@@ -1,4 +1,13 @@
-import { type JSX, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type JSX,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent,
+} from "react";
 import { DEFAULT_THEME, paint, type Theme } from "../canvas/painter";
 import { canvasSurface } from "../canvas/surface";
 import { fitSpec } from "../geometry/fit";
@@ -28,6 +37,7 @@ export function CorpusMap(props: CorpusMapProps): JSX.Element {
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const [vp, setVp] = useState<Viewport>(() => fitSpec(spec, width, height, 24));
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drag = useRef<{ x: number; y: number } | null>(null);
   const regime = regimeFor(vp.scale, thresholds);
 
   useEffect(() => {
@@ -36,8 +46,38 @@ export function CorpusMap(props: CorpusMapProps): JSX.Element {
     paint(canvasSurface(ctx), spec, vp, regime, theme);
   }, [spec, vp, regime, theme]);
 
+  const onPointerDown = (e: PointerEvent) => {
+    drag.current = { x: e.clientX, y: e.clientY };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    setVp((v) => panBy(v, e.clientX - d.x, e.clientY - d.y));
+    drag.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onPointerUp = () => {
+    drag.current = null;
+  };
+
+  const onWheel = (e: WheelEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setVp((v) => zoomAt(v, e.clientX - rect.left, e.clientY - rect.top, factor));
+  };
+
   return (
-    <div style={{ position: "relative", width, height }}>
+    <div
+      data-map-surface=""
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onWheel={onWheel}
+      style={{ position: "relative", width, height, touchAction: "none" }}
+    >
       {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
       <canvas ref={canvasRef} width={width} height={height} aria-hidden="true" />
       <CardOverlay
