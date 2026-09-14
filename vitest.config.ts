@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     exclude: ["bench/**", "node_modules/**", "dist/**"],
-    coverage: { provider: "v8", reporter: ["text", "lcov"], lines: 90, branches: 85 },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      thresholds: { lines: 90, branches: 85 },
+    },
   },
 });

@@ -74,4 +74,36 @@ describe("paint", () => {
     paint(s, spec, vp, "far", DEFAULT_THEME);
     expect(s.cleared).toBe(1);
   });
+
+  it("uses an explicit territory boundary instead of hull", () => {
+    const specWithBoundary: MapSpec = {
+      version: "1",
+      territories: [
+        {
+          id: "t2",
+          name: "Custom",
+          members: ["x", "y", "z"],
+          centroid: [1, 1],
+          boundary: [
+            [0, 0],
+            [3, 0],
+            [0, 3],
+          ],
+        },
+      ],
+      nodes: [
+        { id: "x", label: "X", x: 0, y: 0, territory: "t2" },
+        { id: "y", label: "Y", x: 2, y: 0, territory: "t2" },
+        { id: "z", label: "Z", x: 1, y: 2, territory: "t2" },
+      ],
+    };
+    const s = new RecordingSurface();
+    paint(s, specWithBoundary, vp, "mid", DEFAULT_THEME);
+    const ring = s.polygons[0].points;
+    expect(ring).toEqual([
+      [0, 0],
+      [30, 0],
+      [0, 30],
+    ]);
+  });
 });
