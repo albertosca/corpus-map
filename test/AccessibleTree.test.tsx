@@ -1,18 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AccessibleTree } from "../src/react/AccessibleTree";
 import type { MapSpec } from "../src/spec";
-
-// vitest.config.ts does not set `test.globals: true`, so
-// @testing-library/react's automatic afterEach(cleanup) never registers
-// (it detects a global `afterEach`, which only exists under `globals: true`).
-// Without this, DOM from one test leaks into the next within this file,
-// since these assertions query the whole document via `screen` rather than
-// a per-render `container`.
-afterEach(() => {
-  cleanup();
-});
 
 const spec: MapSpec = {
   version: "1",
@@ -28,27 +18,31 @@ const spec: MapSpec = {
   ],
 };
 
+// scale 10, tx 0, ty 0: every fixture node above lands at screen x,y <= 90,
+// comfortably inside this 400x300 viewport.
+const viewport = { scale: 10, tx: 0, ty: 0 };
+
 describe("AccessibleTree", () => {
   it("lists territories, not items, at the far regime", () => {
-    render(<AccessibleTree spec={spec} regime="far" />);
+    render(<AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
     expect(screen.getByRole("button", { name: /North/ })).toBeDefined();
     expect(screen.queryByText("Alpha")).toBeNull();
   });
 
   it("groups un-territoried nodes under an unassigned group", () => {
-    render(<AccessibleTree spec={spec} regime="far" />);
-    expect(screen.getByRole("button", { name: /Unassigned/i })).toBeDefined();
+    render(<AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
+    expect(screen.getByText(/Unassigned \(1\)/)).toBeDefined();
   });
 
   it("lists items at the near regime", () => {
-    render(<AccessibleTree spec={spec} regime="near" />);
+    render(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
     expect(screen.getByText("Alpha")).toBeDefined();
     expect(screen.getByText("Delta")).toBeDefined();
   });
 
   it("is reachable by keyboard", async () => {
     const user = userEvent.setup();
-    render(<AccessibleTree spec={spec} regime="far" />);
+    render(<AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
     await user.tab();
     expect(document.activeElement?.textContent).toMatch(/North/);
   });
@@ -56,14 +50,52 @@ describe("AccessibleTree", () => {
   it("moves the viewport when a territory is activated", async () => {
     const user = userEvent.setup();
     const onFocusTerritory = vi.fn();
-    render(<AccessibleTree spec={spec} regime="far" onFocusTerritory={onFocusTerritory} />);
+    render(
+      <AccessibleTree
+        spec={spec}
+        regime="far"
+        viewport={viewport}
+        width={400}
+        height={300}
+        cap={200}
+        onFocusTerritory={onFocusTerritory}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: /North/ }));
     expect(onFocusTerritory).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
   });
 
   it("announces the current regime in a live region", () => {
-    const { rerender } = render(<AccessibleTree spec={spec} regime="far" />);
-    rerender(<AccessibleTree spec={spec} regime="near" />);
+    const { rerender } = render(
+      <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
+    );
+    rerender(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
     expect(screen.getByRole("status").textContent).toMatch(/recipes|items|near/i);
+  });
+
+  it("near regime lists at most cap items", () => {
+    const many: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: Array.from({ length: 5000 }, (_, i) => ({
+        id: `n${i}`,
+        label: `N${i}`,
+        x: i * 0.001,
+        y: 0,
+        territory: null,
+      })),
+    };
+    render(<AccessibleTree spec={many} regime="near" viewport={viewport} width={400} height={300} cap={50} />);
+    expect(screen.getAllByRole("button").length).toBeLessThanOrEqual(50);
+  });
+
+  it("near regime does not list an off-screen node", () => {
+    const offscreen: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: [{ id: "a", label: "Offscreen", x: 100, y: 0, territory: null }],
+    };
+    render(<AccessibleTree spec={offscreen} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
+    expect(screen.queryByText("Offscreen")).toBeNull();
   });
 });

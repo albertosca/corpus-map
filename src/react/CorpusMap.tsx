@@ -53,6 +53,10 @@ export function CorpusMap(props: CorpusMapProps): JSX.Element {
       <AccessibleTree
         spec={spec}
         regime={regime}
+        viewport={vp}
+        width={width}
+        height={height}
+        cap={cardCap}
         onFocusTerritory={(t) =>
           setVp((v) => {
             const [sx, sy] = toScreen(v, t.centroid[0], t.centroid[1]);

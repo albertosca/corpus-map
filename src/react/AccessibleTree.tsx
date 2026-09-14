@@ -1,10 +1,16 @@
 import type { JSX } from "react";
 import type { Regime } from "../lod";
 import type { MapNode, MapSpec, Territory } from "../spec";
+import type { Viewport } from "../viewport";
+import { visibleNodes } from "./visible";
 
 export interface AccessibleTreeProps {
   spec: MapSpec;
   regime: Regime;
+  viewport: Viewport;
+  width: number;
+  height: number;
+  cap: number;
   onFocusTerritory?: (territory: Territory) => void;
   onSelect?: (node: MapNode) => void;
 }
@@ -13,11 +19,22 @@ const UNASSIGNED = "Unassigned";
 
 /**
  * The canvas is decorative; this is the content. It mirrors the current
- * regime rather than the corpus, which is what keeps it bounded: ~10 nodes at
- * the far regime, ~100 inside a territory. A corpus of ten thousand items
- * never produces a tree of ten thousand elements.
+ * regime rather than the corpus, which is what keeps it bounded: ~10
+ * territories at the far/mid regime, and at the near regime only the nodes
+ * that are on screen, capped at `cap` — the same bound `CardOverlay` uses
+ * for its cards. A corpus of ten thousand items never produces a tree of
+ * ten thousand elements.
  */
-export function AccessibleTree({ spec, regime, onFocusTerritory, onSelect }: AccessibleTreeProps): JSX.Element {
+export function AccessibleTree({
+  spec,
+  regime,
+  viewport,
+  width,
+  height,
+  cap,
+  onFocusTerritory,
+  onSelect,
+}: AccessibleTreeProps): JSX.Element {
   const loose = spec.nodes.filter((n) => n.territory === null);
   const announcement = regime === "near" ? "Showing individual items" : "Showing territories";
 
@@ -28,7 +45,7 @@ export function AccessibleTree({ spec, regime, onFocusTerritory, onSelect }: Acc
       </div>
       {regime === "near" ? (
         <ul>
-          {spec.nodes.map((n) => (
+          {visibleNodes(spec, viewport, width, height, cap).map((n) => (
             <li key={n.id}>
               <button type="button" onClick={() => onSelect?.(n)}>
                 {n.label}
@@ -47,9 +64,7 @@ export function AccessibleTree({ spec, regime, onFocusTerritory, onSelect }: Acc
           ))}
           {loose.length > 0 && (
             <li>
-              <button type="button">
-                {UNASSIGNED} ({loose.length})
-              </button>
+              {UNASSIGNED} ({loose.length})
             </li>
           )}
         </ul>
