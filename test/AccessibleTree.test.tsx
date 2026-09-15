@@ -70,7 +70,19 @@ describe("AccessibleTree", () => {
       <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
     );
     rerender(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
-    expect(screen.getByRole("status").textContent).toMatch(/recipes|items|near/i);
+    expect(screen.getByRole("status").textContent).toMatch(/items/);
+  });
+
+  it("announces far to mid distinctly, since the tree's items do not change there", () => {
+    const { rerender } = render(
+      <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
+    );
+    const far = screen.getByRole("status").textContent;
+    expect(far).toBe("Showing territories");
+    rerender(<AccessibleTree spec={spec} regime="mid" viewport={viewport} width={400} height={300} cap={200} />);
+    const mid = screen.getByRole("status").textContent;
+    expect(mid).toBe("Showing territories and points");
+    expect(mid).not.toBe(far);
   });
 
   it("near regime lists at most cap items", () => {

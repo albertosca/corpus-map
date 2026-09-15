@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { ReactElement } from "react";
 import type { Regime } from "../lod";
 import type { MapNode, MapSpec, Territory } from "../spec";
 import type { Viewport } from "../viewport";
@@ -17,6 +17,14 @@ export interface AccessibleTreeProps {
 
 const UNASSIGNED = "Unassigned";
 
+// One string per regime, so a far→mid change is announced too — the tree's
+// items do not change between those two, only what the canvas shows.
+const ANNOUNCEMENT: Record<Regime, string> = {
+  far: "Showing territories",
+  mid: "Showing territories and points",
+  near: "Showing individual items",
+};
+
 /**
  * The canvas is decorative; this is the content. It mirrors the current
  * regime rather than the corpus, which is what keeps it bounded: ~10
@@ -34,14 +42,13 @@ export function AccessibleTree({
   cap,
   onFocusTerritory,
   onSelect,
-}: AccessibleTreeProps): JSX.Element {
+}: AccessibleTreeProps): ReactElement {
   const loose = spec.nodes.filter((n) => n.territory === null);
-  const announcement = regime === "near" ? "Showing individual items" : "Showing territories";
 
   return (
     <div style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
       <div role="status" aria-live="polite">
-        {announcement}
+        {ANNOUNCEMENT[regime]}
       </div>
       {regime === "near" ? (
         <ul>

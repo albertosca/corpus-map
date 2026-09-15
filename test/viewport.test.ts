@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panBy, toScreen, toWorld, type Viewport, zoomAt } from "../src/viewport";
+import { panBy, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "../src/viewport";
 
 const v: Viewport = { scale: 2, tx: 10, ty: -5 };
 
@@ -31,5 +31,17 @@ describe("viewport", () => {
     expect(z.scale).toBeCloseTo(v.scale, 9);
     expect(z.tx).toBeCloseTo(v.tx, 9);
     expect(z.ty).toBeCloseTo(v.ty, 9);
+  });
+
+  it("zoomTo lands on the target scale exactly and keeps the anchor fixed", () => {
+    // 1.5546 * (100 / 1.5546) is 99.99999999999999 in IEEE doubles; zoomTo
+    // must return 100, not that.
+    const awkward: Viewport = { scale: 1.554629495393176, tx: 10, ty: -5 };
+    const before = toWorld(awkward, 400, 300);
+    const z = zoomTo(awkward, 400, 300, 100);
+    expect(z.scale).toBe(100);
+    const after = toWorld(z, 400, 300);
+    expect(after[0]).toBeCloseTo(before[0], 9);
+    expect(after[1]).toBeCloseTo(before[1], 9);
   });
 });

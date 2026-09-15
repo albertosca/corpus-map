@@ -55,7 +55,10 @@ describe("CardOverlay", () => {
         renderCard={(n) => <div>{n.label}</div>}
       />,
     );
+    // 5000 nodes at x = i * 0.001 all land on screen at scale 10, so the cap
+    // is the only thing between the DOM and 5000 cards: exactly 50 mount.
     expect(container.querySelectorAll("[data-card]").length).toBeLessThanOrEqual(50);
+    expect(container.querySelectorAll("[data-card]").length).toBe(50);
   });
 
   it("is inert to assistive technology, since the tree is the real content", () => {
@@ -71,6 +74,7 @@ describe("CardOverlay", () => {
       />,
     );
     expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.firstElementChild?.hasAttribute("inert")).toBe(true);
   });
 
   it("does not mount a card for a node outside the viewport", () => {
