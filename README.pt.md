@@ -93,6 +93,8 @@ Mudar `spec`, `width` ou `height` reajusta o viewport à nova extensão; não é
 
 Cards são decorativos. O overlay em que vivem é `aria-hidden` e `inert`, então nada dentro de um card é focável, entra na ordem de tabulação ou é clicável por conta própria — um clique solto sobre um card dispara `onSelect` com aquele nó, e essa é toda a superfície de interação de um card. Conteúdo interativo pertence à UI do próprio consumidor, guiada por `onSelect`.
 
+`theme` reestiliza o campo de pontos e os contornos de território; tanto o tipo `Theme` quanto o `DEFAULT_THEME` da biblioteca são exportados por `corpus-map`, então um consumidor pode tipar um tema próprio ou partir do padrão e sobrescrever campos individuais.
+
 ## A demo
 
 Rode `npm run dev` para abrir o viewer de demonstração. Em desenvolvimento ele consome a biblioteca por um alias do Vite para `src/`, não pelo pacote construído; o que prova que o pacote construído é utilizável é o CI, que roda `npm run build` e confere que o `dist/index.d.ts` emitido existe onde o `package.json` diz. A galeria vem com dois corpora — elementos da tabela periódica e estrelas brilhantes agrupadas por constelação — e nenhum dos dois é comida, deliberadamente: uma especificação de mapa validada por um único domínio seria uma abstração não verificada, e química e astronomia são domínios suficientemente distintos para mostrar que a especificação e o ponto de extensão `renderCard` são de fato agnósticos de domínio.

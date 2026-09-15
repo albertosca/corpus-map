@@ -147,15 +147,22 @@ describe("CorpusMap interaction", () => {
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a", label: "A" }));
 
-      // A real drag that ends over a card is a pan, not a selection.
-      fireEvent.pointerDown(el, { clientX: 300, clientY: 200, pointerId: 1 });
-      fireEvent.pointerMove(el, { clientX: 220, clientY: 30, pointerId: 1 });
-      fireEvent.pointerUp(el, { clientX: 220, clientY: 30, pointerId: 1 });
+      // A drag that releases over a card is a pan, not a selection — and
+      // must still land over a card to be a real test of the guard. Node a's
+      // box starts at (74,24)-(174,64); pressing at (80,30) and moving 10 px
+      // right to (90,30) exceeds CLICK_SLOP (4) and pans the box to
+      // (84,24)-(184,64), so the release point (90,30) is still inside it.
+      // Without the guard this would wrongly select node a.
+      fireEvent.pointerDown(el, { clientX: 80, clientY: 30, pointerId: 1 });
+      fireEvent.pointerMove(el, { clientX: 90, clientY: 30, pointerId: 1 });
+      fireEvent.pointerUp(el, { clientX: 90, clientY: 30, pointerId: 1 });
       expect(onSelect).toHaveBeenCalledTimes(1);
 
-      // Empty ground selects nothing.
-      fireEvent.pointerDown(el, { clientX: 390, clientY: 290, pointerId: 1 });
-      fireEvent.pointerUp(el, { clientX: 390, clientY: 290, pointerId: 1 });
+      // Empty ground selects nothing. After the 10 px pan above, the three
+      // boxes are a (84,24)-(184,64), b (336,276)-(436,316) and c
+      // (210,150)-(310,190); (390,90) is outside all three.
+      fireEvent.pointerDown(el, { clientX: 390, clientY: 90, pointerId: 1 });
+      fireEvent.pointerUp(el, { clientX: 390, clientY: 90, pointerId: 1 });
       expect(onSelect).toHaveBeenCalledTimes(1);
     } finally {
       rects.mockRestore();

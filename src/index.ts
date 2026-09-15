@@ -1,3 +1,5 @@
+export type { Theme } from "./canvas/painter";
+export { DEFAULT_THEME } from "./canvas/painter";
 export type { LodThresholds, Regime } from "./lod";
 export type { CorpusMapProps } from "./react/CorpusMap";
 export { CorpusMap } from "./react/CorpusMap";

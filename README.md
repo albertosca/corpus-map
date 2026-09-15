@@ -93,6 +93,8 @@ Changing `spec`, `width` or `height` refits the viewport to the new extent; no `
 
 Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so nothing inside a card is focusable, in the tab order, or clickable on its own — a press released over a card fires `onSelect` with that node, and that is the whole interaction surface of a card. Interactive content belongs in the consumer's own UI, driven by `onSelect`.
 
+`theme` restyles the point field and territory strokes; both the `Theme` type and the library's `DEFAULT_THEME` are exported from `corpus-map`, so a consumer can type a custom theme or start from the default and override individual fields.
+
 ## The demo
 
 Run `npm run dev` to open the demo viewer. During development it consumes the library through a Vite alias to `src/`, not the built package; what proves the built package is usable is CI, which runs `npm run build` and checks that the emitted `dist/index.d.ts` exists where `package.json` says it does. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.
