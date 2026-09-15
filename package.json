@@ -4,8 +4,17 @@
   "type": "module",
   "main": "./dist/corpus-map.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/corpus-map.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "vite build && tsc --emitDeclarationOnly",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "dev": "vite --config vite.demo.config.ts",
     "build:demo": "vite build --config vite.demo.config.ts --outDir ../dist-demo",
     "test": "vitest run --coverage",

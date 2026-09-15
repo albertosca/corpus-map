@@ -13,6 +13,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # A build step alone stays green with a wrong `types` path; the
+      # `test -f` is what proves the published package resolves its types.
+      - run: npm run build
+      - run: test -f dist/index.d.ts
       - uses: actions/upload-artifact@v4
         with:
           name: coverage
