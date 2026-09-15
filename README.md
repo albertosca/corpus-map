@@ -54,11 +54,19 @@ The library is agnostic about domain exactly to the extent that this contract is
 - `meta` is opaque: the renderer passes it straight through to the consumer-supplied card component and never reads inside it.
 - `territory` may be `null`: a node with no territory is normal (for example, noise points from density-based clustering), not an error, and still renders.
 - `boundary` is optional: when a territory has none, the renderer computes a hull from its members' coordinates; when present, the producer's boundary wins.
+- Membership is declared twice and must agree: every node with a `territory` is listed in that territory's `members`, and every member's node points back at that territory. `validateSpec` rejects a spec where the two disagree, naming the path.
+- **Territory identity must bind to the centroid or to the member set, never to a cluster index.** Clustering with the same input and a different seed returns the same partition under different integer labels, so a producer that names territories by cluster number silently renames them on every recomputation and the map the user learned stops existing.
 
 ## Usage
 
 ```tsx
-import { CorpusMap, type MapNode } from "corpus-map";
+import { CorpusMap, type MapNode, validateSpec } from "corpus-map";
+
+const spec = validateSpec({
+  version: "1",
+  territories: [{ id: "alkali", name: "Alkali metals", members: ["li"], centroid: [1, 2] }],
+  nodes: [{ id: "li", label: "Lithium", x: 1, y: 2, territory: "alkali", meta: { symbol: "Li", atomicNumber: 3 } }],
+});
 
 function renderCard(node: MapNode) {
   const meta = node.meta as { symbol: string; atomicNumber: number };
@@ -69,17 +77,30 @@ function renderCard(node: MapNode) {
   );
 }
 
-<CorpusMap spec={spec} renderCard={renderCard} width={960} height={640} />;
+<CorpusMap
+  spec={spec}
+  renderCard={renderCard}
+  width={960}
+  height={640}
+  onSelect={(node) => console.log("selected", node.id)}
+  onRegimeChange={(regime) => console.log("now showing", regime)}
+/>;
 ```
+
+`<CorpusMap>` validates `spec` during render and throws a `SpecError` for a malformed one, which unmounts the nearest error boundary. Either wrap the map in an error boundary or, as above, call `validateSpec` yourself first and handle the error where the data comes from.
+
+Changing `spec`, `width` or `height` refits the viewport to the new extent; no `key=` remount is needed. `onRegimeChange` fires once on mount with the initial regime (`"far"`, `"mid"` or `"near"`, the `Regime` type is exported) and again on every crossing, so a consumer can, for example, show a legend only at the far regime.
+
+Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so nothing inside a card is focusable, in the tab order, or clickable on its own — a press released over a card fires `onSelect` with that node, and that is the whole interaction surface of a card. Interactive content belongs in the consumer's own UI, driven by `onSelect`.
 
 ## The demo
 
-Run `npm run dev` to open the demo viewer, which consumes the published library rather than its source. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.
+Run `npm run dev` to open the demo viewer. During development it consumes the library through a Vite alias to `src/`, not the built package; what proves the built package is usable is CI, which runs `npm run build` and checks that the emitted `dist/index.d.ts` exists where `package.json` says it does. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.
 
 ## Guarantees
 
 - **Canvas 2D baseline, no WebGPU required.** The point field renders on Canvas 2D; nothing in this library ever requires WebGPU or WebGL to run.
-- **Keyboard and screen-reader navigable.** Every zoom level is mirrored by a visually hidden, always-present accessible tree, so the map can be fully explored without a mouse or a pointer.
+- **Keyboard and screen-reader reachable, with a known gap.** Every zoom level is mirrored by a visually hidden, always-present accessible tree with a live region announcing the current regime. What is reachable today: at the far and mid regimes, one button per territory (Enter zooms the map to it); at the near regime, one button per on-screen item, capped, and Enter selects it. Keyboard zoom-out and pan are not implemented yet, so once a territory is open the keyboard cannot leave it; see [BACKLOG.md](docs/superpowers/BACKLOG.md).
 
 ## Performance
 

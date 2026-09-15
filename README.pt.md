@@ -54,11 +54,19 @@ A biblioteca é agnóstica de domínio exatamente na medida em que este contrato
 - `meta` é opaco: o renderer repassa direto para o componente de card fornecido pelo consumidor e nunca lê o conteúdo.
 - `territory` pode ser `null`: um nó sem território é o caso normal (por exemplo, pontos de ruído de clustering baseado em densidade), não um erro, e ainda assim é renderizado.
 - `boundary` é opcional: quando um território não tem um, o renderer computa um hull a partir das coordenadas dos membros; quando presente, o contorno do produtor prevalece.
+- A pertinência é declarada duas vezes e precisa bater: todo nó com `territory` está listado em `members` daquele território, e o nó de todo membro aponta de volta para aquele território. `validateSpec` rejeita uma especificação em que as duas discordam, nomeando o caminho.
+- **A identidade do território precisa estar ligada ao centroide ou ao conjunto de membros, nunca a um índice de cluster.** Clustering com a mesma entrada e outra seed devolve a mesma partição com rótulos inteiros diferentes, então um produtor que nomeia territórios pelo número do cluster os renomeia em silêncio a cada recomputação, e o mapa que o usuário aprendeu deixa de existir.
 
 ## Uso
 
 ```tsx
-import { CorpusMap, type MapNode } from "corpus-map";
+import { CorpusMap, type MapNode, validateSpec } from "corpus-map";
+
+const spec = validateSpec({
+  version: "1",
+  territories: [{ id: "alkali", name: "Alkali metals", members: ["li"], centroid: [1, 2] }],
+  nodes: [{ id: "li", label: "Lithium", x: 1, y: 2, territory: "alkali", meta: { symbol: "Li", atomicNumber: 3 } }],
+});
 
 function renderCard(node: MapNode) {
   const meta = node.meta as { symbol: string; atomicNumber: number };
@@ -69,17 +77,30 @@ function renderCard(node: MapNode) {
   );
 }
 
-<CorpusMap spec={spec} renderCard={renderCard} width={960} height={640} />;
+<CorpusMap
+  spec={spec}
+  renderCard={renderCard}
+  width={960}
+  height={640}
+  onSelect={(node) => console.log("selected", node.id)}
+  onRegimeChange={(regime) => console.log("now showing", regime)}
+/>;
 ```
+
+`<CorpusMap>` valida `spec` durante a renderização e lança um `SpecError` para uma especificação malformada, o que desmonta o error boundary mais próximo. Envolva o mapa num error boundary ou, como acima, chame `validateSpec` você mesmo antes e trate o erro onde os dados nascem.
+
+Mudar `spec`, `width` ou `height` reajusta o viewport à nova extensão; não é preciso remontar com `key=`. `onRegimeChange` dispara uma vez na montagem com o regime inicial (`"far"`, `"mid"` ou `"near"`; o tipo `Regime` é exportado) e de novo a cada travessia, então um consumidor pode, por exemplo, mostrar uma legenda só no regime distante.
+
+Cards são decorativos. O overlay em que vivem é `aria-hidden` e `inert`, então nada dentro de um card é focável, entra na ordem de tabulação ou é clicável por conta própria — um clique solto sobre um card dispara `onSelect` com aquele nó, e essa é toda a superfície de interação de um card. Conteúdo interativo pertence à UI do próprio consumidor, guiada por `onSelect`.
 
 ## A demo
 
-Rode `npm run dev` para abrir o viewer de demonstração, que consome a biblioteca publicada, não seu código-fonte. A galeria vem com dois corpora — elementos da tabela periódica e estrelas brilhantes agrupadas por constelação — e nenhum dos dois é comida, deliberadamente: uma especificação de mapa validada por um único domínio seria uma abstração não verificada, e química e astronomia são domínios suficientemente distintos para mostrar que a especificação e o ponto de extensão `renderCard` são de fato agnósticos de domínio.
+Rode `npm run dev` para abrir o viewer de demonstração. Em desenvolvimento ele consome a biblioteca por um alias do Vite para `src/`, não pelo pacote construído; o que prova que o pacote construído é utilizável é o CI, que roda `npm run build` e confere que o `dist/index.d.ts` emitido existe onde o `package.json` diz. A galeria vem com dois corpora — elementos da tabela periódica e estrelas brilhantes agrupadas por constelação — e nenhum dos dois é comida, deliberadamente: uma especificação de mapa validada por um único domínio seria uma abstração não verificada, e química e astronomia são domínios suficientemente distintos para mostrar que a especificação e o ponto de extensão `renderCard` são de fato agnósticos de domínio.
 
 ## Garantias
 
 - **Baseline em Canvas 2D, sem exigir WebGPU.** O campo de pontos é renderizado em Canvas 2D; nada nesta biblioteca exige WebGPU ou WebGL para funcionar.
-- **Navegável por teclado e leitor de tela.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, então o mapa pode ser totalmente explorado sem mouse ou ponteiro.
+- **Alcançável por teclado e leitor de tela, com uma lacuna conhecida.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, com uma live region anunciando o regime atual. O que é alcançável hoje: nos regimes distante e médio, um botão por território (Enter dá zoom no mapa até ele); no regime próximo, um botão por item na tela, limitado pelo cap, e Enter o seleciona. Zoom-out e pan por teclado ainda não estão implementados, então, uma vez aberto um território, o teclado não consegue sair dele; veja [BACKLOG.md](docs/superpowers/BACKLOG.md).
 
 ## Performance
 
