@@ -94,6 +94,8 @@ describe("CorpusMap", () => {
     expect(container.querySelector("canvas")).not.toBeNull();
   });
 
+  // Explicit timeout: a single userEvent.click already measured at 3.5s on a
+  // loaded runner (load avg ~7-12), well above the 5000ms default budget.
   it("pans and zooms the canvas to a territory when it is focused in the tree (Ruling B)", async () => {
     const user = userEvent.setup();
     // fitSpec puts the initial scale around 0.25 for this bounding box at
@@ -120,8 +122,10 @@ describe("CorpusMap", () => {
     const top = Number.parseFloat(card?.style.top ?? "");
     expect(Math.abs(left - width / 2)).toBeLessThanOrEqual(5);
     expect(Math.abs(top - height / 2)).toBeLessThanOrEqual(5);
-  });
+  }, 15_000);
 
+  // Explicit timeout: ~44 full renders + userEvent clicks measured at ~5.2s
+  // on a loaded runner (load avg ~7-12), over the 5000ms default budget.
   it("focusing a territory lands in the near regime for awkward corpus extents (C3 sweep)", async () => {
     const user = userEvent.setup();
     // Extents chosen so the fitted scale is an awkward double. Multiplying
@@ -157,7 +161,7 @@ describe("CorpusMap", () => {
     }
     expect(swept).toBeGreaterThanOrEqual(20);
     expect(failures).toEqual([]);
-  });
+  }, 20_000);
 
   it("repositions cards when the width changes without a remount (I2)", () => {
     const { container, rerender } = render(

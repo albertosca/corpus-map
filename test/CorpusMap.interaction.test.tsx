@@ -53,9 +53,13 @@ describe("CorpusMap interaction", () => {
 
   it("clamps wheel zoom-in at 64x the fitted scale (I3)", () => {
     const { container } = renderMap({ midAt: 0, nearAt: 0 });
-    // Unclamped, 5000 notches overflow the scale to Infinity, the regime
-    // falls back to "far" and every card unmounts.
-    for (let i = 0; i < 5000; i += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
+    // 100 notches is ~6x more than the ~17 needed to hit the clamp (see the
+    // "shows cards" test above), so the scale is pinned at fit * 64 well
+    // before the loop ends and every further notch is a no-op. Unclamped,
+    // exp(0.24 * 100) ≈ 2.65e10, i.e. the scale would overflow to roughly
+    // fit * 2.65e10 ≈ 6.7e11 — ten orders of magnitude past the 64x clamp,
+    // so the assertions below still fail hard on revert.
+    for (let i = 0; i < 100; i += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
     expect(container.querySelectorAll('[data-card="c"]')).toHaveLength(1);
     // Node c is the anchor and stays put; node a is 5 * 25.2 * 64 px off
     // screen at the clamp, so it is the only card left.
@@ -65,10 +69,13 @@ describe("CorpusMap interaction", () => {
 
   it("clamps wheel zoom-out at 1/8 of the fitted scale (I3)", () => {
     const { container } = renderMap({ midAt: 0, nearAt: 0 });
-    // Unclamped, the scale underflows to 0 and every node collapses onto the
-    // anchor at x = 200; clamped at 25.2 / 8 = 3.15, node a stays 5 * 3.15
+    // 100 notches is far more than needed to hit the clamp. Unclamped,
+    // exp(-0.24 * 100) ≈ 3.78e-11, i.e. the scale would underflow to roughly
+    // fit * 3.78e-11 ≈ 9.5e-10 — close enough to 0 that every node still
+    // collapses onto the anchor at x = 200, so the assertion below still
+    // fails hard on revert; clamped at 25.2 / 8 = 3.15, node a stays 5 * 3.15
     // px left of it.
-    for (let i = 0; i < 5000; i += 1) fireEvent.wheel(surface(container), { deltaY: 120, ...CENTRE });
+    for (let i = 0; i < 100; i += 1) fireEvent.wheel(surface(container), { deltaY: 120, ...CENTRE });
     expect(cardLeft(container, "a")).toBeCloseTo(200 - 5 * (FIT_SCALE / 8), 6);
   });
 
