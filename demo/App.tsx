@@ -1,9 +1,6 @@
-import { CorpusMap, type MapNode, type MapSpec } from "corpus-map";
-import { useState } from "react";
-import { constellationsSpec } from "./corpora/constellations";
-import { elementsSpec } from "./corpora/elements";
-
-type CorpusKey = "elements" | "constellations";
+import { CorpusMap, type MapNode } from "corpus-map";
+import { type ReactNode, useState } from "react";
+import { type GalleryEntry, gallery } from "./corpora";
 
 interface ElementMeta {
   name: string;
@@ -14,11 +11,6 @@ interface StarMeta {
   constellation: string;
   magnitude: number;
 }
-
-const CORPORA: Record<CorpusKey, { label: string; spec: MapSpec }> = {
-  elements: { label: "Periodic Table", spec: elementsSpec },
-  constellations: { label: "Constellations", spec: constellationsSpec },
-};
 
 function renderElementCard(node: MapNode) {
   const meta = node.meta as ElementMeta;
@@ -41,29 +33,32 @@ function renderStarCard(node: MapNode) {
   );
 }
 
+const CARDS: Record<GalleryEntry["id"], (node: MapNode) => ReactNode> = {
+  elements: renderElementCard,
+  constellations: renderStarCard,
+};
+
 export function App() {
-  const [corpus, setCorpus] = useState<CorpusKey>("elements");
-  const active = CORPORA[corpus];
-  const renderCard = corpus === "elements" ? renderElementCard : renderStarCard;
+  const [active, setActive] = useState<GalleryEntry>(gallery[0]);
 
   return (
     <div style={{ fontFamily: "sans-serif", padding: 16 }}>
       <h1>corpus-map demo</h1>
       <div style={{ marginBottom: 16 }}>
-        {(Object.keys(CORPORA) as CorpusKey[]).map((key) => (
+        {gallery.map((entry) => (
           <button
-            key={key}
+            key={entry.id}
             type="button"
-            onClick={() => setCorpus(key)}
-            disabled={corpus === key}
+            onClick={() => setActive(entry)}
+            disabled={active.id === entry.id}
             style={{ marginRight: 8 }}
           >
-            {CORPORA[key].label}
+            {entry.label}
           </button>
         ))}
       </div>
-      {/* Remount on corpus change so the viewport refits the new spec's extent. */}
-      <CorpusMap key={corpus} spec={active.spec} renderCard={renderCard} width={960} height={640} />
+      {/* No `key=` remount: CorpusMap refits its viewport when `spec` changes. */}
+      <CorpusMap spec={active.spec} renderCard={CARDS[active.id]} width={960} height={640} />
     </div>
   );
 }

@@ -1,26 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { constellationsSpec } from "../demo/corpora/constellations";
-import { elementsSpec } from "../demo/corpora/elements";
+import { gallery } from "../demo/corpora";
 import { validateSpec } from "../src/spec";
 
 describe("gallery corpora", () => {
-  it("ships at least two", () => {
-    expect([elementsSpec, constellationsSpec]).toHaveLength(2);
+  it("ships at least two, from the one list the demo picker reads", () => {
+    expect(gallery.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(gallery.map((g) => g.id)).size).toBe(gallery.length);
   });
 
-  it("are both valid specs", () => {
-    expect(() => validateSpec(elementsSpec)).not.toThrow();
-    expect(() => validateSpec(constellationsSpec)).not.toThrow();
+  it("are all valid specs", () => {
+    for (const entry of gallery) expect(() => validateSpec(entry.spec)).not.toThrow();
   });
 
   it("each carries more than one territory, so the idiom is actually exercised", () => {
-    expect(elementsSpec.territories.length).toBeGreaterThan(1);
-    expect(constellationsSpec.territories.length).toBeGreaterThan(1);
+    for (const entry of gallery) expect(entry.spec.territories.length).toBeGreaterThan(1);
   });
 
   it("contain no food vocabulary, because the gallery is the agnosticism proof", () => {
     const words = /recipe|ingredient|cook|kitchen|food|dish/i;
-    const blob = JSON.stringify([elementsSpec, constellationsSpec]);
+    const blob = JSON.stringify(gallery.map((g) => g.spec));
     expect(blob).not.toMatch(words);
   });
 });
