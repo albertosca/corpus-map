@@ -9,6 +9,7 @@
     "dev": "vite --config vite.demo.config.ts",
     "build:demo": "vite build --config vite.demo.config.ts --outDir ../dist-demo",
     "test": "vitest run --coverage",
+    "bench": "vitest run --config vitest.bench.config.ts",
     "lint": "biome check .",
     "format": "biome format --write ."
   },
