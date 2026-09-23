@@ -36,7 +36,7 @@ export default [
     // Pure logic: anything in src/ that is neither a component (.tsx) nor a
     // hook (use*.ts) must not reach for React or the DOM.
     files: ["src/**/*.ts"],
-    ignores: ["src/**/use*.ts", "src/**/*.test.ts"],
+    ignores: ["src/**/use[A-Z]*.ts", "src/**/*.test.ts"],
     rules: {
       "no-restricted-imports": ["error", { paths: ["react", "react-dom"], patterns: ["react/*", "react-dom/*"] }],
       "no-restricted-globals": ["error", "window", "document"],

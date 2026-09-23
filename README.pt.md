@@ -112,4 +112,4 @@ O benchmark em `bench/field.test.ts` (rodado via `npm run bench`) mede apenas o 
 
 Veja [CREDITS.md](CREDITS.md) para as referências que inspiraram esta biblioteca, e as restrições de licenciamento que foram respeitadas ao fazer isso.
 
-Licença: a ser escolhida antes de o repositório ficar público.
+Este projeto é licenciado sob a [Licença MIT](LICENSE).

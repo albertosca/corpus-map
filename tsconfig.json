@@ -19,5 +19,5 @@
     "skipLibCheck": true,
     "paths": { "corpus-map": ["./src/index.ts"] }
   },
-  "include": ["src", "test", "demo", "bench"]
+  "include": ["src", "test", "demo", "bench", "fixtures"]
 }

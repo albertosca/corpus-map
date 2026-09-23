@@ -112,4 +112,4 @@ The benchmark in `bench/field.test.ts` (run via `npm run bench`) measures only t
 
 See [CREDITS.md](CREDITS.md) for the prior art this library builds on, and the licensing constraints that were respected while doing so.
 
-License: to be chosen before the repository goes public.
+This project is licensed under the [MIT License](LICENSE).
