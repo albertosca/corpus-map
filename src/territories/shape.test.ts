@@ -138,6 +138,11 @@ describe("shape helpers", () => {
     }
     // The outlier should be inside some ring
     expect(rings.some((r) => contains(r, points[20] as Point))).toBe(true);
+    // With components, cluster ring area ~172-650; without components, dilation bloats it to ~2800
+    const clusterPoint = cluster[0] as Point;
+    const clusterRing = rings.find((r) => contains(r, clusterPoint));
+    expect(clusterRing).toBeDefined();
+    expect(ringArea(clusterRing as Ring)).toBeLessThan(800);
   });
 
   it("two points 2.83e9 apart with r = 1e6 give 2 rings", () => {
@@ -147,6 +152,10 @@ describe("shape helpers", () => {
     ];
     const rings = disksOutline(points, 1e6);
     expect(rings).toHaveLength(2);
+    // Each point must be inside some ring
+    for (const p of points) {
+      expect(rings.some((r) => contains(r, p))).toBe(true);
+    }
   });
 
   it("chain of 10,000 points with r = 2.5 gives 1 ring with no non-finite vertices", () => {
@@ -163,15 +172,11 @@ describe("shape helpers", () => {
         expect(Number.isFinite(y)).toBe(true);
       }
     }
-    // Check that approximately every 97th point is covered (rough check)
+    // Check that EVERY 97th point is covered
     const ring = rings[0] as Ring;
-    let coveredCount = 0;
     for (let i = 0; i < points.length; i += 97) {
-      if (contains(ring, points[i] as Point)) {
-        coveredCount += 1;
-      }
+      expect(contains(ring, points[i] as Point)).toBe(true);
     }
-    expect(coveredCount).toBeGreaterThan(0);
   });
 
   it("components groups points within the link distance and separates points beyond it", () => {
