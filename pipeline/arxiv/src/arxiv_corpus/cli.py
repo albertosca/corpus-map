@@ -169,7 +169,12 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
         detail = ", ".join(f"{code} got {have}/{want}" for code, (want, have) in sorted(short.items()))
         raise ValueError(f"short fetch, quota not met: {detail}")
 
-    payload = {"n": n, "floor": floor, "papers": [asdict(paper) for paper in papers]}
+    payload = {
+        "n": n,
+        "floor": floor,
+        "fetched_at": deps.today().isoformat(),
+        "papers": [asdict(paper) for paper in papers],
+    }
     payload_text = json.dumps(payload)
     stage_dir = _stage_dir(cache_dir)
     stage_dir.mkdir(parents=True, exist_ok=True)
@@ -240,7 +245,7 @@ def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
     spec = build_spec(papers, xy)
     per_category = dict(sorted(Counter(paper.category for paper in papers).items()))
     meta: dict[str, object] = {
-        "fetched_at": deps.today().isoformat(),
+        "fetched_at": payload["fetched_at"],
         "query": QUERY_SHAPE,
         "n": payload["n"],
         "floor": payload["floor"],

@@ -51,4 +51,14 @@ As duas foram verificadas ao vivo (reproduzidas com `curl` puro e com um segundo
 
 ## Rodando de novo para atualizar
 
-Rodar `all` de novo com o mesmo `--n`/`--floor` não reproduz o mesmo corpus exato: o `fetch` pede os papers *mais recentes* de cada categoria, então uma execução posterior pega o que foi submetido ao arXiv desde então. O layout do UMAP também não é garantidamente reprodutível bit a bit entre máquinas diferentes mesmo com `random_state` fixo — `arxiv.meta.json` registra os parâmetros usados, não uma promessa de que o UMAP de outra máquina reproduz as mesmas coordenadas. O `arxiv.json` commitado é o artefato; nada na demo ou na suíte de testes depende das suas coordenadas exatas.
+Rodar `all` de novo com o mesmo `--n`/`--floor` **replaya o cache de respostas em disco e reproduz o corpus exatamente igual** — toda requisição de contagem e de página que este pipeline faz fica em cache para sempre sob `.cache/responses/` (indexado pela URL completa da requisição), então uma nova execução sem mudança no cache não pergunta nada ao arXiv e escreve uma saída byte a byte idêntica. É isso que torna uma execução falha ou interrompida grátis para tentar de novo (ver acima); também significa que rodar `all` de novo *não* é como se pega o que o arXiv publicou desde a última busca.
+
+Para de fato atualizar o corpus com papers mais novos, apague o cache de respostas primeiro, e só então rode de novo:
+
+```bash
+cd pipeline/arxiv
+rm -rf .cache/responses
+uv run arxiv-corpus all --n 8000 --floor 20
+```
+
+O `fetch` pede os papers *mais recentes* de cada categoria, então uma vez que o cache de respostas suma, a próxima execução pega o que foi submetido ao arXiv desde então. `embed`, `project` e `export` funcionam todos a partir de uma impressão digital (fingerprint) dos papers que o `fetch` de fato escreveu, então uma atualização não consegue parear silenciosamente papers novos com coordenadas antigas (ou vice-versa), mesmo quando o corpus atualizado tem exatamente o mesmo número de papers por categoria. O layout do UMAP também não é garantidamente reprodutível bit a bit entre máquinas diferentes mesmo com `random_state` fixo — `arxiv.meta.json` registra os parâmetros usados, não uma promessa de que o UMAP de outra máquina reproduz as mesmas coordenadas. O `arxiv.json` commitado é o artefato; nada na demo ou na suíte de testes depende das suas coordenadas exatas.

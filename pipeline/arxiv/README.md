@@ -51,4 +51,14 @@ Both were verified live (reproduced with plain `curl` and with a second HTTP cli
 
 ## Re-running for a refresh
 
-Re-running `all` with the same `--n`/`--floor` will not reproduce the exact same corpus: `fetch` asks for the *newest* papers in each category, so a later run picks up whatever was submitted to arXiv since. UMAP's layout is also not guaranteed bit-reproducible across machines even with a fixed `random_state` — `arxiv.meta.json` records the parameters used, not a promise that another machine's UMAP build reproduces the same coordinates. The committed `arxiv.json` is the artifact; nothing in the demo or the test suite depends on its exact coordinates.
+Re-running `all` with the same `--n`/`--floor` **replays the on-disk response cache and reproduces the exact same corpus** — every count and page request this pipeline makes is cached forever under `.cache/responses/` (keyed by the full request URL), so a re-run with no cache change asks arXiv nothing and writes byte-identical output. That is what makes an interrupted or failed run free to retry (see above); it also means re-running `all` is *not* how you pick up whatever arXiv has published since the last fetch.
+
+To actually refresh the corpus with newer papers, delete the response cache first, then re-run:
+
+```bash
+cd pipeline/arxiv
+rm -rf .cache/responses
+uv run arxiv-corpus all --n 8000 --floor 20
+```
+
+`fetch` asks for the *newest* papers in each category, so once the response cache is gone, the next run picks up whatever was submitted to arXiv since. `embed`, `project` and `export` all key off a fingerprint of the papers `fetch` actually wrote, so a refresh cannot silently pair new papers with old coordinates (or vice versa) even when the refreshed corpus happens to have the exact same number of papers per category. UMAP's layout is also not guaranteed bit-reproducible across machines even with a fixed `random_state` — `arxiv.meta.json` records the parameters used, not a promise that another machine's UMAP build reproduces the same coordinates. The committed `arxiv.json` is the artifact; nothing in the demo or the test suite depends on its exact coordinates.

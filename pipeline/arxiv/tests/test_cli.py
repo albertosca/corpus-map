@@ -276,6 +276,39 @@ def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_n
     export.check_spec(spec)
 
 
+def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -> None:
+    """A stage split invites `export` running on a later day than `fetch` did; meta must
+    still record when the papers were actually fetched, not export's clock."""
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_dir)
+
+    fetch_deps = cli.Dependencies(
+        client=client,
+        embedder=HashEmbedder,
+        projector=FirstTwoProjector,
+        today=lambda: date(2026, 1, 1),
+        model_name="hash-embedder-test",
+        umap_params={"fake": True},
+    )
+    cli.run_fetch(fetch_deps, cache_dir, n=3, floor=1)
+    cli.run_embed(fetch_deps, cache_dir)
+    cli.run_project(fetch_deps, cache_dir)
+
+    export_deps = cli.Dependencies(
+        client=client,
+        embedder=HashEmbedder,
+        projector=FirstTwoProjector,
+        today=lambda: date(2026, 9, 23),
+        model_name="hash-embedder-test",
+        umap_params={"fake": True},
+    )
+    cli.run_export(export_deps, cache_dir, out_dir)
+
+    meta = json.loads((out_dir / "arxiv.meta.json").read_text(encoding="utf-8"))
+    assert meta["fetched_at"] == "2026-01-01"
+
+
 # --- provenance (I-2) ---
 
 
