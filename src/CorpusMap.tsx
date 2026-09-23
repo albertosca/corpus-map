@@ -34,10 +34,6 @@ const MAX_ZOOM_IN = 64;
 /** A press released within this many pixels of where it started is a click, not a drag. */
 const CLICK_SLOP = 4;
 
-function sameViewport(a: Viewport, b: Viewport): boolean {
-  return a.scale === b.scale && a.tx === b.tx && a.ty === b.ty;
-}
-
 function cardIdAt(root: HTMLElement | null, clientX: number, clientY: number): string | null {
   if (!root) return null;
   // Reverse the DOM order rather than index from the end: `noUncheckedIndexedAccess`
@@ -71,20 +67,22 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((n) => [n.id, n])), [spec]);
   const [vp, setVp] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
+  // Refit when the spec or the box changes, during render rather than in an
+  // effect, so no frame is ever painted with the new spec at the old viewport.
+  const [fitBasis, setFitBasis] = useState({ spec, width, height });
+  if (fitBasis.spec !== spec || fitBasis.width !== width || fitBasis.height !== height) {
+    setFitBasis({ spec, width, height });
+    setVp(fitSpec(spec, width, height, FIT_PADDING));
+  }
+  const fitScale = useMemo(() => fitSpec(spec, width, height, FIT_PADDING).scale, [spec, width, height]);
+  const fitScaleRef = useRef(fitScale);
+  useEffect(() => {
+    fitScaleRef.current = fitScale;
+  }, [fitScale]);
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
-  const fitScale = useRef(vp.scale);
   const regime = regimeFor(vp.scale, thresholds);
-
-  // A different spec (or box) refits the viewport; consumers do not need to
-  // remount with `key=`. The bail-out keeps mount and StrictMode's double
-  // effect from producing an extra paint.
-  useEffect(() => {
-    const fitted = fitSpec(spec, width, height, FIT_PADDING);
-    fitScale.current = fitted.scale;
-    setVp((v) => (sameViewport(v, fitted) ? v : fitted));
-  }, [spec, width, height]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -106,7 +104,9 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // event on every render; the effect fires on mount (so the consumer learns
   // the initial regime) and then only when the regime actually changes.
   const onRegimeChangeRef = useRef(onRegimeChange);
-  onRegimeChangeRef.current = onRegimeChange;
+  useEffect(() => {
+    onRegimeChangeRef.current = onRegimeChange;
+  });
   useEffect(() => {
     onRegimeChangeRef.current?.(regime);
   }, [regime]);
@@ -121,7 +121,7 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
       const rect = el.getBoundingClientRect();
       const factor = Math.exp(-e.deltaY * WHEEL_SENSITIVITY);
       setVp((v) => {
-        const fit = fitScale.current;
+        const fit = fitScaleRef.current;
         const target = Math.min(fit * MAX_ZOOM_IN, Math.max(fit / MAX_ZOOM_OUT, v.scale * factor));
         return zoomTo(v, e.clientX - rect.left, e.clientY - rect.top, target);
       });

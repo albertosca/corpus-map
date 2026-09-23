@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import type { MapSpec } from "./shared/spec";
+import { fitSpec } from "./viewport/fit";
+import { toScreen } from "./viewport/viewport";
 
 const spec: MapSpec = {
   version: "1",
@@ -251,6 +253,69 @@ describe("CorpusMap", () => {
     } finally {
       if (original) Object.defineProperty(window, "devicePixelRatio", original);
       else Reflect.deleteProperty(window, "devicePixelRatio");
+    }
+  });
+});
+
+function recordingContext(texts: Array<{ text: string; x: number; y: number }>): CanvasRenderingContext2D {
+  const noop = () => {};
+  const ctx = {
+    canvas: { width: 0, height: 0 },
+    clearRect: noop,
+    setTransform: noop,
+    beginPath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    closePath: noop,
+    fill: noop,
+    stroke: noop,
+    arc: noop,
+    fillText: (text: string, x: number, y: number) => texts.push({ text, x, y }),
+    fillStyle: "",
+    strokeStyle: "",
+    font: "",
+  };
+  return ctx as unknown as CanvasRenderingContext2D;
+}
+
+describe("spec swap", () => {
+  it("never paints the new spec at the previous viewport", () => {
+    const texts: Array<{ text: string; x: number; y: number }> = [];
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => recordingContext(texts)) as unknown as typeof original;
+    try {
+      const small: MapSpec = {
+        version: "1",
+        territories: [{ id: "t", name: "Small", members: ["a", "b", "c"], centroid: [1, 1] }],
+        nodes: [
+          { id: "a", label: "A", x: 0, y: 0, territory: "t" },
+          { id: "b", label: "B", x: 2, y: 0, territory: "t" },
+          { id: "c", label: "C", x: 1, y: 2, territory: "t" },
+        ],
+      };
+      const large: MapSpec = {
+        version: "1",
+        territories: [{ id: "u", name: "Large", members: ["d", "e", "f"], centroid: [500, 500] }],
+        nodes: [
+          { id: "d", label: "D", x: 0, y: 0, territory: "u" },
+          { id: "e", label: "E", x: 1000, y: 0, territory: "u" },
+          { id: "f", label: "F", x: 500, y: 1000, territory: "u" },
+        ],
+      };
+      const { rerender } = render(
+        <CorpusMap spec={small} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />,
+      );
+      texts.length = 0;
+      rerender(<CorpusMap spec={large} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />);
+      const [ex, ey] = toScreen(fitSpec(large, 400, 300, 24), 500, 500);
+      const largeTexts = texts.filter((t) => t.text === "Large");
+      expect(largeTexts.length).toBeGreaterThan(0);
+      for (const t of largeTexts) {
+        expect(t.x).toBeCloseTo(ex, 6);
+        expect(t.y).toBeCloseTo(ey, 6);
+      }
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original;
     }
   });
 });
