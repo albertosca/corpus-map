@@ -11,6 +11,8 @@ export interface CardOverlayProps {
   cap: number;
   width: number;
   height: number;
+  /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
+  opacity?: number | undefined;
   renderCard: (node: MapNode) => ReactNode;
 }
 
@@ -31,6 +33,7 @@ export function CardOverlay({
   cap,
   width,
   height,
+  opacity = 1,
   renderCard,
 }: CardOverlayProps): ReactElement | null {
   if (regime !== "near") return null;
@@ -38,7 +41,7 @@ export function CardOverlay({
   const shown = visibleNodes(spec, viewport, width, height, cap);
 
   return (
-    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity }}>
       {shown.map((node) => {
         const [x, y] = toScreen(viewport, node.x, node.y);
         return (

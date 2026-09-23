@@ -5,11 +5,5 @@ export interface LodThresholds {
   nearAt: number;
 }
 
-export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 8 };
-
-export function regimeFor(scale: number, t: LodThresholds): Regime {
-  if (!Number.isFinite(scale)) return "far";
-  if (scale >= t.nearAt) return "near";
-  if (scale >= t.midAt) return "mid";
-  return "far";
-}
+/** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
+export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 6 };

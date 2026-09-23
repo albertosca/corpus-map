@@ -3,12 +3,15 @@ import { type ReactElement, type ReactNode } from "react";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
+import { type Tuning } from "./shared/tuning";
 export interface CorpusMapProps {
     spec: MapSpec;
     renderCard: (node: MapNode) => ReactNode;
     width: number;
     height: number;
     thresholds?: LodThresholds | undefined;
+    /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
+    tuning?: Partial<Tuning> | undefined;
     cardCap?: number | undefined;
     theme?: Theme | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
@@ -54,9 +57,11 @@ export interface CardOverlayProps {
     cap: number;
     width: number;
     height: number;
+    /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
+    opacity?: number | undefined;
     renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({ spec, viewport, regime, cap, width, height, renderCard, }: CardOverlayProps): ReactElement | null;
+export declare function CardOverlay({ spec, viewport, regime, cap, width, height, opacity, renderCard, }: CardOverlayProps): ReactElement | null;
 
 // cards/layout.d.ts
 export interface CardAnchor {
@@ -91,10 +96,13 @@ export declare function layoutCards(anchors: readonly CardAnchor[], size: {
 export type { CorpusMapProps } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
+export { DEFAULT_THRESHOLDS } from "./lod/lod";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
 export { DEFAULT_THEME } from "./shared/theme";
+export type { Tuning } from "./shared/tuning";
+export { DEFAULT_TUNING } from "./shared/tuning";
 
 // labels/contrast.d.ts
 type Rgba = [number, number, number, number];
@@ -173,14 +181,19 @@ export declare function signedDistance(p: Point, ring: Ring): number;
  */
 export declare function poleOfInaccessibility(ring: Ring, precision: number): Point;
 
+// labels/useMeasure.d.ts
+import { type Measure } from "./placement";
+/** Text measurement from an offscreen 2D canvas; the deterministic estimate where there is none (jsdom). */
+export declare function useMeasure(): Measure;
+
 // lod/lod.d.ts
 export type Regime = "far" | "mid" | "near";
 export interface LodThresholds {
     midAt: number;
     nearAt: number;
 }
+/** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
-export declare function regimeFor(scale: number, t: LodThresholds): Regime;
 
 // lod/regime.d.ts
 import type { LodThresholds, Regime } from "./lod";

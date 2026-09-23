@@ -100,15 +100,35 @@ describe("CorpusMap", () => {
     expect(container.querySelector("canvas")).not.toBeNull();
   });
 
+  it("opens the far regime for a corpus with a large fitted scale, like the elements demo (default thresholds)", () => {
+    // Extent 17x4 in 960x640 (24 px padding, usable 912x592) fits at
+    // scale = min(912/17, 592/4) = 53.6, which is above the pre-migration
+    // absolute nearAt (8) and rendered cards on mount before this task.
+    // Thresholds are now ratios of the fitted scale, so mounting (vp = the
+    // fitted viewport, ratio 1) is always "far".
+    const wide: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0, territory: null },
+        { id: "b", label: "B", x: 17, y: 4, territory: null },
+      ],
+    };
+    const { container } = render(
+      <CorpusMap spec={wide} renderCard={(n) => <div>{n.label}</div>} width={960} height={640} />,
+    );
+    expect(container.querySelectorAll("[data-card]")).toHaveLength(0);
+  });
+
   // Explicit timeout: a single userEvent.click already measured at 3.5s on a
   // loaded runner (load avg ~7-12), well above the 5000ms default budget.
   it("pans and zooms the canvas to a territory when it is focused in the tree (Ruling B)", async () => {
     const user = userEvent.setup();
-    // fitSpec puts the initial scale around 0.25 for this bounding box at
-    // this viewport size, so these thresholds start the map in "mid" (tree
-    // shows territories, not items) and land exactly in "near" once the
-    // focus handler sets the scale to `nearAt`.
-    const thresholds = { midAt: 0.1, nearAt: 1 };
+    // Thresholds are ratios of the fitted scale, and mounting always starts
+    // at ratio 1 (vp = the fitted viewport): midAt < 1 < nearAt starts the
+    // map in "mid" (tree shows territories, not items) and it lands exactly
+    // in "near" once the focus handler sets the scale to `fitScale * nearAt`.
+    const thresholds = { midAt: 0.5, nearAt: 2 };
 
     render(
       <CorpusMap
@@ -130,15 +150,17 @@ describe("CorpusMap", () => {
     expect(Math.abs(top - height / 2)).toBeLessThanOrEqual(5);
   }, 15_000);
 
-  // Explicit timeout: ~44 full renders + userEvent clicks measured at ~5.2s
+  // Explicit timeout: ~48 full renders + userEvent clicks measured at ~5.2s
   // on a loaded runner (load avg ~7-12), over the 5000ms default budget.
   it("focusing a territory lands in the near regime for awkward corpus extents (C3 sweep)", async () => {
     const user = userEvent.setup();
-    // Extents chosen so the fitted scale is an awkward double. Multiplying
-    // such a scale by `nearAt / scale` lands a float ulp below `nearAt` for
-    // roughly one extent in sixteen; building the viewport from `nearAt`
-    // directly cannot. Both `nearAt` values are swept; extents whose fitted
-    // scale is already at or past `nearAt` start in "near" and are skipped.
+    // Extents chosen so the fitted scale (an awkward double) makes
+    // `fitScale * nearAt` round-trip through `regimeAt`'s ratio division
+    // imprecisely for roughly one extent in sixteen. Since thresholds are
+    // now ratios, the mount regime is always "far" (ratio 1 < any nearAt
+    // swept here) regardless of extent — what varies with the extent is
+    // only the magnitude of `fitScale`, and therefore the float ulp the
+    // round trip can lose. Both `nearAt` ratios are swept.
     const ks = [
       1, 7, 20, 50, 86, 95, 113, 130, 162, 168, 175, 195, 200, 208, 238, 260, 300, 323, 331, 348, 362, 377, 389, 398,
     ];
@@ -148,8 +170,6 @@ describe("CorpusMap", () => {
       for (const k of ks) {
         const ex = k * 1.37 + 0.11;
         const ey = ex * 0.73;
-        const fitted = Math.min((width - 48) / ex, (height - 48) / ey);
-        if (fitted >= nearAt) continue;
         swept += 1;
         const { unmount } = render(
           <CorpusMap
@@ -161,7 +181,7 @@ describe("CorpusMap", () => {
           />,
         );
         await user.click(screen.getByRole("button", { name: /South/ }));
-        if (document.querySelector('[data-card="b"]') === null) failures.push(`nearAt=${nearAt} k=${k} fit=${fitted}`);
+        if (document.querySelector('[data-card="b"]') === null) failures.push(`nearAt=${nearAt} k=${k} ex=${ex}`);
         unmount();
       }
     }
@@ -275,6 +295,10 @@ function recordingContext(texts: Array<{ text: string; x: number; y: number }>):
     stroke: noop,
     arc: noop,
     fillText: (text: string, x: number, y: number) => texts.push({ text, x, y }),
+    // `useMeasure` creates its own offscreen canvas; this override replaces
+    // `HTMLCanvasElement.prototype.getContext` globally for the test, so
+    // that canvas gets this fake context too and needs a `measureText`.
+    measureText: (text: string) => ({ width: text.length * 6 }),
     fillStyle: "",
     strokeStyle: "",
     font: "",
