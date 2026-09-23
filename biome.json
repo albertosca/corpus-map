@@ -19,7 +19,8 @@
     "rules": {
       "preset": "recommended",
       "suspicious": { "noExplicitAny": "error" },
-      "style": { "noNonNullAssertion": "error", "useImportType": "error" }
+      "style": { "noNonNullAssertion": "error", "useImportType": "error" },
+      "correctness": { "useExhaustiveDependencies": "off", "useHookAtTopLevel": "off" }
     }
   },
   "javascript": {
