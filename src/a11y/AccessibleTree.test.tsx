@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { AccessibleTree } from "../src/react/AccessibleTree";
-import type { MapSpec } from "../src/spec";
+import type { MapSpec } from "../shared/spec";
+import { AccessibleTree } from "./AccessibleTree";
 
 const spec: MapSpec = {
   version: "1",

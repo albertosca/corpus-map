@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THRESHOLDS, regimeFor } from "../src/lod";
+import { DEFAULT_THRESHOLDS, regimeFor } from "./lod";
 
 const t = { midAt: 2, nearAt: 8 };
 

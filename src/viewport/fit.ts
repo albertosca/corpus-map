@@ -1,5 +1,5 @@
-import type { MapSpec } from "../spec";
-import type { Viewport } from "../viewport";
+import type { MapSpec } from "../shared/spec";
+import type { Viewport } from "./viewport";
 
 export interface Bounds {
   minX: number;

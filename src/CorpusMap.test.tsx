@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { CorpusMap } from "../src/react/CorpusMap";
-import type { MapSpec } from "../src/spec";
+import { CorpusMap } from "./CorpusMap";
+import type { MapSpec } from "./shared/spec";
 
 const spec: MapSpec = {
   version: "1",

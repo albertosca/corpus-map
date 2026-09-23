@@ -1,8 +1,8 @@
 import type { ReactElement } from "react";
-import type { Regime } from "../lod";
-import type { MapNode, MapSpec, Territory } from "../spec";
-import type { Viewport } from "../viewport";
-import { visibleNodes } from "./visible";
+import type { Regime } from "../lod/lod";
+import { visibleNodes } from "../lod/visible";
+import type { MapNode, MapSpec, Territory } from "../shared/spec";
+import type { Viewport } from "../viewport/viewport";
 
 export interface AccessibleTreeProps {
   spec: MapSpec;

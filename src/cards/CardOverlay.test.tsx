@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CardOverlay } from "../src/react/CardOverlay";
-import type { MapSpec } from "../src/spec";
+import type { MapSpec } from "../shared/spec";
+import { CardOverlay } from "./CardOverlay";
 
 const many = (n: number): MapSpec => ({
   version: "1",

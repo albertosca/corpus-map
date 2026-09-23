@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hullOf } from "../src/geometry/hull";
+import { hullOf } from "./hull";
 
 const square: Array<[number, number]> = [
   [0, 0],

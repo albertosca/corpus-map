@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SpecError, validateSpec } from "../src/spec";
+import { SpecError, validateSpec } from "./spec";
 
 const minimal = {
   version: "1",

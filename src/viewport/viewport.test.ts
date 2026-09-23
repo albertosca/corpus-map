@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panBy, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "../src/viewport";
+import { panBy, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "./viewport";
 
 const v: Viewport = { scale: 2, tx: 10, ty: -5 };
 

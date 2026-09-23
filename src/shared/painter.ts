@@ -1,7 +1,7 @@
-import { hullOf } from "../geometry/hull";
-import type { Regime } from "../lod";
-import type { MapSpec } from "../spec";
-import { toScreen, type Viewport } from "../viewport";
+import type { Regime } from "../lod/lod";
+import { hullOf } from "../territories/hull";
+import { toScreen, type Viewport } from "../viewport/viewport";
+import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
 
 export interface Theme {

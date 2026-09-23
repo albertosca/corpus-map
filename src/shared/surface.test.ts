@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canvasSurface } from "../src/canvas/surface";
+import { canvasSurface } from "./surface";
 
 describe("canvasSurface", () => {
   it("calls clearRect with canvas dimensions on clear()", () => {

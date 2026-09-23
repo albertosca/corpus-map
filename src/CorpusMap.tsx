@@ -1,12 +1,12 @@
 import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_THEME, paint, type Theme } from "../canvas/painter";
-import { canvasSurface } from "../canvas/surface";
-import { fitSpec } from "../geometry/fit";
-import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime, regimeFor } from "../lod";
-import { type MapNode, type MapSpec, validateSpec } from "../spec";
-import { panBy, type Viewport, zoomTo } from "../viewport";
-import { AccessibleTree } from "./AccessibleTree";
-import { CardOverlay } from "./CardOverlay";
+import { AccessibleTree } from "./a11y/AccessibleTree";
+import { CardOverlay } from "./cards/CardOverlay";
+import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime, regimeFor } from "./lod/lod";
+import { DEFAULT_THEME, paint, type Theme } from "./shared/painter";
+import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
+import { canvasSurface } from "./shared/surface";
+import { fitSpec } from "./viewport/fit";
+import { panBy, type Viewport, zoomTo } from "./viewport/viewport";
 
 export interface CorpusMapProps {
   spec: MapSpec;

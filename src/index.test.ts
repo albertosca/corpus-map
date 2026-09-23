@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THEME, type Theme } from "../src/index";
+import { DEFAULT_THEME, type Theme } from "./index";
 
 describe("package exports", () => {
   it("exposes DEFAULT_THEME and the Theme type from the package root", () => {

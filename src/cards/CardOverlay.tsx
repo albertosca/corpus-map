@@ -1,8 +1,8 @@
 import type { ReactElement, ReactNode } from "react";
-import type { Regime } from "../lod";
-import type { MapNode, MapSpec } from "../spec";
-import { toScreen, type Viewport } from "../viewport";
-import { visibleNodes } from "./visible";
+import type { Regime } from "../lod/lod";
+import { visibleNodes } from "../lod/visible";
+import type { MapNode, MapSpec } from "../shared/spec";
+import { toScreen, type Viewport } from "../viewport/viewport";
 
 export interface CardOverlayProps {
   spec: MapSpec;

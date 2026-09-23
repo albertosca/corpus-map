@@ -11,6 +11,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
+      exclude: ["fixtures/**"],
       thresholds: { lines: 90, branches: 85 },
     },
   },

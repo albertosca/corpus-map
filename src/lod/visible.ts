@@ -1,5 +1,5 @@
-import type { MapNode, MapSpec } from "../spec";
-import { toScreen, type Viewport } from "../viewport";
+import type { MapNode, MapSpec } from "../shared/spec";
+import { toScreen, type Viewport } from "../viewport/viewport";
 
 /**
  * Nodes whose screen position falls inside the viewport, in spec order,

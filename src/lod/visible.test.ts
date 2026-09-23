@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { visibleNodes } from "../src/react/visible";
-import type { MapSpec } from "../src/spec";
+import type { MapSpec } from "../shared/spec";
+import { visibleNodes } from "./visible";
 
 const viewport = { scale: 10, tx: 0, ty: 0 };
 

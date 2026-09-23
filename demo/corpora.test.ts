@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { gallery } from "../demo/corpora";
-import { validateSpec } from "../src/spec";
+import { validateSpec } from "../src/shared/spec";
+import { gallery } from "./corpora";
 
 describe("gallery corpora", () => {
   it("ships at least two, from the one list the demo picker reads", () => {

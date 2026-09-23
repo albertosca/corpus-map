@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { fitSpec, worldBounds } from "../src/geometry/fit";
-import type { MapSpec } from "../src/spec";
-import { toScreen } from "../src/viewport";
+import type { MapSpec } from "../shared/spec";
+import { fitSpec, worldBounds } from "./fit";
+import { toScreen } from "./viewport";
 
 const spec = (pts: Array<[number, number]>): MapSpec => ({
   version: "1",

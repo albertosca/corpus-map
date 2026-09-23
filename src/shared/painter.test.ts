@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THEME, paint } from "../src/canvas/painter";
-import { RecordingSurface } from "../src/canvas/surface";
-import type { MapSpec } from "../src/spec";
+import { DEFAULT_THEME, paint } from "./painter";
+import type { MapSpec } from "./spec";
+import { RecordingSurface } from "./surface";
 
 const spec: MapSpec = {
   version: "1",

@@ -2,7 +2,7 @@
 
 This library is a composition of ideas that already existed separately in other projects. Prior-art research (2026-09-13) examined thirteen libraries; the four below are the ones that directly shaped a design decision here, and each entry says exactly what was taken — an idea, or a license that permits reuse — and what was not.
 
-No code was copied from any of the projects listed below. The concave/convex hull implementation in this repository (`src/geometry/hull.ts`) is Andrew's monotone chain, written from the published algorithm, not adapted from any of these codebases.
+No code was copied from any of the projects listed below. The concave/convex hull implementation in this repository (`src/territories/hull.ts`) is Andrew's monotone chain, written from the published algorithm, not adapted from any of these codebases.
 
 ## AntV G6 — MIT
 
