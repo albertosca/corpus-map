@@ -57,4 +57,34 @@ describe("layoutCards", () => {
   it("returns nothing for no anchors", () => {
     expect(layoutCards([], SIZE, BOX)).toEqual([]);
   });
+
+  it("places first anchor even when it has no free candidate, clamped to box", () => {
+    const cards = layoutCards(
+      [
+        { id: "a", x: 50, y: 50 },
+        { id: "b", x: 60, y: 60 },
+        { id: "c", x: 70, y: 70 },
+      ],
+      { width: 200, height: 200 },
+      { width: 100, height: 100 },
+    );
+    expect(cards).toEqual([{ ids: ["a", "b", "c"], x: 0, y: 0 }]);
+  });
+
+  it("all anchors appear exactly once across all cards (property test)", () => {
+    for (let seed = 0; seed < 50; seed += 1) {
+      const rand = mulberry32(seed);
+      const cardWidth = Math.floor(20 + rand() * 280);
+      const cardHeight = Math.floor(20 + rand() * 280);
+      const anchors: CardAnchor[] = Array.from({ length: 30 }, (_, i) => ({
+        id: `p${seed}_${i}`,
+        x: rand() * 200,
+        y: rand() * 150,
+      }));
+      const cards = layoutCards(anchors, { width: cardWidth, height: cardHeight }, { width: 200, height: 150 });
+      const allIds = cards.flatMap((c) => c.ids);
+      expect(allIds).toHaveLength(30);
+      expect(new Set(allIds).size).toBe(30);
+    }
+  });
 });
