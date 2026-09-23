@@ -41,6 +41,9 @@ MIN_PAGE_SIZE = 50
 MAX_PAGES = 20
 USER_AGENT = "corpus-map-arxiv-pipeline/0.1 (https://github.com/albertosca/corpus-map; offline research corpus build)"
 
+MAX_ATTEMPTS = 3
+RETRY_BASE_DELAY = 3.0  # seconds; also the required spacing between requests
+
 _VERSION_SUFFIX = re.compile(r"v\d+$")
 
 Get = Callable[[str], str]
@@ -59,7 +62,7 @@ class Paper:
 
 
 def http_get(url: str) -> str:  # pragma: no cover -- real network, never called in tests
-    response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+    response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
     response.raise_for_status()
     return response.text
 
@@ -80,6 +83,16 @@ def cache_path(cache_dir: Path, url: str) -> Path:
     """The on-disk path a URL's cached body is stored at, under `cache_dir`."""
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
     return cache_dir / f"{digest}.atom"
+
+
+def _is_transient(err: httpx.HTTPError) -> bool:
+    """Whether `err` is worth retrying: an HTTP 5xx (arXiv's own hiccup) or any other
+    `httpx.HTTPError` that is not an HTTP status error at all (a dropped connection, a
+    timeout, ...). An HTTP 4xx is not transient -- retrying it would not change the outcome.
+    """
+    if isinstance(err, httpx.HTTPStatusError):
+        return err.response.status_code >= 500
+    return True
 
 
 def _strip_version(raw_id: str) -> str:
@@ -240,9 +253,7 @@ class Client:
         if cached is not None:
             return self._parse_or_raise(cached, url)
 
-        self._throttle()
-        body = self._get(url)
-        self._last_request_at = self._now()
+        body = self._get_with_retry(url)
         parsed = self._parse_or_raise(body, url)
         self._write_cache(url, body)
         return parsed
@@ -253,6 +264,28 @@ class Client:
             return parse_page(body)
         except ValueError as err:
             raise ValueError(f"{url}: {err}") from err
+
+    def _get_with_retry(self, url: str) -> str:
+        """`self._get(url)`, retrying a transient failure (an HTTP 5xx or a transport error
+        such as a dropped connection) up to `MAX_ATTEMPTS` times with `RETRY_BASE_DELAY *
+        2**attempt` backoff through the injected `sleep` -- never a raw traceback out of
+        `main()`. A non-transient HTTP error (a 4xx) is not retried: it will not go away.
+        Every attempt, retries included, still goes through `_throttle`, so the required
+        request spacing holds even across a retried request.
+        """
+        for attempt in range(MAX_ATTEMPTS):
+            self._throttle()
+            try:
+                body = self._get(url)
+            except httpx.HTTPError as err:
+                self._last_request_at = self._now()
+                if not _is_transient(err) or attempt == MAX_ATTEMPTS - 1:
+                    raise ValueError(f"{url}: request failed after {attempt + 1} attempt(s): {err}") from err
+                self._sleep(RETRY_BASE_DELAY * 2**attempt)
+                continue
+            self._last_request_at = self._now()
+            return body
+        raise AssertionError("unreachable: the loop above always returns or raises")  # pragma: no cover
 
     def _throttle(self) -> None:
         if self._last_request_at is None:

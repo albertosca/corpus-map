@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 import pytest
 
 from arxiv_corpus.fetch import (
+    MAX_ATTEMPTS,
     USER_AGENT,
     Client,
     Paper,
@@ -97,6 +100,43 @@ class RepeatingGetSpy:
     def __call__(self, url: str) -> str:
         self.calls.append(url)
         return self._body
+
+
+class FlakyGet:
+    """A fake `Get` that raises `httpx.HTTPStatusError` (`status_codes`, in order) before
+    finally returning `final_body`, recording every call."""
+
+    def __init__(self, status_codes: list[int], final_body: str) -> None:
+        self._status_codes = list(status_codes)
+        self._final_body = final_body
+        self.calls = 0
+
+    def __call__(self, url: str) -> str:
+        self.calls += 1
+        if self._status_codes:
+            code = self._status_codes.pop(0)
+            request = httpx.Request("GET", url)
+            response = httpx.Response(status_code=code, request=request)
+            raise httpx.HTTPStatusError(f"{code} for {url}", request=request, response=response)
+        return self._final_body
+
+
+class AlwaysFailingGet:
+    """A fake `Get` that always raises the given `httpx.HTTPError`, recording every call."""
+
+    def __init__(self, make_error: Callable[[str], httpx.HTTPError]) -> None:
+        self._make_error = make_error
+        self.calls = 0
+
+    def __call__(self, url: str) -> str:
+        self.calls += 1
+        raise self._make_error(url)
+
+
+def _status_error(url: str, code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", url)
+    response = httpx.Response(status_code=code, request=request)
+    return httpx.HTTPStatusError(f"{code} for {url}", request=request, response=response)
 
 
 def failing_get(url: str) -> str:
@@ -486,6 +526,87 @@ def test_papers_returns_empty_immediately_for_non_positive_want() -> None:
 
 def test_user_agent_names_the_real_repository() -> None:
     assert "https://github.com/albertosca/corpus-map" in USER_AGENT
+
+
+def test_transient_5xx_retries_with_backoff_and_succeeds() -> None:
+    clock = FakeClock()
+    get = FlakyGet(status_codes=[503], final_body=read_fixture("count.atom"))
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=3.0, cache_dir=None)
+
+    result = client.total("cs.CL")
+
+    assert result == 119789
+    assert get.calls == 2
+    assert clock.sleep_calls == [3.0]
+
+
+def test_transport_error_retries_and_succeeds() -> None:
+    clock = FakeClock()
+    calls = {"n": 0}
+
+    def get(url: str) -> str:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectError("connection refused")
+        return read_fixture("count.atom")
+
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=3.0, cache_dir=None)
+
+    result = client.total("cs.CL")
+
+    assert result == 119789
+    assert calls["n"] == 2
+    assert clock.sleep_calls == [3.0]
+
+
+def test_backoff_doubles_between_attempts() -> None:
+    clock = FakeClock()
+    get = FlakyGet(status_codes=[503, 502], final_body=read_fixture("count.atom"))
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=3.0, cache_dir=None)
+
+    client.total("cs.CL")
+
+    assert clock.sleep_calls == [3.0, 6.0]
+
+
+def test_5xx_exhausts_all_attempts_and_raises_a_clean_value_error_naming_the_url() -> None:
+    clock = FakeClock()
+    get = AlwaysFailingGet(lambda url: _status_error(url, 503))
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=0.0, cache_dir=None)
+
+    with pytest.raises(ValueError, match=r"cat:cs\.CL") as exc_info:
+        client.total("cs.CL")
+
+    assert get.calls == MAX_ATTEMPTS
+    assert f"after {MAX_ATTEMPTS} attempt" in str(exc_info.value)
+    assert not isinstance(exc_info.value, httpx.HTTPError)
+
+
+def test_a_4xx_status_is_not_retried() -> None:
+    clock = FakeClock()
+    get = AlwaysFailingGet(lambda url: _status_error(url, 404))
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=0.0, cache_dir=None)
+
+    with pytest.raises(ValueError, match=r"cat:cs\.CL"):
+        client.total("cs.CL")
+
+    assert get.calls == 1
+    assert clock.sleep_calls == []
+
+
+def test_retry_keeps_the_gap_between_requests(tmp_path: Path) -> None:
+    """Every attempt -- retries included -- still respects the throttle gap, and so does
+    the next, unrelated request right after."""
+    clock = FakeClock()
+    get = FlakyGet(status_codes=[503], final_body=read_fixture("count.atom"))
+    client = Client(get=get, sleep=clock.sleep, now=clock.now, gap=3.0, cache_dir=None)
+
+    client.total("cs.CL")
+    client.total("cs.AI")
+
+    # sleep 1: the 3.0s backoff after the first attempt's 503. sleep 2: the throttle gap
+    # before the next request, since the fake clock has not advanced on its own since then.
+    assert clock.sleep_calls == [3.0, 3.0]
 
 
 def test_error_feed_is_not_cached(tmp_path: Path) -> None:
