@@ -75,7 +75,9 @@ export declare function candidates(x: number, y: number, w: number, h: number, g
  * Place a card beside each anchor, in the first of eight candidate positions
  * that stays inside the box and overlaps no placed card (Christensen, Marks and
  * Shieber 1995). An anchor with no free candidate joins the placed card nearest
- * to it, which becomes a group card.
+ * to it, which becomes a group card. If no card has been placed yet and the
+ * anchor has no free candidate, place its card anyway, clamped to the box corner.
+ * A card larger than the box is placed at the box's corner (0, 0).
  */
 export declare function layoutCards(anchors: readonly CardAnchor[], size: {
     width: number;

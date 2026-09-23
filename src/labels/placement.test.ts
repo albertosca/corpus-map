@@ -112,4 +112,26 @@ describe("placeLabels", () => {
     const classes = new Set(labels.map((l) => l.labelClass));
     expect(classes).toEqual(new Set(["large", "medium", "small"]));
   });
+
+  it("handles IDs with same member count (coverage: id comparison branches)", () => {
+    const tied = placeLabels(
+      [
+        { id: "z", name: "z", anchor: [0, 0] as Point, members: 100 },
+        { id: "a", name: "a", anchor: [100, 100] as Point, members: 100 },
+        { id: "m", name: "m", anchor: [50, 50] as Point, members: 100 },
+      ],
+      FONTS,
+      CUT,
+      estimateText,
+      FIT,
+    );
+    const ids = tied.map((l) => l.id);
+    expect(ids).toEqual(["a", "m", "z"]);
+  });
+
+  it("estimateText handles fonts without px notation (coverage: regex fallback)", () => {
+    const result = estimateText("test", "600 bold system-ui");
+    expect(result.width).toBeCloseTo(28.8);
+    expect(result.height).toBe(12);
+  });
 });
