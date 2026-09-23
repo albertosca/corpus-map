@@ -1,4 +1,14 @@
-import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type PointerEvent,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AccessibleTree } from "./a11y/AccessibleTree";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
@@ -14,12 +24,31 @@ import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
 import { useElementSize } from "./viewport/useElementSize";
-import { panBy, recenterOnBoxChange, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
+import { clampScale, panBy, recenterOnBoxChange, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
 import { wheelZoomFactor } from "./viewport/wheel";
+
+/** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
+export interface CorpusMapHandle {
+  /** One wheel notch's zoom-in factor about the box centre, clamped to the wheel band. */
+  zoomIn(): void;
+  /** One wheel notch's zoom-out factor about the box centre, clamped to the wheel band. */
+  zoomOut(): void;
+  /** Resets the viewport to the fitted view, the same reset a `spec` change applies. */
+  fit(): void;
+}
+
+/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, and how many nodes are on screen (uncapped). */
+export interface CorpusMapView {
+  regime: Regime;
+  ratio: number;
+  visibleCount: number;
+}
 
 export interface CorpusMapProps {
   spec: MapSpec;
   renderCard: (node: MapNode) => ReactNode;
+  /** React 19 ref-as-prop; see `CorpusMapHandle`. */
+  ref?: Ref<CorpusMapHandle> | undefined;
   /**
    * When both `width` and `height` are given they win as the box's source —
    * no `ResizeObserver`, no waiting for a measurement, the map fits to them
@@ -29,8 +58,8 @@ export interface CorpusMapProps {
    * (props changing, or a new measurement) keeps the current scale and
    * keeps the world point that was at the old box's centre at the new box's
    * centre — it does not refit. A new `spec` still refits. A consumer who
-   * wants to refit after a box change calls the imperative handle's
-   * `fit()`.
+   * wants to refit after a box change calls `fit()` on the imperative
+   * handle obtained through the `ref` prop above (`CorpusMapHandle`).
    */
   width?: number | undefined;
   height?: number | undefined;
@@ -44,11 +73,22 @@ export interface CorpusMapProps {
   onSelect?: ((node: MapNode) => void) | undefined;
   /** Fired once on mount with the initial regime, then on every change. */
   onRegimeChange?: ((regime: Regime) => void) | undefined;
+  /**
+   * Fired once on mount, then after any committed render whose regime,
+   * ratio or visible-node count changed — at most once per animation frame
+   * during a drag, since drags are already coalesced into one commit per
+   * frame (metric 13).
+   */
+  onViewChange?: ((view: CorpusMapView) => void) | undefined;
 }
 
 const FIT_PADDING = 24;
 
-/** Wheel zoom is clamped to [fit / MAX_ZOOM_OUT, fit * MAX_ZOOM_IN] of the fitted scale. */
+/**
+ * Wheel zoom, and the imperative handle's `zoomIn`/`zoomOut` (showcase
+ * Task 3), are clamped to [fit / MAX_ZOOM_OUT, fit * MAX_ZOOM_IN] of the
+ * fitted scale, through the shared `clampScale`.
+ */
 const MAX_ZOOM_OUT = 8;
 const MAX_ZOOM_IN = 64;
 
@@ -99,10 +139,10 @@ interface HoverState {
  * else from measuring the parent (see the `width`/`height` doc). A box
  * change after the first keeps the current view — scale and centre — no
  * matter which source it came from; a new `spec` refits. To refit after a
- * box change, call the imperative handle's `fit()`.
+ * box change, pass a `ref` (typed `CorpusMapHandle`) and call its `fit()`.
  */
-export function CorpusMap(props: CorpusMapProps): ReactElement {
-  const { spec: raw, renderCard, onSelect, onRegimeChange } = props;
+export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
+  const { spec: raw, renderCard, onSelect, onRegimeChange, onViewChange } = props;
   const thresholds = useMemo(() => resolveThresholds(props.thresholds), [props.thresholds]);
   const tuning = useMemo(() => resolveTuning(props.tuning), [props.tuning]);
   const cardCap = props.cardCap ?? 200;
@@ -164,8 +204,8 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // being resized" case the same section's second bullet motivates — a
   // consumer who measures their own container and threads the numbers
   // through as props is that case, not a different one. A consumer who
-  // wants a refit after a box change calls the imperative handle's `fit()`
-  // (Task 3).
+  // wants a refit after a box change calls `fit()` on the handle obtained
+  // through the `ref` prop (`CorpusMapHandle`, showcase Task 3).
   const [fitBasis, setFitBasis] = useState<{ spec: MapSpec; width: number; height: number } | null>(
     ready ? { spec, width, height } : null,
   );
@@ -238,6 +278,12 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
 
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
+
+  // `onViewChange`'s node count: on-screen, uncapped — like the hover
+  // hit-test's own `visibleNodes(..., Infinity)` call above, not the
+  // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
+  // same count a maxed-out card cap would otherwise hide (showcase Task 3).
+  const visibleCount = ready ? visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).length : 0;
 
   // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
   // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
@@ -315,6 +361,62 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
     onRegimeChangeRef.current?.(next);
   }, [next, ready]);
 
+  // Latest callback in a ref, same pattern as `onRegimeChangeRef` just
+  // above: an inline arrow prop (the demo's indicator will pass one) must
+  // not re-fire the effect below just because its identity changed. Fires
+  // once on mount (`ready` gate, same reasoning as `onRegimeChange`), then
+  // again only when `next`/`ratio`/`visibleCount` actually differ from the
+  // previous commit's — which is also what keeps it to at most once per
+  // animation frame during a drag: the drag's own accumulated pan is
+  // already flushed into a single `setVp` per frame (metric 13), so there
+  // is at most one commit per frame for this effect to react to.
+  const onViewChangeRef = useRef(onViewChange);
+  useEffect(() => {
+    onViewChangeRef.current = onViewChange;
+  });
+  useEffect(() => {
+    if (!ready) return;
+    onViewChangeRef.current?.({ regime: next, ratio, visibleCount });
+  }, [next, ratio, visibleCount, ready]);
+
+  // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
+  // rebuilt every commit and its closures — `vp`/`fitScale`/`fitted`/
+  // `tuning`/`width`/`height`/`thresholds` — are always the ones from the
+  // render that just committed, never a stale render from before a spec or
+  // box change. `zoomIn`/`zoomOut` use `setVp`'s functional-update form
+  // (not the closed-over `vp` directly) so a burst of calls made between
+  // renders — the showcase's zoom button held down, or this file's own
+  // 200-calls test — each sees the previous call's result, not the same
+  // pre-burst `vp` 200 times over.
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => {
+      const factor = wheelZoomFactor({ deltaY: -120, deltaMode: 0, ctrlKey: false }, tuning);
+      setVp((v) => {
+        const target = clampScale(v.scale * factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
+        return zoomTo(v, width / 2, height / 2, target);
+      });
+    },
+    zoomOut: () => {
+      const factor = wheelZoomFactor({ deltaY: 120, deltaMode: 0, ctrlKey: false }, tuning);
+      setVp((v) => {
+        const target = clampScale(v.scale * factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
+        return zoomTo(v, width / 2, height / 2, target);
+      });
+    },
+    // Resets the regime hysteresis the same way a `spec` change does (the
+    // `fitBasis` branch above): `fit()` is an explicit "back to the
+    // overview" action, landing the ratio back at exactly 1, and a regime
+    // that merely carried its hysteresis band over from wherever the user
+    // had zoomed to could stay "near"/"mid" even though the view is back
+    // at the fitted one — the same staleness the `fitBasis` comment
+    // documents for a corpus swap, reproduced here by an explicit fit
+    // instead of a new spec (see this file's `.handle.test.tsx`).
+    fit: () => {
+      setVp(fitted);
+      setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+    },
+  }));
+
   // Native, non-passive listener: React's `onWheel` is registered passive, so
   // `preventDefault` there cannot stop the page from scrolling under the map.
   useEffect(() => {
@@ -329,7 +431,7 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
       );
       setVp((v) => {
         const fit = fitScaleRef.current;
-        const target = Math.min(fit * MAX_ZOOM_IN, Math.max(fit / MAX_ZOOM_OUT, v.scale * factor));
+        const target = clampScale(v.scale * factor, fit, MAX_ZOOM_OUT, MAX_ZOOM_IN);
         return zoomTo(v, e.clientX - rect.left, e.clientY - rect.top, target);
       });
       // A wheel zoom moves every on-screen point, so a hover name resolved

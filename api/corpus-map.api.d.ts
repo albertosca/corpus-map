@@ -1,12 +1,29 @@
 // CorpusMap.d.ts
-import { type ReactElement, type ReactNode } from "react";
+import { type ReactElement, type ReactNode, type Ref } from "react";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
 import { type Tuning } from "./shared/tuning";
+/** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
+export interface CorpusMapHandle {
+    /** One wheel notch's zoom-in factor about the box centre, clamped to the wheel band. */
+    zoomIn(): void;
+    /** One wheel notch's zoom-out factor about the box centre, clamped to the wheel band. */
+    zoomOut(): void;
+    /** Resets the viewport to the fitted view, the same reset a `spec` change applies. */
+    fit(): void;
+}
+/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, and how many nodes are on screen (uncapped). */
+export interface CorpusMapView {
+    regime: Regime;
+    ratio: number;
+    visibleCount: number;
+}
 export interface CorpusMapProps {
     spec: MapSpec;
     renderCard: (node: MapNode) => ReactNode;
+    /** React 19 ref-as-prop; see `CorpusMapHandle`. */
+    ref?: Ref<CorpusMapHandle> | undefined;
     /**
      * When both `width` and `height` are given they win as the box's source —
      * no `ResizeObserver`, no waiting for a measurement, the map fits to them
@@ -16,8 +33,8 @@ export interface CorpusMapProps {
      * (props changing, or a new measurement) keeps the current scale and
      * keeps the world point that was at the old box's centre at the new box's
      * centre — it does not refit. A new `spec` still refits. A consumer who
-     * wants to refit after a box change calls the imperative handle's
-     * `fit()`.
+     * wants to refit after a box change calls `fit()` on the imperative
+     * handle obtained through the `ref` prop above (`CorpusMapHandle`).
      */
     width?: number | undefined;
     height?: number | undefined;
@@ -34,6 +51,13 @@ export interface CorpusMapProps {
     onSelect?: ((node: MapNode) => void) | undefined;
     /** Fired once on mount with the initial regime, then on every change. */
     onRegimeChange?: ((regime: Regime) => void) | undefined;
+    /**
+     * Fired once on mount, then after any committed render whose regime,
+     * ratio or visible-node count changed — at most once per animation frame
+     * during a drag, since drags are already coalesced into one commit per
+     * frame (metric 13).
+     */
+    onViewChange?: ((view: CorpusMapView) => void) | undefined;
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -41,9 +65,9 @@ export interface CorpusMapProps {
  * else from measuring the parent (see the `width`/`height` doc). A box
  * change after the first keeps the current view — scale and centre — no
  * matter which source it came from; a new `spec` refits. To refit after a
- * box change, call the imperative handle's `fit()`.
+ * box change, pass a `ref` (typed `CorpusMapHandle`) and call its `fit()`.
  */
-export declare function CorpusMap(props: CorpusMapProps): ReactElement;
+export declare function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement;
 
 // a11y/AccessibleTree.d.ts
 import type { ReactElement } from "react";
@@ -130,7 +154,7 @@ export declare function layoutCards(anchors: readonly CardAnchor[], size: {
 }, gap?: number): PlacedCard[];
 
 // index.d.ts
-export type { CorpusMapProps } from "./CorpusMap";
+export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS } from "./lod/lod";
@@ -552,6 +576,13 @@ export declare function zoomAt(v: Viewport, sx: number, sy: number, factor: numb
  * enough to fall on the wrong side of a regime threshold.
  */
 export declare function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport;
+/**
+ * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. Factored out of
+ * the wheel handler so the imperative handle's `zoomIn`/`zoomOut` (showcase
+ * Task 3) clamp to exactly the same band through the same code, rather than
+ * a second copy of the arithmetic that could drift from it.
+ */
+export declare function clampScale(scale: number, fit: number, maxZoomOut: number, maxZoomIn: number): number;
 /**
  * A box resize (showcase Task 2): keeps `scale` and keeps the world point
  * formerly at the old box's centre at the new box's centre, instead of

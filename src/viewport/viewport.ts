@@ -32,6 +32,16 @@ export function zoomTo(v: Viewport, sx: number, sy: number, scale: number): View
 }
 
 /**
+ * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. Factored out of
+ * the wheel handler so the imperative handle's `zoomIn`/`zoomOut` (showcase
+ * Task 3) clamp to exactly the same band through the same code, rather than
+ * a second copy of the arithmetic that could drift from it.
+ */
+export function clampScale(scale: number, fit: number, maxZoomOut: number, maxZoomIn: number): number {
+  return Math.min(fit * maxZoomIn, Math.max(fit / maxZoomOut, scale));
+}
+
+/**
  * A box resize (showcase Task 2): keeps `scale` and keeps the world point
  * formerly at the old box's centre at the new box's centre, instead of
  * refitting — a spec change refits (via `fitSpec`); a box change alone does

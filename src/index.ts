@@ -1,4 +1,4 @@
-export type { CorpusMapProps } from "./CorpusMap";
+export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS } from "./lod/lod";
