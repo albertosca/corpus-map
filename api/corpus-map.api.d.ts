@@ -83,6 +83,22 @@ export interface LodThresholds {
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
 export declare function regimeFor(scale: number, t: LodThresholds): Regime;
 
+// lod/regime.d.ts
+import type { LodThresholds, Regime } from "./lod";
+/**
+ * Regime for `ratio` = scale / fitted scale, with hysteresis: a finer regime
+ * is entered at its threshold and left only once the ratio falls a fraction
+ * `hysteresis` below it, so a zoom oscillating around a threshold does not
+ * mount and unmount cards on every tick.
+ */
+export declare function regimeAt(rawRatio: number, t: LodThresholds, previous: Regime, hysteresis: number): Regime;
+/**
+ * Opacity of a layer that enters at `threshold`: 0 at the threshold, 1 at
+ * threshold * (1 + band), linear between. A threshold of 0 or less means the
+ * layer is always fully present.
+ */
+export declare function fade(ratio: number, threshold: number, band: number): number;
+
 // lod/visible.d.ts
 import type { MapNode, MapSpec } from "../shared/spec";
 import { type Viewport } from "../viewport/viewport";
@@ -199,6 +215,36 @@ export interface Theme {
 }
 export declare const DEFAULT_THEME: Theme;
 
+// shared/tuning.d.ts
+/**
+ * Every number the literature does not settle, in one place, so a tuning
+ * panel can drive them without code changes. See the map-feel spec for the
+ * source of each default.
+ */
+export interface Tuning {
+    /** Scale factor per pixel of wheel `deltaY`: exp(-deltaY * wheelSensitivity). d3-zoom's default. */
+    wheelSensitivity: number;
+    /** Extra gain for trackpad pinch, which browsers deliver as a wheel event with `ctrlKey`. */
+    pinchGain: number;
+    /** Largest zoom factor a single wheel event may apply (MapLibre caps at 2). */
+    maxZoomPerEvent: number;
+    /** Fraction below a threshold the ratio must fall before a regime is left. */
+    hysteresis: number;
+    /** Fraction above a threshold over which the entering layer fades from 0 to 1. */
+    fadeBand: number;
+    /** Boundary disk radius, in units of the 90th percentile of a territory's nearest-neighbour distances. */
+    hullPadding: number;
+    /** Member-count percentiles at or above which a territory name is large or medium. */
+    labelClasses: {
+        large: number;
+        medium: number;
+    };
+    /** Screen-pixel radius within which hovering picks the nearest point (a 24 px target, WCAG 2.5.8). */
+    hoverRadius: number;
+}
+export declare const DEFAULT_TUNING: Tuning;
+export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
+
 // territories/hull.d.ts
 type Point = [number, number];
 /**
@@ -215,6 +261,30 @@ import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
 export declare function paintTerritories(surface: Surface, spec: MapSpec, vp: Viewport, byId: ReadonlyMap<string, MapNode>, theme: Theme): void;
+
+// territories/shape.d.ts
+export type Point = [number, number];
+export type Ring = Point[];
+/**
+ * The `quantile` of the distances from each point to its nearest neighbour; 0
+ * for fewer than two points. The boundary radius is set from the 90th
+ * percentile, not the median: it must bridge a territory's sparse stretches,
+ * or the outline breaks into islands (measured on the synthetic corpus: the
+ * median split 18 of 30 territories, the 90th percentile none).
+ */
+export declare function spacing(points: readonly Point[], quantile?: number): number;
+export declare function extent(points: readonly Point[]): number;
+/**
+ * Outer rings of the union of disks of radius `r` around `points`, by
+ * marching squares over the signed distance to the union. Holes are dropped:
+ * a territory is drawn as regions, not as regions with gaps.
+ */
+export declare function disksOutline(points: readonly Point[], r: number): Ring[];
+/** One pass of Chaikin corner cutting on a closed ring. */
+export declare function chaikin(ring: Ring): Ring;
+/** Even-odd point-in-polygon test. */
+export declare function contains(ring: Ring, [x, y]: Point): boolean;
+export declare function ringArea(ring: Ring): number;
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";
@@ -244,3 +314,19 @@ export declare function zoomAt(v: Viewport, sx: number, sy: number, factor: numb
  * enough to fall on the wrong side of a regime threshold.
  */
 export declare function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport;
+
+// viewport/wheel.d.ts
+import type { Tuning } from "../shared/tuning";
+export interface WheelInput {
+    deltaY: number;
+    deltaMode: number;
+    ctrlKey: boolean;
+}
+/**
+ * Multiplicative zoom factor for one wheel event. Exponential in the delta,
+ * so a scroll yields the same final scale whether it arrives as one event or
+ * many (Guiard and Beaudouin-Lafon 2004: control the zoom index, not the
+ * scale). `ctrlKey` marks a trackpad pinch. A single event is capped so a
+ * large line- or page-mode notch cannot jump.
+ */
+export declare function wheelZoomFactor(e: WheelInput, t: Pick<Tuning, "wheelSensitivity" | "pinchGain" | "maxZoomPerEvent">): number;
