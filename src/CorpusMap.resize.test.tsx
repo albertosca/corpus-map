@@ -10,7 +10,35 @@ import { DEFAULT_TUNING } from "./shared/tuning";
  * a test fire a `contentRect` report directly, standing in for the browser
  * actually resizing the observed element. Mocked globally in this file only
  * (never in test/setup.ts) and restored after every test.
+ *
+ * Fix round 2: a real `ResizeObserver` delivers an initial callback with the
+ * observed element's *current* size as soon as `observe()` starts, not only
+ * on a later change — the original fake stayed silent until a test called
+ * `.report()`, which let a mid-lifecycle test (rewritten below) assert a
+ * "not ready" transition that cannot happen in a real browser. `observe()`
+ * now fires that initial callback too, from whichever of two sources
+ * actually determines the element's size in a given test:
+ *   - explicit `width`/`height` props: `CorpusMap`'s root div's inline style
+ *     is a deterministic, literal pixel box in that mode
+ *     (`explicitBox ? width : "100%"`), so the initial size is read straight
+ *     from `target`'s own `style.width`/`style.height` — no test setup
+ *     needed, and it can never disagree with what the component itself just
+ *     rendered.
+ *   - auto-measured mode: the style is `100%`, whose real pixel size in a
+ *     browser depends on the parent, which jsdom never lays out — a test
+ *     that wants `observe()` to already know a size (simulating a parent
+ *     that already has a size when the map mounts) sets `currentMeasuredSize`
+ *     first; left `null` (the default, reset every test), the fake stays
+ *     silent, same as the "genuinely not measured yet" case a real observer
+ *     would also not be able to report before the browser lays anything out.
+ * `observe()` is called exactly once per component instance (the hook's
+ * effect has a stable `[ref]` dependency), so this fake does not — and a
+ * real `ResizeObserver` watching a jsdom-less element could not either —
+ * re-fire automatically on a later style change alone; a genuinely new size
+ * after the first still needs an explicit `.report()` call.
  */
+let currentMeasuredSize: { width: number; height: number } | null = null;
+
 class FakeResizeObserver {
   static instances: FakeResizeObserver[] = [];
   readonly callback: ResizeObserverCallback;
@@ -23,6 +51,15 @@ class FakeResizeObserver {
 
   observe(target: Element): void {
     this.target = target;
+    const el = target as HTMLElement;
+    const styleWidth = Number.parseFloat(el.style.width);
+    const styleHeight = Number.parseFloat(el.style.height);
+    const explicitStyle =
+      el.style.width.endsWith("px") && el.style.height.endsWith("px")
+        ? { width: styleWidth, height: styleHeight }
+        : null;
+    const initial = explicitStyle ?? currentMeasuredSize;
+    if (initial) this.report(initial.width, initial.height);
   }
 
   unobserve(): void {
@@ -44,6 +81,7 @@ let original: typeof ResizeObserver | undefined;
 beforeEach(() => {
   original = globalThis.ResizeObserver;
   FakeResizeObserver.instances = [];
+  currentMeasuredSize = null;
   (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
     FakeResizeObserver as unknown as typeof ResizeObserver;
 });
@@ -136,12 +174,17 @@ describe("CorpusMap fills its parent (showcase Task 2)", () => {
         thresholds={{ midAt: 0, nearAt: 0 }}
       />,
     );
-    // Rendered immediately, with no ResizeObserver report at all.
+    // Rendered immediately: the observer does fire once, automatically, on
+    // observe() (fix round 2 — matching a real ResizeObserver's initial
+    // callback), reporting the same 400x300 straight from the root div's
+    // own style — but it is `measured`, which the map ignores outright
+    // while `explicitBox` is set, so nothing here waited on it.
     expect(cardLeft(container)).toBeCloseTo(200 + 6, 9);
     expect(cardTop(container)).toBeCloseTo(150, 9);
 
-    // A report through the (still-instantiated, but unused) observer must
-    // not move the map: explicit props always win.
+    // A further, different report through the (still-instantiated, but
+    // unused) observer must not move the map either: explicit props always
+    // win over `measured`, no matter its value.
     act(() => {
       latestObserver().report(1000, 1000);
     });
@@ -277,20 +320,32 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     expect(cardTop(container)).toBeCloseTo(300, 9);
   });
 
-  it("keeps the view (no stale-size frame) when a consumer switches from explicit props to auto-measured mid-lifecycle, and resumes keep-view correctly on the next real report", () => {
-    // While explicit props are active, `useElementSize` is still attached
-    // (rules of hooks) but is ignored — `box = explicitBox ?? measured`.
-    // The moment the consumer drops the props, `box` falls through to
-    // whatever `measured` currently holds. In a real browser the root
-    // div's CSS was pinned to the literal explicit size the whole time (see
-    // the render below), so the div's own box never moved and there is
-    // nothing new for the ResizeObserver to report until the CSS itself
-    // switches to `100%` on this same commit — so, for at least one commit,
-    // `measured` is exactly the *old* explicit size, not yet the true
-    // parent size. This test proves that transition paints the *same*
-    // frame (not a wrong-size one) — an exact rendered no-op — and that the
-    // very next real report is then handled by the ordinary (now-unified)
-    // keep-view path, self-correcting to the true size.
+  it("keeps the current view (no stale-size frame, no silent refit) when a consumer switches from explicit props to auto-measured mid-lifecycle, and resumes keep-view correctly on the next real report", () => {
+    // Fix round 2, realistic premise: a real ResizeObserver delivers an
+    // initial callback with the observed element's *current* size as soon
+    // as observe() starts. This file's FakeResizeObserver now does the same
+    // (see its own comment) — while explicit props are active, the root
+    // div's inline style already IS the literal 800x600 box, so `observe()`
+    // reports it immediately and `measured` already equals {800, 600} by
+    // the time this test's first `render()` returns. Dropping the props
+    // therefore falls through to an *already-correct* `measured` value, not
+    // a stale or absent one: `fitBasis` (still `{twoNodeSpec, 800, 600}`
+    // from before the switch) matches the post-switch box exactly, so the
+    // box-change branch's own `fitBasis.width !== width || ...` check is
+    // false and nothing runs at all — a genuine no-op commit, not a blank
+    // frame (fix round 1's version of this test wrongly assumed `measured`
+    // was still `null` at the switch, which only held because the fake
+    // stayed silent — that assumption is exactly what this round's realism
+    // fix corrects; see the "Fix round 2" section of the report).
+    //
+    // A genuine no-op is not, by itself, distinguishable from a *silent
+    // refit* to that same box: refitting `twoNodeSpec` into an unchanged
+    // 800x600 box reproduces the exact same fitted numbers, so a test that
+    // never moves the view away from the fit first cannot tell "kept" from
+    // "quietly recomputed" — the same pitfall the regime-hysteresis test
+    // above already had to design around. Zooming away from the fit before
+    // switching closes that gap: a refit-in-disguise would snap back to the
+    // fitted view; a true no-op keeps the zoomed one.
     const { container, rerender } = render(
       <CorpusMap
         spec={twoNodeSpec}
@@ -301,15 +356,30 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
         height={600}
       />,
     );
-    const beforeLeftA = cardLeft(container, "a");
-    const beforeLeftB = cardLeft(container, "b");
-    const beforeTop = cardTop(container, "a");
+    expect(FakeResizeObserver.instances).toHaveLength(1);
 
-    // Drop the props: falls through to `measured`, which is still `null`
-    // (this file's FakeResizeObserver only reports when a test calls
-    // `.report()` — nothing has, while explicit props were active) — so the
-    // map goes back to "not ready" for exactly this one commit, painting
-    // nothing rather than a wrong-size frame.
+    // Zoom OUT, anchored at the box's own centre (400, 300 in local/surface
+    // coordinates — jsdom's default zero-rect `getBoundingClientRect`, same
+    // as this file's other wheel-driven test). Zooming out, not in: the
+    // fitted view already spans 752 of the 800px-wide box (24px padding
+    // each side), so zooming in would immediately push a card outside the
+    // box and off `visibleNodes`' screen cull — zooming out leaves headroom.
+    // `zoomTo`/`zoomAt` keep whatever world point is currently under the
+    // anchor fixed at that screen position, and world (0, 0) — the midpoint
+    // of the two nodes — is exactly what the fitted view already puts at
+    // (400, 300), so it stays there through the zoom; only the scale
+    // changes, giving a real, non-default state to prove is preserved (not
+    // reproduced by coincidence).
+    fireEvent.wheel(surface(container), { deltaY: 240, clientX: 400, clientY: 300 });
+    const zoomedLeftA = cardLeft(container, "a");
+    const zoomedLeftB = cardLeft(container, "b");
+    const zoomedTop = cardTop(container, "a");
+    const FIT_SPAN = 10 * 75.2; // the un-zoomed span between the two cards, for comparison
+    expect(zoomedLeftB - zoomedLeftA).toBeLessThan(FIT_SPAN * 0.9); // actually zoomed out
+
+    // Drop the props: falls through to `measured`, which this fake already
+    // reported as {800, 600} on `observe()` — the same value `fitBasis`
+    // already holds — so this must be a true no-op commit.
     rerender(
       <CorpusMap
         spec={twoNodeSpec}
@@ -318,32 +388,24 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
         thresholds={{ midAt: 0, nearAt: 0 }}
       />,
     );
-    expect(container.querySelector("canvas")).toBeNull();
-    expect(container.querySelector("[data-card]")).toBeNull();
+    // No new observer: the hook's effect has a stable `[ref]` dependency
+    // and never re-subscribes just because the box's source changed.
+    expect(FakeResizeObserver.instances).toHaveLength(1);
+    expect(cardLeft(container, "a")).toBeCloseTo(zoomedLeftA, 9);
+    expect(cardLeft(container, "b")).toBeCloseTo(zoomedLeftB, 9);
+    expect(cardTop(container, "a")).toBeCloseTo(zoomedTop, 9);
 
-    // The next real report (the true parent size) arrives: treated as the
-    // *first* known size for the measured mode (fitBasis was cleared by the
-    // "not ready" commit above), so it fits fresh rather than keeping the
-    // stale 800x600 view — there is no old *measured* box to keep the view
-    // relative to, only an old *explicit* one, and the ruling's unification
-    // is about box changes within a continuously-ready lifetime, not about
-    // carrying a view across a ready -> not-ready -> ready gap.
-    act(() => {
-      latestObserver().report(800, 600);
-    });
-    expect(cardLeft(container, "a")).toBeCloseTo(beforeLeftA, 6);
-    expect(cardLeft(container, "b")).toBeCloseTo(beforeLeftB, 6);
-    expect(cardTop(container, "a")).toBeCloseTo(beforeTop, 6);
-
-    // And a further resize from there keeps the view exactly like any other
-    // measured box change.
+    // The true parent size arrives later, as a genuinely new report on the
+    // same (persisting) observer — handled by the ordinary, unified
+    // keep-view box-change path, same as any other measured resize, and
+    // relative to the *zoomed* state just proven kept, not the original fit.
     act(() => {
       latestObserver().report(1000, 700);
     });
     const afterLeftA = cardLeft(container, "a");
     const afterLeftB = cardLeft(container, "b");
-    expect(afterLeftB - afterLeftA).toBeCloseTo(beforeLeftB - beforeLeftA, 9);
-    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9);
+    expect(afterLeftB - afterLeftA).toBeCloseTo(zoomedLeftB - zoomedLeftA, 9); // scale kept
+    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
     expect(cardTop(container, "a")).toBeCloseTo(350, 9);
   });
 

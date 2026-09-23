@@ -7,7 +7,19 @@ import { useElementSize } from "./useElementSize";
  * jsdom has no `ResizeObserver`. A fake that records every instance and lets
  * a test fire a `contentRect` report directly, standing in for the browser
  * actually resizing the observed element.
+ *
+ * Fix round 2: a real `ResizeObserver` delivers an initial callback with the
+ * observed element's *current* size as soon as `observe()` starts, not only
+ * on a later change. `observe()` now does the same, from a module-level
+ * `currentSize` a test sets before rendering (this file's `Probe` element
+ * carries no size-bearing style of its own — unlike `CorpusMap`'s root div —
+ * so there is nothing to derive an initial size from other than a value the
+ * test supplies). Left `null` (the default, reset every test), the fake
+ * stays silent, same as a real observer would for an element the test has
+ * not told it anything about yet.
  */
+let currentSize: { width: number; height: number } | null = null;
+
 class FakeResizeObserver {
   static instances: FakeResizeObserver[] = [];
   readonly callback: ResizeObserverCallback;
@@ -20,6 +32,7 @@ class FakeResizeObserver {
 
   observe(target: Element): void {
     this.target = target;
+    if (currentSize) this.report(currentSize.width, currentSize.height);
   }
 
   unobserve(): void {
@@ -41,6 +54,7 @@ let original: typeof ResizeObserver | undefined;
 beforeEach(() => {
   original = globalThis.ResizeObserver;
   FakeResizeObserver.instances = [];
+  currentSize = null;
   (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
     FakeResizeObserver as unknown as typeof ResizeObserver;
 });
@@ -63,6 +77,13 @@ describe("useElementSize", () => {
     render(<Probe onRender={(s) => seen.push(s)} />);
     expect(seen[seen.length - 1]).toBeNull();
     expect(FakeResizeObserver.instances).toHaveLength(1);
+  });
+
+  it("returns a size already known at observe() time immediately, with no separate report() call (fix round 2 realism)", () => {
+    currentSize = { width: 640, height: 480 };
+    const seen: Array<{ width: number; height: number } | null> = [];
+    render(<Probe onRender={(s) => seen.push(s)} />);
+    expect(seen[seen.length - 1]).toEqual({ width: 640, height: 480 });
   });
 
   it("returns the size from the first reported contentRect", () => {
