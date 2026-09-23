@@ -30,3 +30,20 @@ export function zoomTo(v: Viewport, sx: number, sy: number, scale: number): View
   const factor = scale / v.scale;
   return { scale, tx: sx - (sx - v.tx) * factor, ty: sy - (sy - v.ty) * factor };
 }
+
+/**
+ * A box resize (showcase Task 2): keeps `scale` and keeps the world point
+ * formerly at the old box's centre at the new box's centre, instead of
+ * refitting — a spec change refits (via `fitSpec`); a box change alone does
+ * not.
+ */
+export function recenterOnBoxChange(
+  v: Viewport,
+  oldWidth: number,
+  oldHeight: number,
+  newWidth: number,
+  newHeight: number,
+): Viewport {
+  const [wx, wy] = toWorld(v, oldWidth / 2, oldHeight / 2);
+  return { scale: v.scale, tx: newWidth / 2 - wx * v.scale, ty: newHeight / 2 - wy * v.scale };
+}

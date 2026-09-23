@@ -7,8 +7,9 @@ import { type Tuning } from "./shared/tuning";
 export interface CorpusMapProps {
     spec: MapSpec;
     renderCard: (node: MapNode) => ReactNode;
-    width: number;
-    height: number;
+    /** When both `width` and `height` are given they win; otherwise the root fills its parent (`100%`), measured with a `ResizeObserver`. */
+    width?: number | undefined;
+    height?: number | undefined;
     thresholds?: LodThresholds | undefined;
     /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
     tuning?: Partial<Tuning> | undefined;
@@ -491,6 +492,31 @@ export interface Bounds {
 export declare function worldBounds(spec: MapSpec): Bounds;
 export declare function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport;
 
+// viewport/useElementSize.d.ts
+import { type RefObject } from "react";
+export interface ElementSize {
+    width: number;
+    height: number;
+}
+/**
+ * The size of `ref`'s element, from a `ResizeObserver`; `null` until the
+ * first observation. A report equal to the current size never calls
+ * `setSize` at all, so no render is ever scheduled for it — checked against
+ * `sizeRef`, not the `size` state variable, because a same-reference-
+ * returning functional update is only an optimization, not a guarantee:
+ * measured empirically while building this hook (against the CorpusMap
+ * frame-coalescing test's own technique of counting Profiler commits, not
+ * renders — a render-body counter would have missed it), React still
+ * re-commits a second, separate dispatch of an identical value once a real
+ * state change has already committed before it. `sizeRef` is written
+ * synchronously in this same callback, right where `size` is decided, rather
+ * than through a `[size]`-keyed effect like `CorpusMap`'s `hoverRef` (which
+ * needs one, since `hover` there has more than one writer): `size` has
+ * exactly one writer, this callback, so there is no other update this ref
+ * could fall behind.
+ */
+export declare function useElementSize(ref: RefObject<HTMLElement | null>): ElementSize | null;
+
 // viewport/viewport.d.ts
 export interface Viewport {
     scale: number;
@@ -507,6 +533,13 @@ export declare function zoomAt(v: Viewport, sx: number, sy: number, factor: numb
  * enough to fall on the wrong side of a regime threshold.
  */
 export declare function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport;
+/**
+ * A box resize (showcase Task 2): keeps `scale` and keeps the world point
+ * formerly at the old box's centre at the new box's centre, instead of
+ * refitting — a spec change refits (via `fitSpec`); a box change alone does
+ * not.
+ */
+export declare function recenterOnBoxChange(v: Viewport, oldWidth: number, oldHeight: number, newWidth: number, newHeight: number): Viewport;
 
 // viewport/wheel.d.ts
 import type { Tuning } from "../shared/tuning";

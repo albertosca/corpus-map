@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panBy, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "./viewport";
+import { panBy, recenterOnBoxChange, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "./viewport";
 
 const v: Viewport = { scale: 2, tx: 10, ty: -5 };
 
@@ -43,6 +43,26 @@ describe("viewport", () => {
     const after = toWorld(z, 400, 300);
     expect(after[0]).toBeCloseTo(before[0], 9);
     expect(after[1]).toBeCloseTo(before[1], 9);
+  });
+});
+
+describe("recenterOnBoxChange (showcase Task 2: a resize keeps the view)", () => {
+  it("keeps the world point formerly at the old box centre at the new box centre, and keeps scale", () => {
+    const start: Viewport = { scale: 3, tx: 20, ty: -10 };
+    const oldCentre = toWorld(start, 800 / 2, 600 / 2);
+    const next = recenterOnBoxChange(start, 800, 600, 1000, 700);
+    expect(next.scale).toBe(start.scale);
+    const [sx, sy] = toScreen(next, oldCentre[0], oldCentre[1]);
+    expect(sx).toBeCloseTo(1000 / 2, 9);
+    expect(sy).toBeCloseTo(700 / 2, 9);
+  });
+
+  it("is a no-op when the box does not change", () => {
+    const start: Viewport = { scale: 3, tx: 20, ty: -10 };
+    const next = recenterOnBoxChange(start, 800, 600, 800, 600);
+    expect(next.scale).toBe(start.scale);
+    expect(next.tx).toBeCloseTo(start.tx, 9);
+    expect(next.ty).toBeCloseTo(start.ty, 9);
   });
 });
 

@@ -13,14 +13,16 @@ import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
-import { panBy, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
+import { useElementSize } from "./viewport/useElementSize";
+import { panBy, recenterOnBoxChange, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
 import { wheelZoomFactor } from "./viewport/wheel";
 
 export interface CorpusMapProps {
   spec: MapSpec;
   renderCard: (node: MapNode) => ReactNode;
-  width: number;
-  height: number;
+  /** When both `width` and `height` are given they win; otherwise the root fills its parent (`100%`), measured with a `ResizeObserver`. */
+  width?: number | undefined;
+  height?: number | undefined;
   thresholds?: LodThresholds | undefined;
   /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
   tuning?: Partial<Tuning> | undefined;
@@ -81,7 +83,7 @@ interface HoverState {
 }
 
 export function CorpusMap(props: CorpusMapProps): ReactElement {
-  const { spec: raw, renderCard, width, height, onSelect, onRegimeChange } = props;
+  const { spec: raw, renderCard, onSelect, onRegimeChange } = props;
   const thresholds = useMemo(() => resolveThresholds(props.thresholds), [props.thresholds]);
   const tuning = useMemo(() => resolveTuning(props.tuning), [props.tuning]);
   const cardCap = props.cardCap ?? 200;
@@ -93,6 +95,22 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((n) => [n.id, n])), [spec]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Always called (rules of hooks): a consumer that never removes/adds
+  // `width`/`height` across an instance's lifetime never sees it matter, and
+  // one that does gets a `measured` value that has been tracking the parent
+  // the whole time, ready the moment the explicit props are dropped.
+  const measured = useElementSize(rootRef);
+  // "When both are given they win" (spec 4 §1): a lone `width` or `height`
+  // does not count as explicit, and falls through to the measured box.
+  const explicitBox =
+    props.width !== undefined && props.height !== undefined ? { width: props.width, height: props.height } : null;
+  const box = explicitBox ?? measured;
+  const ready = box !== null;
+  const width = box?.width ?? 0;
+  const height = box?.height ?? 0;
+
   const [vp, setVp] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
   const fitted = useMemo(() => fitSpec(spec, width, height, FIT_PADDING), [spec, width, height]);
   const fitScale = fitted.scale;
@@ -100,20 +118,47 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // where `ratio`/`next` are computed) so a spec/box swap can reset it in
   // the same render-phase adjustment that resets `vp`, not just `vp` alone.
   const [regime, setRegime] = useState<Regime>(() => regimeAt(1, thresholds, "far", tuning.hysteresis));
-  // Refit when the spec or the box changes, during render rather than in an
-  // effect, so no frame is ever painted with the new spec at the old
-  // viewport. The new viewport is exactly the fresh fit, so its ratio is
-  // always 1: reset the regime the same way a fresh mount would compute it,
-  // or a regime whose hysteresis exit band was sized for the OLD corpus's
-  // ratio can carry over onto a new corpus where it should have released
-  // (e.g. a wide hysteresis and a nearAt close to 1 — reproduced with
-  // `{ nearAt: 1.02 }`, `hysteresis: 0.3`: swapping specs while "near"
-  // left the regime stuck "near" on the new corpus's fitted view).
-  const [fitBasis, setFitBasis] = useState({ spec, width, height });
-  if (fitBasis.spec !== spec || fitBasis.width !== width || fitBasis.height !== height) {
-    setFitBasis({ spec, width, height });
-    setVp(fitted);
-    setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+  // Refit during render, not an effect, so no frame is ever painted with the
+  // new spec (or the first known box) at a stale viewport. `fitBasis` stays
+  // `null` until `ready`, so nothing here runs before the first size.
+  //
+  // A spec change always refits: the new viewport is exactly the fresh fit,
+  // so its ratio is always 1 — reset the regime the same way a fresh mount
+  // would compute it, or a regime whose hysteresis exit band was sized for
+  // the OLD corpus's ratio can carry over onto a new corpus where it should
+  // have released (e.g. a wide hysteresis and a nearAt close to 1 —
+  // reproduced with `{ nearAt: 1.02 }`, `hysteresis: 0.3`: swapping specs
+  // while "near" left the regime stuck "near" on the new corpus's fitted
+  // view). The first known size is treated the same way (`fitBasis === null`
+  // is indistinguishable from a spec swap: both need a fresh fit and a fresh
+  // regime).
+  //
+  // A box-only change (showcase Task 2) is different: explicit `width`/
+  // `height` props changing is "acceptable for fixed boxes" (spec 4 §1's
+  // parenthetical) and keeps today's refit-and-reset behaviour exactly,
+  // since every existing consumer of this path already relies on it. A
+  // *measured* box changing — a window being resized — refits was "wrong for
+  // a window being resized" (same parenthetical): it keeps `vp.scale` and
+  // keeps the world point that was at the old box's centre at the new box's
+  // centre (`recenterOnBoxChange`), and does not reset the regime — the
+  // view, hysteresis included, is kept.
+  const [fitBasis, setFitBasis] = useState<{ spec: MapSpec; width: number; height: number } | null>(
+    ready ? { spec, width, height } : null,
+  );
+  if (ready) {
+    if (fitBasis === null || fitBasis.spec !== spec) {
+      setFitBasis({ spec, width, height });
+      setVp(fitted);
+      setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+    } else if (fitBasis.width !== width || fitBasis.height !== height) {
+      setFitBasis({ spec, width, height });
+      if (explicitBox) {
+        setVp(fitted);
+        setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+      } else {
+        setVp(recenterOnBoxChange(vp, fitBasis.width, fitBasis.height, width, height));
+      }
+    }
   }
   const fitScaleRef = useRef(fitScale);
   useEffect(() => {
@@ -123,7 +168,6 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   useEffect(() => {
     tuningRef.current = tuning;
   }, [tuning]);
-  const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
@@ -239,13 +283,18 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns
   // the initial regime) and then only when the regime actually changes.
+  // Gated on `ready`: before the first measured size there is no real regime
+  // yet (`next` is computed from the box's 0-fallback), and firing then
+  // would hand a measured-mode consumer a bogus value before the map has
+  // ever painted anything.
   const onRegimeChangeRef = useRef(onRegimeChange);
   useEffect(() => {
     onRegimeChangeRef.current = onRegimeChange;
   });
   useEffect(() => {
+    if (!ready) return;
     onRegimeChangeRef.current?.(next);
-  }, [next]);
+  }, [next, ready]);
 
   // Native, non-passive listener: React's `onWheel` is registered passive, so
   // `preventDefault` there cannot stop the page from scrolling under the map.
@@ -399,70 +448,84 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onPointerLeave={onPointerLeave}
-      style={{ position: "relative", width, height, touchAction: "none" }}
+      style={{
+        position: "relative",
+        // Explicit props keep today's literal pixel box; without them the
+        // root fills its parent (spec 4 §1) — a CSS percentage, not a value
+        // frozen to the last measurement, so it keeps tracking the parent
+        // and the `ResizeObserver` inside `useElementSize` keeps firing on
+        // every future resize, not just the first one.
+        width: explicitBox ? width : "100%",
+        height: explicitBox ? height : "100%",
+        touchAction: "none",
+      }}
     >
-      {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
-      <canvas ref={canvasRef} aria-hidden="true" style={{ width, height, display: "block" }} />
-      <CardOverlay
-        spec={spec}
-        viewport={vp}
-        regime={next}
-        cap={cardCap}
-        width={width}
-        height={height}
-        cardSize={cardSize}
-        opacity={cardOpacity}
-        theme={theme}
-        renderCard={renderCard}
-      />
-      {hover ? (
-        <div
-          data-hover={hover.id}
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: hover.x,
-            top: hover.y - 8,
-            transform: "translate(-50%, -100%)",
-            background: theme.hoverBackground,
-            color: theme.hoverText,
-            padding: "2px 6px",
-            borderRadius: 4,
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            font: "12px system-ui, sans-serif",
-          }}
-        >
-          {hover.label}
-        </div>
+      {ready ? (
+        <>
+          {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
+          <canvas ref={canvasRef} aria-hidden="true" style={{ width, height, display: "block" }} />
+          <CardOverlay
+            spec={spec}
+            viewport={vp}
+            regime={next}
+            cap={cardCap}
+            width={width}
+            height={height}
+            cardSize={cardSize}
+            opacity={cardOpacity}
+            theme={theme}
+            renderCard={renderCard}
+          />
+          {hover ? (
+            <div
+              data-hover={hover.id}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: hover.x,
+                top: hover.y - 8,
+                transform: "translate(-50%, -100%)",
+                background: theme.hoverBackground,
+                color: theme.hoverText,
+                padding: "2px 6px",
+                borderRadius: 4,
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+                font: "12px system-ui, sans-serif",
+              }}
+            >
+              {hover.label}
+            </div>
+          ) : null}
+          <AccessibleTree
+            spec={spec}
+            regime={next}
+            viewport={vp}
+            width={width}
+            height={height}
+            cap={cardCap}
+            onFocusTerritory={(t) => {
+              // Built from the target scale directly rather than via a zoom
+              // factor: `fitScale * (nearAt / (scale / fitScale))`-style paths
+              // can land a float ulp below `fitScale * nearAt`, on the wrong
+              // side of the threshold; `regimeAt`'s tolerance covers the
+              // residual ulp of this multiply. Landing on `nearAt` itself would
+              // put the cards at exactly fade 0 (I1: `fade` is 0 AT its
+              // threshold, ramping to 1 only above it) — invisible cards right
+              // after the one keyboard/AT action meant to show them. Landing a
+              // full fade band above `nearAt` instead puts the fade at 1, same
+              // as any other zoom past the top of the band; clamped to the same
+              // wheel band a manual zoom is clamped to, so this can never land
+              // outside what the user could otherwise reach.
+              const [cx, cy] = t.centroid;
+              const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
+              const scale = Math.min(fitScale * MAX_ZOOM_IN, Math.max(fitScale / MAX_ZOOM_OUT, target));
+              setVp({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
+            }}
+            onSelect={onSelect}
+          />
+        </>
       ) : null}
-      <AccessibleTree
-        spec={spec}
-        regime={next}
-        viewport={vp}
-        width={width}
-        height={height}
-        cap={cardCap}
-        onFocusTerritory={(t) => {
-          // Built from the target scale directly rather than via a zoom
-          // factor: `fitScale * (nearAt / (scale / fitScale))`-style paths
-          // can land a float ulp below `fitScale * nearAt`, on the wrong
-          // side of the threshold; `regimeAt`'s tolerance covers the
-          // residual ulp of this multiply. Landing on `nearAt` itself would
-          // put the cards at exactly fade 0 (I1: `fade` is 0 AT its
-          // threshold, ramping to 1 only above it) — invisible cards right
-          // after the one keyboard/AT action meant to show them. Landing a
-          // full fade band above `nearAt` instead puts the fade at 1, same
-          // as any other zoom past the top of the band; clamped to the same
-          // wheel band a manual zoom is clamped to, so this can never land
-          // outside what the user could otherwise reach.
-          const [cx, cy] = t.centroid;
-          const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
-          const scale = Math.min(fitScale * MAX_ZOOM_IN, Math.max(fitScale / MAX_ZOOM_OUT, target));
-          setVp({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
-        }}
-        onSelect={onSelect}
-      />
     </div>
   );
 }
