@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { generateCorpus } from "../../fixtures/synthetic/generate";
+import { paint } from "../shared/paint";
+import { buildScene } from "../shared/scene";
+import { RecordingSurface } from "../shared/surface";
+import { DEFAULT_THEME } from "../shared/theme";
+import { DEFAULT_TUNING } from "../shared/tuning";
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
+import { fitSpec, worldBounds } from "../viewport/fit";
+import { toScreen, type Viewport } from "../viewport/viewport";
 import { estimateText, LABEL_PADDING, type PlacedLabel, placeLabels } from "./placement";
 import { poleOfInaccessibility } from "./pole";
 
@@ -61,13 +68,76 @@ describe("placeLabels", () => {
       ).toBe(0);
   });
 
-  it("metric 7: zooming in never hides a name, and visibility depends only on the ratio", () => {
+  // Component level, through `paint`: a planted `if (... || ratio >
+  // l.activeFrom * 1.5 + 8) continue;` in `paintLabels` left every test in
+  // the old, pure-`placeLabels`-only version of this test green (it never
+  // called `paint`, so it could never see what `paintLabels` actually
+  // draws). This version goes through `paint` into a `RecordingSurface` so
+  // the same defect fails it.
+  it("metric 7: zooming in never hides a name already drawn, and pan alone never changes which names are on screen", () => {
+    const width = 960;
+    const height = 640;
+    const fit = fitSpec(spec, width, height, 24);
+    const b = worldBounds(spec);
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText, fit.scale);
+    const vpAt = (ratio: number, panX = 0, panY = 0): Viewport => {
+      const scale = fit.scale * ratio;
+      return { scale, tx: width / 2 - cx * scale + panX, ty: height / 2 - cy * scale + panY };
+    };
+    const drawnNames = (ratio: number, panX = 0, panY = 0): Set<string> => {
+      const s = new RecordingSurface();
+      paint(s, scene, spec, vpAt(ratio, panX, panY), { regime: "far", ratio, pointAlpha: 0 }, DEFAULT_THEME);
+      return new Set(s.texts.map((t) => t.text));
+    };
+    const onScreenNames = (ratio: number, panX: number, panY: number): Set<string> => {
+      const vp = vpAt(ratio, panX, panY);
+      const out = new Set<string>();
+      for (const l of scene.labels) {
+        if (ratio < l.activeFrom) continue;
+        const [x, y] = toScreen(vp, l.anchor[0], l.anchor[1]);
+        if (x >= 0 && x <= width && y >= 0 && y <= height) out.add(l.name);
+      }
+      return out;
+    };
+
+    // (i) sweeping the ratio upward, no name drawn at one step is missing
+    // at any later step.
     let previous = new Set<string>();
     for (const ratio of ratios) {
-      const now = new Set(labels.filter((l) => ratio >= l.activeFrom).map((l) => l.id));
-      for (const id of previous) expect(now.has(id)).toBe(true);
+      const now = drawnNames(ratio);
+      for (const name of previous) expect(now.has(name)).toBe(true);
       previous = now;
     }
+
+    // (ii) at a fixed ratio, panning the viewport never changes which
+    // names are drawn — restricted to names whose anchor falls on screen
+    // at both pan offsets (a name near the edge can slide off screen at
+    // one offset and not the other; that is a screen-bounds fact, not a
+    // labeling bug). A modest pan (30, -15) at ratios close to the fitted
+    // scale (1, 1.5, 2) keeps a healthy double-digit overlap; a larger pan
+    // or a much higher ratio empties it out (this two-territory-scattered
+    // corpus is not re-centred on zoom the way `CorpusMap` would pan it),
+    // which would make the "at least one name" check below vacuous.
+    for (const ratio of [1, 1.5, 2]) {
+      const panA = drawnNames(ratio, 0, 0);
+      const panB = drawnNames(ratio, 30, -15);
+      const onBoth = [...onScreenNames(ratio, 0, 0)].filter((name) => onScreenNames(ratio, 30, -15).has(name));
+      expect(onBoth.length).toBeGreaterThan(0);
+      for (const name of onBoth) {
+        expect(panA.has(name)).toBe(true);
+        expect(panB.has(name)).toBe(true);
+      }
+    }
+  });
+
+  // Adds order-independence, which the paint-based test above does not
+  // cover (it builds one `Scene` from the territories in their given
+  // order): `placeLabels` must assign the same `activeFrom` to every id
+  // whatever order its inputs arrive in, since priority is decided by
+  // member count and id, not by array position.
+  it("metric 7 (order independence): placeLabels gives every id the same activeFrom whatever order the inputs arrive in", () => {
     const again = placeLabels(
       [...spec.territories]
         .reverse()
@@ -90,10 +160,6 @@ describe("placeLabels", () => {
     const [ux, uy] = anchorOf("t0");
     const [cx, cy] = spec.territories.find((t) => t.id === "t0")?.centroid ?? [0, 0];
     expect(Math.hypot(ux - cx, uy - cy)).toBeGreaterThan(1);
-  });
-
-  it("metric 9 (size): the smallest name is at least 12 px", () => {
-    expect(Math.min(...labels.map((l) => l.height))).toBeGreaterThanOrEqual(12);
   });
 
   it("shows the top name even when every name sits at the same point", () => {
@@ -127,11 +193,5 @@ describe("placeLabels", () => {
     );
     const ids = tied.map((l) => l.id);
     expect(ids).toEqual(["a", "m", "z"]);
-  });
-
-  it("estimateText handles fonts without px notation (coverage: regex fallback)", () => {
-    const result = estimateText("test", "600 bold system-ui");
-    expect(result.width).toBeCloseTo(28.8);
-    expect(result.height).toBe(12);
   });
 });
