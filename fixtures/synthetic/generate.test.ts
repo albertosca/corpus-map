@@ -72,8 +72,12 @@ describe("generateCorpus", () => {
       expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(pts));
     });
 
-    it("t1 is L-shaped around t2: t2's centroid lies inside t1's convex hull", () => {
+    it("t1 is L-shaped around t2: t2 sits inside t1's convex hull, where t1 has no members", () => {
       expect(insidePolygon(territory(spec, "t2").centroid, hullOf(memberPoints(spec, "t1")))).toBe(true);
+      const l = memberPoints(spec, "t1");
+      const [tx, ty] = territory(spec, "t2").centroid;
+      const nearest = Math.min(...l.map(([x, y]) => Math.hypot(x - tx, y - ty)));
+      expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(l));
     });
 
     it("t3 and t4 are adjacent and carry long names", () => {
