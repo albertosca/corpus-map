@@ -14,7 +14,7 @@ arXiv's metadata (title, abstract, category, and other bibliographic fields) is 
 
 ## No author names
 
-CC0 covers author names too, but this pipeline drops them anyway: a public, zoomable map of real people's names — searchable, screenshot-able, permanently attached to a specific paper title — adds risk to those authors for no benefit to the showcase, which only needs to demonstrate that the library can render a real corpus. `export.py` never reads the `<author>` element off the arXiv feed in the first place, and `arxiv.test.ts` walks the entire exported JSON recursively, asserting that no key named `author` or `authors` exists at any depth — not a spot check, a proof.
+CC0 covers author names too, but this pipeline drops them anyway: a public, zoomable map of real people's names — searchable, screenshot-able, permanently attached to a specific paper title — adds risk to those authors for no benefit to the showcase, which only needs to demonstrate that the library can render a real corpus. `fetch.py` never reads the `<author>` element off the arXiv feed in the first place, and `arxiv.test.ts` walks the entire exported JSON recursively, asserting that no key named `author` or `authors` exists at any depth — not a spot check, a proof.
 
 ## How to re-run it
 
@@ -40,7 +40,9 @@ Each stage caches its output under `.cache/` (git-ignored), so a failed or inter
 | **Total wall time, fetch through export** | **~15 m 54 s** |
 | Output | `arxiv.json` 1.79 MB (8,000 nodes, 38 territories); `arxiv.meta.json` 1.2 KB |
 
-38 of the 40 `cs.*` categories in `categories.py` ended up as territories — `cs.NA` and `cs.SY` genuinely returned zero papers under their own primary category from the live API on this run (both are commonly cross-listed rather than primary elsewhere: `math.NA` and `eess.SY`), which is expected, not a bug — `sample.py` gives a `total == 0` category a quota of `0` rather than forcing the floor onto an empty category.
+38 of the 40 `cs.*` categories in `categories.py` ended up as territories — `cs.NA` and `cs.SY` genuinely returned zero papers for the whole count query on this run, cross-listed papers included, not just their own primary category (both are commonly cross-listed rather than primary elsewhere: `math.NA` and `eess.SY`), which is expected, not a bug — `sample.py` gives a `total == 0` category a quota of `0` rather than forcing the floor onto an empty category.
+
+The committed corpus was also built with an earlier version of `sample.py`'s quota-shrink rule, which took every excess item off whichever category was currently largest rather than spreading it proportionally: all 43 papers above the `--n 8000` target came off `cs.LG` alone (1,592 → 1,549). `sample.py` now shrinks proportionally, but the corpus is not being rebuilt for this alone; a future refresh (see below) will use the corrected rule.
 
 ## Two things this run found that the design spec did not anticipate
 

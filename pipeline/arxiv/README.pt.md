@@ -14,7 +14,7 @@ Os metadados do arXiv (título, resumo, categoria e outros campos bibliográfico
 
 ## Sem nomes de autores
 
-O CC0 cobre nomes de autores também, mas este pipeline os descarta mesmo assim: um mapa público e navegável com nomes de pessoas reais — pesquisável, capturável em screenshot, permanentemente ligado ao título de um paper específico — adiciona risco a esses autores sem nenhum benefício para a vitrine, que só precisa demonstrar que a biblioteca consegue renderizar um corpus real. O `export.py` nunca lê o elemento `<author>` do feed do arXiv, para começar, e `arxiv.test.ts` percorre o JSON exportado inteiro recursivamente, checando que nenhuma chave chamada `author` ou `authors` existe em qualquer profundidade — não é uma amostragem pontual, é uma prova.
+O CC0 cobre nomes de autores também, mas este pipeline os descarta mesmo assim: um mapa público e navegável com nomes de pessoas reais — pesquisável, capturável em screenshot, permanentemente ligado ao título de um paper específico — adiciona risco a esses autores sem nenhum benefício para a vitrine, que só precisa demonstrar que a biblioteca consegue renderizar um corpus real. O `fetch.py` nunca lê o elemento `<author>` do feed do arXiv, para começar, e `arxiv.test.ts` percorre o JSON exportado inteiro recursivamente, checando que nenhuma chave chamada `author` ou `authors` existe em qualquer profundidade — não é uma amostragem pontual, é uma prova.
 
 ## Como rodar de novo
 
@@ -40,7 +40,9 @@ Cada estágio guarda sua saída em cache sob `.cache/` (ignorado pelo git), ent�
 | **Tempo total, do fetch ao export** | **~15 min 54 s** |
 | Saída | `arxiv.json` 1,79 MB (8.000 nós, 38 territórios); `arxiv.meta.json` 1,2 KB |
 
-38 das 40 categorias `cs.*` em `categories.py` viraram territórios — `cs.NA` e `cs.SY` genuinamente retornaram zero papers sob sua própria categoria primária na API ao vivo nesta execução (ambas costumam ser cross-listed em vez de primárias em outro lugar: `math.NA` e `eess.SY`), o que é esperado, não um bug — `sample.py` dá cota `0` a uma categoria com `total == 0` em vez de forçar o piso (`floor`) numa categoria vazia.
+38 das 40 categorias `cs.*` em `categories.py` viraram territórios — `cs.NA` e `cs.SY` genuinamente retornaram zero papers para a query de contagem inteira nesta execução, cross-lists incluídos, não só a própria categoria primária (ambas costumam ser cross-listed em vez de primárias em outro lugar: `math.NA` e `eess.SY`), o que é esperado, não um bug — `sample.py` dá cota `0` a uma categoria com `total == 0` em vez de forçar o piso (`floor`) numa categoria vazia.
+
+O corpus commitado também foi construído com uma versão anterior da regra de redução de cota de `sample.py`, que tirava todo o excedente da categoria que estivesse maior no momento em vez de distribuir proporcionalmente: os 43 papers acima da meta `--n 8000` saíram todos de `cs.LG` sozinha (1.592 → 1.549). O `sample.py` agora reduz proporcionalmente, mas o corpus não está sendo reconstruído só por causa disso; uma futura atualização (ver abaixo) vai usar a regra corrigida.
 
 ## Duas coisas que esta execução encontrou e que o spec de design não previu
 
