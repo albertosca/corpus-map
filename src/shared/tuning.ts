@@ -49,6 +49,9 @@ function validateTuning(t: Tuning): void {
   if (!Number.isFinite(t.fadeBand) || t.fadeBand < 0) {
     throw new RangeError(`tuning.fadeBand must be a finite number >= 0, got ${t.fadeBand}`);
   }
+  if (!Number.isFinite(t.hullPadding) || t.hullPadding <= 0) {
+    throw new RangeError(`tuning.hullPadding must be a finite number > 0, got ${t.hullPadding}`);
+  }
   if (!Number.isFinite(t.hoverRadius) || t.hoverRadius < 0) {
     throw new RangeError(`tuning.hoverRadius must be a finite number >= 0, got ${t.hoverRadius}`);
   }
