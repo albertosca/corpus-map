@@ -39,7 +39,9 @@ class HashEmbedder:
 
 def _hash_vector(text: str) -> npt.NDArray[np.float32]:
     digest = hashlib.sha256(text.encode("utf-8")).digest()
-    raw = np.frombuffer(digest, dtype=np.uint16).astype(np.float32)
+    # Pinned little-endian ("<u2") rather than native uint16: determinism must not depend on
+    # the machine's byte order.
+    raw = np.frombuffer(digest, dtype="<u2").astype(np.float32)
     unit = raw / np.linalg.norm(raw)
     return unit.astype(np.float32)
 

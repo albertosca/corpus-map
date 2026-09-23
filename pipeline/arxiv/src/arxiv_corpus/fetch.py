@@ -86,11 +86,16 @@ def _required_text(parent: ET.Element, tag: str, context: str) -> str:
     `context` identifies where in the feed this lookup happened (e.g. "arXiv feed" or
     "arXiv entry 2609.26796"), so the raised message pins down both the missing element and
     which response body it came from once the `Client` adds the request URL on top.
+
+    Text that is empty once stripped of whitespace (e.g. `<summary>   </summary>`) is
+    treated the same as a missing element -- it would otherwise produce a paper with an
+    empty abstract, or a node with an empty map label.
     """
     element = parent.find(tag, NAMESPACES)
-    if element is None or element.text is None:
+    text = element.text if element is not None else None
+    if text is None or not text.strip():
         raise ValueError(f"{context}: missing <{tag}>")
-    return element.text
+    return text
 
 
 def _required_attr(parent: ET.Element, tag: str, attr: str, context: str) -> str:

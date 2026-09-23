@@ -159,6 +159,31 @@ ERROR_FEED_ENTRY = """
     <updated>2026-01-01T00:00:00Z</updated>
   </entry>"""
 
+WHITESPACE_ONLY_TITLE_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <title>   </title>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <summary>Some invented abstract.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-01T00:00:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
+WHITESPACE_ONLY_SUMMARY_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <title>Invented title</title>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <summary>
+    </summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-01T00:00:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
 
 def test_parse_page_parses_total_ids_years_and_primary_categories() -> None:
     total, results = parse_page(read_fixture("page.atom"))
@@ -353,6 +378,22 @@ def test_parse_page_missing_title_raises_value_error_naming_entry_and_element() 
     body = make_atom(total=1, entries=[MISSING_TITLE_ENTRY])
 
     with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:title>"):
+        parse_page(body)
+
+
+def test_parse_page_whitespace_only_title_raises_value_error() -> None:
+    """A `<title>` that is only whitespace is treated as missing -- it would be an empty map label."""
+    body = make_atom(total=1, entries=[WHITESPACE_ONLY_TITLE_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:title>"):
+        parse_page(body)
+
+
+def test_parse_page_whitespace_only_summary_raises_value_error() -> None:
+    """A `<summary>` that is only whitespace is treated as missing -- it would be an empty abstract."""
+    body = make_atom(total=1, entries=[WHITESPACE_ONLY_SUMMARY_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:summary>"):
         parse_page(body)
 
 
