@@ -138,6 +138,12 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={thresholds}
+        // Zero-size cards (map-feel Task 8): the card frame then collapses
+        // to a point offset from its anchor by exactly the 6 px layout gap
+        // (`left = anchorX + 6, top = anchorY`), so the assertions below —
+        // which are about where the focus handler centres the anchor, not
+        // about card layout — only need that constant +6 added back in.
+        cardSize={{ width: 0, height: 0 }}
       />,
     );
 
@@ -147,7 +153,7 @@ describe("CorpusMap", () => {
     expect(card).not.toBeNull();
     const left = Number.parseFloat(card?.style.left ?? "");
     const top = Number.parseFloat(card?.style.top ?? "");
-    expect(Math.abs(left - width / 2)).toBeLessThanOrEqual(5);
+    expect(Math.abs(left - (width / 2 + 6))).toBeLessThanOrEqual(5);
     expect(Math.abs(top - height / 2)).toBeLessThanOrEqual(5);
   }, 15_000);
 
@@ -244,6 +250,12 @@ describe("CorpusMap", () => {
   });
 
   it("repositions cards when the width changes without a remount (I2)", () => {
+    // Zero-size cards (map-feel Task 8): keeps `left = anchorX + 6` exact
+    // and predictable across the resize, rather than depending on which of
+    // `layoutCards`'s eight candidates a 160x56 default frame would land on
+    // at each width — this test is about reactivity to the width prop, not
+    // about card layout.
+    const cardSize = { width: 0, height: 0 };
     const { container, rerender } = render(
       <CorpusMap
         spec={spec}
@@ -251,6 +263,7 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        cardSize={cardSize}
       />,
     );
     const before = (container.querySelector('[data-card="a"]') as HTMLElement).style.left;
@@ -261,11 +274,12 @@ describe("CorpusMap", () => {
         width={800}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        cardSize={cardSize}
       />,
     );
     const after = (container.querySelector('[data-card="a"]') as HTMLElement).style.left;
     expect(after).not.toBe(before);
-    expect(Number.parseFloat(after)).toBeCloseTo(400, 6);
+    expect(Number.parseFloat(after)).toBeCloseTo(400 + 6, 6);
   });
 
   it("refits to a different spec without a key= remount (I2)", () => {
@@ -274,6 +288,8 @@ describe("CorpusMap", () => {
       territories: [],
       nodes: [{ id: "z", label: "Zed", x: 100_000, y: 100_000, territory: null }],
     };
+    // Zero-size cards, same reason as above: `left = anchorX + 6` exactly.
+    const cardSize = { width: 0, height: 0 };
     const { container, rerender } = render(
       <CorpusMap
         spec={spec}
@@ -281,6 +297,7 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        cardSize={cardSize}
       />,
     );
     expect(container.querySelector('[data-card="a"]')).not.toBeNull();
@@ -291,11 +308,41 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        cardSize={cardSize}
       />,
     );
     const card = container.querySelector('[data-card="z"]') as HTMLElement | null;
     expect(card).not.toBeNull();
-    expect(Number.parseFloat(card?.style.left ?? "")).toBeCloseTo(width / 2, 6);
+    expect(Number.parseFloat(card?.style.left ?? "")).toBeCloseTo(width / 2 + 6, 6);
+  });
+
+  it("defaults cardSize to 160x56 and threads a custom cardSize through to the card frame", () => {
+    const { container: defaultContainer } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+      />,
+    );
+    const defaultCard = defaultContainer.querySelector('[data-card="a"]') as HTMLElement;
+    expect(defaultCard.style.width).toBe("160px");
+    expect(defaultCard.style.height).toBe("56px");
+
+    const { container } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        cardSize={{ width: 90, height: 30 }}
+      />,
+    );
+    const card = container.querySelector('[data-card="a"]') as HTMLElement;
+    expect(card.style.width).toBe("90px");
+    expect(card.style.height).toBe("30px");
   });
 
   it("marks the card overlay inert so consumer focusables inside cards leave the tab order (I5)", () => {

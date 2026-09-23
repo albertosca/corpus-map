@@ -1,9 +1,11 @@
 import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibleTree } from "./a11y/AccessibleTree";
-import { CardOverlay } from "./cards/CardOverlay";
+import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
 import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime } from "./lod/lod";
 import { fade, regimeAt } from "./lod/regime";
+import { visibleNodes } from "./lod/visible";
+import { nearestWithin } from "./points/hover";
 import { paint } from "./shared/paint";
 import { buildScene } from "./shared/scene";
 import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
@@ -11,7 +13,7 @@ import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
-import { panBy, type Viewport, zoomTo } from "./viewport/viewport";
+import { panBy, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
 import { wheelZoomFactor } from "./viewport/wheel";
 
 export interface CorpusMapProps {
@@ -23,6 +25,8 @@ export interface CorpusMapProps {
   /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
   tuning?: Partial<Tuning> | undefined;
   cardCap?: number | undefined;
+  /** Card frame size, passed to `layoutCards`. Defaults to 160x56. */
+  cardSize?: { width: number; height: number } | undefined;
   theme?: Theme | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
   /** Fired once on mount with the initial regime, then on every change. */
@@ -68,11 +72,23 @@ interface Pending {
   dy: number;
 }
 
+/** The nearest node to the pointer, resolved and rendered as a small label above its point. */
+interface HoverState {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+}
+
 export function CorpusMap(props: CorpusMapProps): ReactElement {
   const { spec: raw, renderCard, width, height, onSelect, onRegimeChange } = props;
   const thresholds = props.thresholds ?? DEFAULT_THRESHOLDS;
   const tuning = useMemo(() => resolveTuning(props.tuning), [props.tuning]);
   const cardCap = props.cardCap ?? 200;
+  // Not memoized: `layoutCards` is cheap and already recomputed every render
+  // inside `CardOverlay`, so keying a memo on this object's identity would
+  // only add a stale-dependency risk (Task 7's lesson) for no benefit.
+  const cardSize = props.cardSize ?? DEFAULT_CARD_SIZE;
   const theme = props.theme ?? DEFAULT_THEME;
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
@@ -112,6 +128,12 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
   const rafId = useRef<number | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
+  // The pointer's latest surface-relative position while not pressed,
+  // awaiting resolution in the same animation-frame flush as a drag's
+  // accumulated pan (metric 13: resolving it synchronously in the move
+  // handler instead would cost one commit per move).
+  const hoverPoint = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -128,6 +150,12 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // pass renders and paints.
   const next = regimeAt(ratio, thresholds, regime, tuning.hysteresis);
   if (next !== regime) setRegime(next);
+  // A wheel zoom can leave the mid/near regimes without any further pointer
+  // move to trigger the frame-flush clear below — adjusted here, during
+  // render, so a stale hover name never has a frame where it is visibly
+  // shown at the wrong regime, and never lingers to reappear untested for
+  // proximity if the ratio zooms back in without a fresh move.
+  if (next !== "mid" && next !== "near" && hover !== null) setHover(null);
 
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
@@ -228,31 +256,71 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
     if (e.button !== 0 || !e.isPrimary) return;
     drag.current = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Pressing clears the hover name: a scheduled frame from just before the
+    // press could still be in flight, so this also drops the queued point,
+    // not just the rendered state. Guarded on the current value, not just
+    // called unconditionally: React's same-value bail-out for a `useState`
+    // setter only skips the *render*, not the dispatch itself, and an
+    // unconditional call here — even when hover is already null — was
+    // measured to surface as a spurious extra commit later in the same
+    // pointer-move burst (metric 13's own test, before this guard).
+    hoverPoint.current = null;
+    if (hover !== null) setHover(null);
   };
 
-  // Pointer moves only accumulate a delta; the viewport is updated at most
-  // once per animation frame, so a burst of move events costs one React
-  // commit per frame, not one per event (metric 13).
+  // Pointer moves accumulate a drag delta, or (while not pressed) queue a
+  // hover point; both are resolved at most once per animation frame, so a
+  // burst of move events costs one React commit per frame, not one per
+  // event (metric 13) — hover included, which is why it is resolved inside
+  // the same scheduled callback below rather than with its own `setHover`
+  // here in the handler.
   const onPointerMove = (e: PointerEvent) => {
     const d = drag.current;
-    if (!d) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
-    drag.current = { ...d, x: e.clientX, y: e.clientY };
-    const p = pending.current;
-    pending.current = p ? { dx: p.dx + dx, dy: p.dy + dy } : { dx, dy };
+    if (d) {
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      drag.current = { ...d, x: e.clientX, y: e.clientY };
+      const p = pending.current;
+      pending.current = p ? { dx: p.dx + dx, dy: p.dy + dy } : { dx, dy };
+    } else {
+      const rect = rootRef.current?.getBoundingClientRect();
+      hoverPoint.current = rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null;
+    }
     if (rafId.current === null) {
       rafId.current = window.requestAnimationFrame(() => {
         rafId.current = null;
         const acc = pending.current;
         pending.current = null;
         if (acc) setVp((v) => panBy(v, acc.dx, acc.dy));
+        const hp = hoverPoint.current;
+        if (drag.current === null && hp && (next === "mid" || next === "near")) {
+          const points = visibleNodes(spec, vp, width, height, cardCap).map((n) => {
+            const [x, y] = toScreen(vp, n.x, n.y);
+            return { id: n.id, x, y };
+          });
+          const nearest = nearestWithin(points, hp.x, hp.y, tuning.hoverRadius);
+          // `nearest.id` is always a key of `nodesById`: `points` was built
+          // from `visibleNodes(spec, ...)`, which only ever returns `spec`'s
+          // own nodes.
+          setHover(
+            nearest
+              ? { id: nearest.id, label: (nodesById.get(nearest.id) as MapNode).label, x: nearest.x, y: nearest.y }
+              : null,
+          );
+        } else if (hover !== null) {
+          setHover(null);
+        }
       });
     }
   };
 
   const onPointerCancel = () => {
     drag.current = null;
+  };
+
+  const onPointerLeave = () => {
+    hoverPoint.current = null;
+    if (hover !== null) setHover(null);
   };
 
   // The card overlay is inert, so it cannot receive the click itself: a
@@ -276,6 +344,7 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onPointerLeave={onPointerLeave}
       style={{ position: "relative", width, height, touchAction: "none" }}
     >
       {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
@@ -287,9 +356,32 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
         cap={cardCap}
         width={width}
         height={height}
+        cardSize={cardSize}
         opacity={cardOpacity}
+        theme={theme}
         renderCard={renderCard}
       />
+      {hover ? (
+        <div
+          data-hover={hover.id}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: hover.x,
+            top: hover.y - 8,
+            transform: "translate(-50%, -100%)",
+            background: theme.hoverBackground,
+            color: theme.hoverText,
+            padding: "2px 6px",
+            borderRadius: 4,
+            pointerEvents: "none",
+            whiteSpace: "nowrap",
+            font: "12px system-ui, sans-serif",
+          }}
+        >
+          {hover.label}
+        </div>
+      ) : null}
       <AccessibleTree
         spec={spec}
         regime={next}

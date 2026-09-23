@@ -13,6 +13,11 @@ export interface CorpusMapProps {
     /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
     tuning?: Partial<Tuning> | undefined;
     cardCap?: number | undefined;
+    /** Card frame size, passed to `layoutCards`. Defaults to 160x56. */
+    cardSize?: {
+        width: number;
+        height: number;
+    } | undefined;
     theme?: Theme | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
     /** Fired once on mount with the initial regime, then on every change. */
@@ -49,7 +54,13 @@ export declare function AccessibleTree({ spec, regime, viewport, width, height, 
 import type { ReactElement, ReactNode } from "react";
 import type { Regime } from "../lod/lod";
 import type { MapNode, MapSpec } from "../shared/spec";
+import { type Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
+/** The library's own default card frame size, also `CorpusMap`'s default for `cardSize`. */
+export declare const DEFAULT_CARD_SIZE: {
+    width: number;
+    height: number;
+};
 export interface CardOverlayProps {
     spec: MapSpec;
     viewport: Viewport;
@@ -57,11 +68,17 @@ export interface CardOverlayProps {
     cap: number;
     width: number;
     height: number;
+    /** Frame size passed to `layoutCards`. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
+    cardSize?: {
+        width: number;
+        height: number;
+    } | undefined;
     /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
     opacity?: number | undefined;
+    theme?: Pick<Theme, "cardBackground" | "cardBorder"> | undefined;
     renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({ spec, viewport, regime, cap, width, height, opacity, renderCard, }: CardOverlayProps): ReactElement | null;
+export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, renderCard, }: CardOverlayProps): ReactElement | null;
 
 // cards/layout.d.ts
 export interface CardAnchor {
