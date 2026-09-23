@@ -1,0 +1,202 @@
+"""Polite arXiv API access: counts, newest-first pages, primary-category filter, cache.
+
+Verified against https://export.arxiv.org/api/query and the live cs.CL feed on 2026-09-23:
+ids arrive as `http://arxiv.org/abs/<id>v<n>` (the version suffix is stripped here), the
+primary category is the `term` attribute of `<arxiv:primary_category/>`, and the total is
+`<opensearch:totalResults>`. The API allows at most 2,000 results per request and asks for
+one request every 3 seconds.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import math
+import re
+import xml.etree.ElementTree as ET
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
+
+ATOM_NS = "http://www.w3.org/2005/Atom"
+OPENSEARCH_NS = "http://a9.com/-/spec/opensearch/1.1/"
+ARXIV_NS = "http://arxiv.org/schemas/atom"
+NAMESPACES = {"atom": ATOM_NS, "opensearch": OPENSEARCH_NS, "arxiv": ARXIV_NS}
+
+BASE_URL = "https://export.arxiv.org/api/query"
+MAX_PAGE_SIZE = 2000
+MIN_PAGE_SIZE = 50
+MAX_PAGES = 20
+USER_AGENT = "corpus-map-arxiv-pipeline/0.1 (https://github.com/corpus-map; offline research corpus build)"
+
+_VERSION_SUFFIX = re.compile(r"v\d+$")
+
+Get = Callable[[str], str]
+Sleep = Callable[[float], None]
+
+
+@dataclass(frozen=True)
+class Paper:
+    """A single arXiv paper, as parsed off its Atom entry."""
+
+    id: str
+    title: str
+    abstract: str
+    category: str
+    year: int
+
+
+def urllib_get(url: str) -> str:  # pragma: no cover -- real network, never called in tests
+    request = Request(url, headers={"User-Agent": USER_AGENT})
+    with urlopen(request, timeout=30) as response:
+        return cast(bytes, response.read()).decode("utf-8")
+
+
+def build_query_url(category: str, start: int, max_results: int) -> str:
+    """Build a newest-first arXiv API query URL for one category page."""
+    params = {
+        "search_query": f"cat:{category}",
+        "start": str(start),
+        "max_results": str(max_results),
+        "sortBy": "submittedDate",
+        "sortOrder": "descending",
+    }
+    return f"{BASE_URL}?{urlencode(params, safe=':')}"
+
+
+def cache_path(cache_dir: Path, url: str) -> Path:
+    """The on-disk path a URL's cached body is stored at, under `cache_dir`."""
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return cache_dir / f"{digest}.atom"
+
+
+def _strip_version(raw_id: str) -> str:
+    tail = raw_id.rsplit("/abs/", 1)[-1]
+    return _VERSION_SUFFIX.sub("", tail)
+
+
+def parse_page(body: str) -> tuple[int, list[tuple[Paper, str]]]:
+    """Parse one Atom response page.
+
+    Returns the `opensearch:totalResults` count and, for each entry, the parsed `Paper`
+    alongside the primary category term seen on that entry (the two match: `Paper.category`
+    is set to the same primary category, so callers filtering on the tuple's second element
+    need not re-derive it from the paper).
+    """
+    root = ET.fromstring(body)
+    total_element = cast(ET.Element, root.find("opensearch:totalResults", NAMESPACES))
+    total = int(cast(str, total_element.text))
+
+    results: list[tuple[Paper, str]] = []
+    for entry in root.findall("atom:entry", NAMESPACES):
+        raw_id = cast(str, cast(ET.Element, entry.find("atom:id", NAMESPACES)).text)
+        title = cast(str, cast(ET.Element, entry.find("atom:title", NAMESPACES)).text).strip()
+        abstract = cast(str, cast(ET.Element, entry.find("atom:summary", NAMESPACES)).text).strip()
+        published = cast(str, cast(ET.Element, entry.find("atom:published", NAMESPACES)).text)
+        primary_category = cast(ET.Element, entry.find("arxiv:primary_category", NAMESPACES)).get("term", "")
+
+        paper = Paper(
+            id=_strip_version(raw_id),
+            title=title,
+            abstract=abstract,
+            category=primary_category,
+            year=int(published[:4]),
+        )
+        results.append((paper, primary_category))
+
+    return total, results
+
+
+class Client:
+    """Polite arXiv API client: throttled requests, an on-disk response cache."""
+
+    def __init__(
+        self,
+        get: Get,
+        sleep: Sleep,
+        now: Callable[[], float],
+        gap: float = 3.0,
+        cache_dir: Path | None = None,
+    ) -> None:
+        self._get = get
+        self._sleep = sleep
+        self._now = now
+        self._gap = gap
+        self._cache_dir = cache_dir
+        self._last_request_at: float | None = None
+
+    def total(self, category: str) -> int:
+        """The `opensearch:totalResults` for `category`, via a `max_results=0` request."""
+        url = build_query_url(category, start=0, max_results=0)
+        total, _entries = parse_page(self._fetch(url))
+        return total
+
+    def papers(self, category: str, want: int) -> list[Paper]:
+        """Up to `want` papers whose primary category is `category`, newest first."""
+        collected: list[Paper] = []
+        seen: set[str] = set()
+        start = 0
+
+        for _page in range(MAX_PAGES):
+            max_results = min(MAX_PAGE_SIZE, max(MIN_PAGE_SIZE, math.ceil((want - len(collected)) * 1.6)))
+            url = build_query_url(category, start=start, max_results=max_results)
+            _total, entries = parse_page(self._fetch(url))
+
+            for paper, primary_category in entries:
+                if primary_category != category or paper.id in seen:
+                    continue
+                seen.add(paper.id)
+                collected.append(paper)
+                if len(collected) >= want:
+                    return collected
+
+            start += max_results
+            if len(entries) < max_results:
+                return collected
+
+        logger.warning(
+            "stopped after %d pages for %s: got %d/%d papers",
+            MAX_PAGES,
+            category,
+            len(collected),
+            want,
+        )
+        return collected
+
+    def _fetch(self, url: str) -> str:
+        cached = self._read_cache(url)
+        if cached is not None:
+            return cached
+
+        self._throttle()
+        body = self._get(url)
+        self._last_request_at = self._now()
+        self._write_cache(url, body)
+        return body
+
+    def _throttle(self) -> None:
+        if self._last_request_at is None:
+            return
+        remaining = self._gap - (self._now() - self._last_request_at)
+        if remaining > 0:
+            self._sleep(remaining)
+
+    def _read_cache(self, url: str) -> str | None:
+        if self._cache_dir is None:
+            return None
+        path = cache_path(self._cache_dir, url)
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def _write_cache(self, url: str, body: str) -> None:
+        if self._cache_dir is None:
+            return
+        path = cache_path(self._cache_dir, url)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")

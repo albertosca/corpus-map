@@ -1,0 +1,55 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/invented-fixture-page</id>
+  <title>ArXiv Query: search_query=cat:cs.CL&amp;id_list=&amp;start=0&amp;max_results=3</title>
+  <updated>2026-01-05T12:00:00Z</updated>
+  <link href="https://export.arxiv.org/api/query?search_query=cat:cs.CL&amp;start=0&amp;max_results=3" rel="self" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>3</opensearch:itemsPerPage>
+  <opensearch:totalResults>3</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2601.00001v1</id>
+    <title>Sparse Attention Routing for Long-Context
+  Retrieval Augmented Generation</title>
+    <updated>2026-01-05T12:00:00Z</updated>
+    <link href="https://arxiv.org/abs/2601.00001v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2601.00001v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Invented abstract about a sparse attention routing scheme for retrieval augmented generation over long contexts.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-05T12:00:00Z</published>
+    <arxiv:comment>8 pages, 2 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>A. Example</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2601.00002v1</id>
+    <title>Multiagent Curriculum Design for Cooperative Language Games</title>
+    <updated>2026-01-04T09:30:00Z</updated>
+    <link href="https://arxiv.org/abs/2601.00002v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2601.00002v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Invented abstract about a curriculum for cooperative language games, cross-listed from machine learning into computation and language.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-04T09:30:00Z</published>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>A. Example</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2601.00003v3</id>
+    <title>Calibrated Uncertainty Estimates for Neural Machine Translation</title>
+    <updated>2026-01-03T08:15:00Z</updated>
+    <link href="https://arxiv.org/abs/2601.00003v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2601.00003v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Invented abstract about calibrated uncertainty estimates for a neural machine translation system.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-03T08:15:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>A. Example</name>
+    </author>
+  </entry>
+</feed>
