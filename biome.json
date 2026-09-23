@@ -17,12 +17,15 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "suspicious": { "noExplicitAny": "error" },
+      "style": { "noNonNullAssertion": "error", "useImportType": "error" }
     }
   },
   "javascript": {
     "formatter": {
       "quoteStyle": "double"
     }
-  }
+  },
+  "overrides": [{ "includes": ["src/**"], "linter": { "rules": { "suspicious": { "noConsole": "error" } } } }]
 }
