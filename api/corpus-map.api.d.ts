@@ -211,6 +211,16 @@ export interface LodThresholds {
 }
 /** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
+/**
+ * Validated, defaulted thresholds: both fields finite and in
+ * `[0, MAX_RATIO]`, `midAt <= nearAt`. Unvalidated thresholds silently break
+ * the LOD contract — `{ midAt: 6, nearAt: -1 }` opens "near" immediately,
+ * `{ midAt: NaN, nearAt: NaN }` sticks at "far" forever (`regimeAt` treats a
+ * non-finite ratio as far, and a NaN threshold makes every comparison
+ * false), and a `nearAt` above the wheel zoom clamp is unreachable no matter
+ * how far the user zooms in.
+ */
+export declare function resolveThresholds(input: LodThresholds | undefined): LodThresholds;
 
 // lod/regime.d.ts
 import type { LodThresholds, Regime } from "./lod";
@@ -420,16 +430,6 @@ export interface Tuning {
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
-
-// territories/hull.d.ts
-type Point = [number, number];
-/**
- * Andrew's monotone chain. Sorting first is what makes the result independent
- * of input order, which the map depends on: the same members must always
- * produce the same boundary, or a recomputation silently redraws territories.
- */
-export declare function hullOf(points: Point[]): Point[];
-export {};
 
 // territories/paintTerritories.d.ts
 import type { Scene } from "../shared/scene";

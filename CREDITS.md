@@ -2,7 +2,7 @@
 
 This library is a composition of ideas that already existed separately in other projects, papers and public algorithms. Prior-art research (2026-09-13) examined thirteen libraries; the four below are the ones that directly shaped a design decision in the original renderer, and the map-feel work (2026-09-23) added four more sources for level of detail, labeling and card placement. Each entry says exactly what was taken — an idea, or a license that permits reuse — and what was not.
 
-No code was copied from any of the projects, papers or algorithms listed below. The concave/convex hull implementations in this repository — `src/territories/hull.ts` (Andrew's monotone chain convex hull) and `src/territories/shape.ts` (marching squares plus Chaikin corner cutting, see below) — are written from published algorithms, not adapted from any of these codebases.
+No code was copied from any of the projects, papers or algorithms listed below. The concave hull implementation in this repository — `src/territories/shape.ts` (marching squares plus Chaikin corner cutting, see below) — is written from published algorithms, not adapted from any of these codebases.
 
 ## AntV G6 — MIT
 
