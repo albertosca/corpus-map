@@ -20,7 +20,9 @@
     "test": "vitest run --coverage",
     "bench": "vitest run --config vitest.bench.config.ts",
     "lint": "biome check . && eslint --max-warnings 0 .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "api:check": "node scripts/api-guard.mjs",
+    "api:update": "npm run build && node scripts/api-guard.mjs --update"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

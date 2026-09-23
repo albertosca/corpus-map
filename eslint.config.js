@@ -5,7 +5,17 @@ import reactHooks from "eslint-plugin-react-hooks";
 // else. TypeScript 7 has no JavaScript API, so typescript-eslint cannot
 // parse; Babel's parser reads the syntax, which is all the hooks rules need.
 export default [
-  { ignores: ["dist/**", "dist-demo/**", "coverage/**", "node_modules/**", "**/.claude/**", ".superpowers/**"] },
+  {
+    ignores: [
+      "api/**",
+      "dist/**",
+      "dist-demo/**",
+      "coverage/**",
+      "node_modules/**",
+      "**/.claude/**",
+      ".superpowers/**",
+    ],
+  },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {

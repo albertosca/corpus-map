@@ -28,5 +28,8 @@
       "quoteStyle": "double"
     }
   },
-  "overrides": [{ "includes": ["src/**"], "linter": { "rules": { "suspicious": { "noConsole": "error" } } } }]
+  "overrides": [
+    { "includes": ["src/**"], "linter": { "rules": { "suspicious": { "noConsole": "error" } } } },
+    { "includes": ["api/**"], "formatter": { "enabled": false }, "linter": { "enabled": false } }
+  ]
 }
