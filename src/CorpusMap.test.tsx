@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import { estimateText } from "./labels/placement";
+import * as sceneModule from "./shared/scene";
 import { buildScene } from "./shared/scene";
 import type { MapSpec } from "./shared/spec";
 import { DEFAULT_THEME } from "./shared/theme";
@@ -189,6 +190,59 @@ describe("CorpusMap", () => {
     expect(failures).toEqual([]);
   }, 20_000);
 
+  it("resets the hysteresis regime, not just the viewport, when the spec changes under a wide hysteresis band (I2)", () => {
+    const specA: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: [{ id: "p1", label: "P1", x: 0, y: 0, territory: null }],
+    };
+    const specB: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: [{ id: "p2", label: "P2", x: 0, y: 0, territory: null }],
+    };
+    const onRegimeChange = vi.fn();
+    const { container, rerender } = render(
+      <CorpusMap
+        spec={specA}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={{ midAt: 0.5, nearAt: 1.02 }}
+        tuning={{ hysteresis: 0.3 }}
+        onRegimeChange={onRegimeChange}
+      />,
+    );
+    // Mount ratio is always 1, so this starts "mid" (>= midAt 0.5, < nearAt
+    // 1.02); one full wheel notch (factor ~1.27) crosses nearAt into "near".
+    fireEvent.wheel(container.querySelector("[data-map-surface]") as HTMLElement, {
+      deltaY: -120,
+      clientX: 200,
+      clientY: 150,
+    });
+    expect(onRegimeChange.mock.calls[onRegimeChange.mock.calls.length - 1]).toEqual(["near"]);
+    expect(container.querySelectorAll("[data-card]").length).toBeGreaterThan(0);
+
+    // Swap to a same-shaped new spec. The refit sets the ratio straight
+    // back to 1, which — with a 30% hysteresis band on a nearAt of 1.02
+    // (exit bound 1.02 * 0.7 = 0.714) — is still above the exit bound, so a
+    // regime that merely carried over would wrongly stay "near" on a
+    // corpus it never actually zoomed into.
+    rerender(
+      <CorpusMap
+        spec={specB}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={{ midAt: 0.5, nearAt: 1.02 }}
+        tuning={{ hysteresis: 0.3 }}
+        onRegimeChange={onRegimeChange}
+      />,
+    );
+    expect(onRegimeChange.mock.calls[onRegimeChange.mock.calls.length - 1]).toEqual(["mid"]);
+    expect(container.querySelectorAll("[data-card]")).toHaveLength(0);
+  });
+
   it("repositions cards when the width changes without a remount (I2)", () => {
     const { container, rerender } = render(
       <CorpusMap
@@ -277,6 +331,44 @@ describe("CorpusMap", () => {
     } finally {
       if (original) Object.defineProperty(window, "devicePixelRatio", original);
       else Reflect.deleteProperty(window, "devicePixelRatio");
+    }
+  });
+
+  it("keys the scene memo on the primitive values buildScene reads, not on the tuning/theme object identity", () => {
+    const spy = vi.spyOn(sceneModule, "buildScene");
+    try {
+      // A fresh object literal every call, exactly how spec 4's tuning panel
+      // (and any consumer passing `tuning`/`theme` inline) would pass props.
+      const renderAt = (hullPadding: number) =>
+        render(
+          <CorpusMap
+            spec={spec}
+            renderCard={() => null}
+            width={width}
+            height={height}
+            tuning={{ pinchGain: 3, hullPadding }}
+            theme={{ ...DEFAULT_THEME }}
+          />,
+        );
+      const { rerender } = renderAt(2.5);
+      const rerenderAt = (hullPadding: number) =>
+        rerender(
+          <CorpusMap
+            spec={spec}
+            renderCard={() => null}
+            width={width}
+            height={height}
+            tuning={{ pinchGain: 3, hullPadding }}
+            theme={{ ...DEFAULT_THEME }}
+          />,
+        );
+      for (let i = 0; i < 5; i += 1) rerenderAt(2.5);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      rerenderAt(9);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
     }
   });
 });

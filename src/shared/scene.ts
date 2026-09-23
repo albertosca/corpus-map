@@ -18,7 +18,20 @@ function largestRing(rings: readonly Ring[]): Ring | undefined {
   return best;
 }
 
-export function buildScene(spec: MapSpec, tuning: Tuning, theme: Theme, measure: Measure, fitScale: number): Scene {
+/**
+ * Only the fields this function actually reads, not the full `Tuning`/`Theme`
+ * — so a caller can memoize its own call on just those primitive values
+ * (e.g. `CorpusMap`, where `tuning`/`theme` objects are minted fresh on
+ * every render for an inline literal prop) without depending on unstable
+ * whole-object identity for fields it never uses.
+ */
+export function buildScene(
+  spec: MapSpec,
+  tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
+  theme: Pick<Theme, "territoryFonts">,
+  measure: Measure,
+  fitScale: number,
+): Scene {
   const byId = new Map(spec.nodes.map((n) => [n.id, n]));
   // Territories too small to measure their own spacing get disks 1% of the corpus wide.
   const fallback = 0.01 * Math.max(extent(spec.nodes.map((n) => [n.x, n.y] as Point)), 1e-9);

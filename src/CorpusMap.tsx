@@ -78,14 +78,26 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((n) => [n.id, n])), [spec]);
   const [vp, setVp] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
-  // Refit when the spec or the box changes, during render rather than in an
-  // effect, so no frame is ever painted with the new spec at the old viewport.
   const fitted = useMemo(() => fitSpec(spec, width, height, FIT_PADDING), [spec, width, height]);
   const fitScale = fitted.scale;
+  // Hysteresis regime; declared before the refit below (rather than nearer
+  // where `ratio`/`next` are computed) so a spec/box swap can reset it in
+  // the same render-phase adjustment that resets `vp`, not just `vp` alone.
+  const [regime, setRegime] = useState<Regime>(() => regimeAt(1, thresholds, "far", tuning.hysteresis));
+  // Refit when the spec or the box changes, during render rather than in an
+  // effect, so no frame is ever painted with the new spec at the old
+  // viewport. The new viewport is exactly the fresh fit, so its ratio is
+  // always 1: reset the regime the same way a fresh mount would compute it,
+  // or a regime whose hysteresis exit band was sized for the OLD corpus's
+  // ratio can carry over onto a new corpus where it should have released
+  // (e.g. a wide hysteresis and a nearAt close to 1 — reproduced with
+  // `{ nearAt: 1.02 }`, `hysteresis: 0.3`: swapping specs while "near"
+  // left the regime stuck "near" on the new corpus's fitted view).
   const [fitBasis, setFitBasis] = useState({ spec, width, height });
   if (fitBasis.spec !== spec || fitBasis.width !== width || fitBasis.height !== height) {
     setFitBasis({ spec, width, height });
     setVp(fitted);
+    setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
   }
   const fitScaleRef = useRef(fitScale);
   useEffect(() => {
@@ -114,7 +126,6 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // zoom never mounts and unmounts cards on every tick. `next` — not the
   // (possibly stale, about-to-be-discarded) `regime` state — is what this
   // pass renders and paints.
-  const [regime, setRegime] = useState<Regime>(() => regimeAt(ratio, thresholds, "far", tuning.hysteresis));
   const next = regimeAt(ratio, thresholds, regime, tuning.hysteresis);
   if (next !== regime) setRegime(next);
 
@@ -122,11 +133,46 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
   // Computed once per spec/tuning/theme/measure/fit: concave territory
-  // shapes and placed names.
+  // shapes and placed names. Keyed on the primitive values `buildScene`
+  // actually reads — not on the `tuning`/`theme` objects themselves, which
+  // `resolveTuning` and `props.theme ?? DEFAULT_THEME` both mint fresh on
+  // every render for an inline literal prop (spec 4's tuning panel does
+  // exactly that), which would rebuild the scene (70-135ms on 10k items)
+  // on every render. The literals below and the dependency list must both
+  // name every field `buildScene` reads — nothing more, nothing less —
+  // which is also why `buildScene` only asks for `Pick<Tuning, ...>` and
+  // `Pick<Theme, ...>`: passing the whole objects here would put the whole
+  // (unstable) objects back in the dependency list.
   const measure = useMeasure();
   const scene = useMemo(
-    () => buildScene(spec, tuning, theme, measure, fitScale),
-    [spec, tuning, theme, measure, fitScale],
+    () =>
+      buildScene(
+        spec,
+        {
+          hullPadding: tuning.hullPadding,
+          labelClasses: { large: tuning.labelClasses.large, medium: tuning.labelClasses.medium },
+        },
+        {
+          territoryFonts: {
+            large: theme.territoryFonts.large,
+            medium: theme.territoryFonts.medium,
+            small: theme.territoryFonts.small,
+          },
+        },
+        measure,
+        fitScale,
+      ),
+    [
+      spec,
+      fitScale,
+      measure,
+      tuning.hullPadding,
+      tuning.labelClasses.large,
+      tuning.labelClasses.medium,
+      theme.territoryFonts.large,
+      theme.territoryFonts.medium,
+      theme.territoryFonts.small,
+    ],
   );
 
   useEffect(() => {

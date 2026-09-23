@@ -271,7 +271,14 @@ export interface Scene {
     shapes: ReadonlyMap<string, Ring[]>;
     labels: readonly PlacedLabel[];
 }
-export declare function buildScene(spec: MapSpec, tuning: Tuning, theme: Theme, measure: Measure, fitScale: number): Scene;
+/**
+ * Only the fields this function actually reads, not the full `Tuning`/`Theme`
+ * — so a caller can memoize its own call on just those primitive values
+ * (e.g. `CorpusMap`, where `tuning`/`theme` objects are minted fresh on
+ * every render for an inline literal prop) without depending on unstable
+ * whole-object identity for fields it never uses.
+ */
+export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts">, measure: Measure, fitScale: number): Scene;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
