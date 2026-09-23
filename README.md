@@ -103,7 +103,7 @@ Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so 
 
 ## The demo
 
-Run `npm run dev` to open the demo viewer. During development it consumes the library through a Vite alias to `src/`, not the built package; what proves the built package is usable is CI, which runs `npm run build` and checks that the emitted `dist/index.d.ts` exists where `package.json` says it does. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.
+Run `npm run dev` to open the demo viewer. During development it consumes the library through a Vite alias to `src/`, not the built package; what proves the built package is usable is CI, which runs `npm run build` and checks that the emitted `dist/index.d.ts` exists where `package.json` says it does. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic. A third, real-world corpus built from live arXiv `cs.*` papers (`demo/corpora/arxiv.json`, checked by `demo/corpora/arxiv.test.ts` but not yet wired into the gallery) is built by the separate package under [pipeline/arxiv/](pipeline/arxiv/README.md).
 
 ## Guarantees
 
