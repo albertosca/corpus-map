@@ -23,7 +23,12 @@ export function hullOf(points: Point[]): Point[] {
   const build = (pts: Point[]): Point[] => {
     const chain: Point[] = [];
     for (const p of pts) {
-      while (chain.length >= 2 && cross(chain[chain.length - 2], chain[chain.length - 1], p) <= 0) chain.pop();
+      for (;;) {
+        const a = chain[chain.length - 2];
+        const b = chain[chain.length - 1];
+        if (a === undefined || b === undefined || cross(a, b, p) > 0) break;
+        chain.pop();
+      }
       chain.push(p);
     }
     chain.pop();

@@ -39,7 +39,11 @@ const CARDS: Record<GalleryEntry["id"], (node: MapNode) => ReactNode> = {
 };
 
 export function App() {
-  const [active, setActive] = useState<GalleryEntry>(gallery[0]);
+  const [active, setActive] = useState<GalleryEntry>(() => {
+    const firstEntry = gallery[0];
+    if (!firstEntry) throw new Error("demo gallery is empty");
+    return firstEntry;
+  });
 
   return (
     <div style={{ fontFamily: "sans-serif", padding: 16 }}>

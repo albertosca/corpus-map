@@ -13,12 +13,12 @@ export interface CorpusMapProps {
   renderCard: (node: MapNode) => ReactNode;
   width: number;
   height: number;
-  thresholds?: LodThresholds;
-  cardCap?: number;
-  theme?: Theme;
-  onSelect?: (node: MapNode) => void;
+  thresholds?: LodThresholds | undefined;
+  cardCap?: number | undefined;
+  theme?: Theme | undefined;
+  onSelect?: ((node: MapNode) => void) | undefined;
   /** Fired once on mount with the initial regime, then on every change. */
-  onRegimeChange?: (regime: Regime) => void;
+  onRegimeChange?: ((regime: Regime) => void) | undefined;
 }
 
 const FIT_PADDING = 24;
@@ -39,11 +39,16 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
 
 function cardIdAt(root: HTMLElement | null, clientX: number, clientY: number): string | null {
   if (!root) return null;
-  const cards = root.querySelectorAll<HTMLElement>("[data-card]");
-  for (let i = cards.length - 1; i >= 0; i -= 1) {
-    const r = cards[i].getBoundingClientRect();
+  // Reverse the DOM order rather than index from the end: `noUncheckedIndexedAccess`
+  // makes an out-of-bounds index type `HTMLElement | undefined`, and this list can
+  // never actually be out of bounds, so an `if (!card) continue` guard would be
+  // dead code that a coverage gate can never satisfy. Topmost (last in DOM order)
+  // still wins.
+  const cards = [...root.querySelectorAll<HTMLElement>("[data-card]")].reverse();
+  for (const card of cards) {
+    const r = card.getBoundingClientRect();
     if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-      return cards[i].getAttribute("data-card");
+      return card.getAttribute("data-card");
     }
   }
   return null;

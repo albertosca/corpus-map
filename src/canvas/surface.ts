@@ -31,10 +31,11 @@ export function canvasSurface(ctx: CanvasRenderingContext2D): Surface {
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     },
     polygon(points, fill, stroke) {
-      if (points.length === 0) return;
+      const [first, ...rest] = points;
+      if (!first) return;
       ctx.beginPath();
-      ctx.moveTo(points[0][0], points[0][1]);
-      for (const [x, y] of points.slice(1)) ctx.lineTo(x, y);
+      ctx.moveTo(first[0], first[1]);
+      for (const [x, y] of rest) ctx.lineTo(x, y);
       ctx.closePath();
       ctx.fillStyle = fill;
       ctx.fill();

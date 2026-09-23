@@ -11,8 +11,8 @@ export interface AccessibleTreeProps {
   width: number;
   height: number;
   cap: number;
-  onFocusTerritory?: (territory: Territory) => void;
-  onSelect?: (node: MapNode) => void;
+  onFocusTerritory?: ((territory: Territory) => void) | undefined;
+  onSelect?: ((node: MapNode) => void) | undefined;
 }
 
 const UNASSIGNED = "Unassigned";

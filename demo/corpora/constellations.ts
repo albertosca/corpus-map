@@ -77,8 +77,9 @@ const UNASSIGNED_STARS: StarSeed[] = [
 const ALL_STARS: StarSeed[] = [...ASSIGNED_STARS, ...UNASSIGNED_STARS];
 
 const TERRITORY_MEMBERS: Record<string, string[]> = ASSIGNED_STARS.reduce<Record<string, string[]>>((acc, star) => {
-  if (!acc[star.constellation]) acc[star.constellation] = [];
-  acc[star.constellation].push(star.id);
+  const list = acc[star.constellation] ?? [];
+  list.push(star.id);
+  acc[star.constellation] = list;
   return acc;
 }, {});
 

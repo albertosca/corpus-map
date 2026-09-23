@@ -38,7 +38,9 @@ function territorialSpec(territories: number, perTerritory: number): MapSpec {
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  const mid = sorted[Math.floor(sorted.length / 2)];
+  if (mid === undefined) throw new Error("median of an empty list");
+  return mid;
 }
 
 describe("point field", () => {

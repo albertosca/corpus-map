@@ -7,6 +7,12 @@ const minimal = {
   nodes: [{ id: "n1", label: "One", x: 0, y: 0, territory: "t1" }],
 };
 
+function first<T>(items: readonly T[]): T {
+  const item = items[0];
+  if (item === undefined) throw new Error("expected at least one item");
+  return item;
+}
+
 describe("validateSpec", () => {
   it("accepts a minimal spec", () => {
     expect(validateSpec(minimal).nodes).toHaveLength(1);
@@ -14,7 +20,7 @@ describe("validateSpec", () => {
 
   it("accepts a node with no territory", () => {
     const spec = { version: "1", territories: [], nodes: [{ id: "n1", label: "One", x: 1, y: 2, territory: null }] };
-    expect(validateSpec(spec).nodes[0].territory).toBeNull();
+    expect(first(validateSpec(spec).nodes).territory).toBeNull();
   });
 
   it("accepts a spec where every node is un-territoried", () => {
@@ -67,7 +73,7 @@ describe("validateSpec", () => {
       territories: [],
       nodes: [{ id: "n1", label: "One", x: 0, y: 0, territory: null, meta }],
     };
-    expect(validateSpec(spec).nodes[0].meta).toEqual(meta);
+    expect(first(validateSpec(spec).nodes).meta).toEqual(meta);
   });
 
   it("rejects a NaN centroid component, naming the path", () => {
@@ -176,6 +182,6 @@ describe("validateSpec", () => {
       [1, 1],
     ];
     const spec = { ...minimal, territories: [{ ...minimal.territories[0], boundary }] };
-    expect(validateSpec(spec).territories[0].boundary).toHaveLength(3);
+    expect(first(validateSpec(spec).territories).boundary).toHaveLength(3);
   });
 });

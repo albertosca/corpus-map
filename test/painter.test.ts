@@ -16,6 +16,12 @@ const spec: MapSpec = {
 
 const vp = { scale: 10, tx: 0, ty: 0 };
 
+function first<T>(items: readonly T[]): T {
+  const item = items[0];
+  if (item === undefined) throw new Error("expected at least one item");
+  return item;
+}
+
 describe("paint", () => {
   it("draws territory boundary and name at the far regime, and no points", () => {
     const s = new RecordingSurface();
@@ -35,7 +41,7 @@ describe("paint", () => {
   it("draws an un-territoried node without stretching any boundary toward it", () => {
     const s = new RecordingSurface();
     paint(s, spec, vp, "mid", DEFAULT_THEME);
-    const ring = s.polygons[0].points;
+    const ring = first(s.polygons).points;
     expect(ring.every(([x]) => x < 90)).toBe(true);
   });
 
@@ -99,7 +105,7 @@ describe("paint", () => {
     };
     const s = new RecordingSurface();
     paint(s, specWithBoundary, vp, "mid", DEFAULT_THEME);
-    const ring = s.polygons[0].points;
+    const ring = first(s.polygons).points;
     expect(ring).toEqual([
       [0, 0],
       [30, 0],
