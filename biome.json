@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!pipeline"]
+    "includes": ["**", "!pipeline", "!demo/corpora/arxiv.json", "!demo/corpora/arxiv.meta.json"]
   },
   "formatter": {
     "enabled": true,
