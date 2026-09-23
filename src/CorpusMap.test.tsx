@@ -157,6 +157,36 @@ describe("CorpusMap", () => {
     expect(Math.abs(top - height / 2)).toBeLessThanOrEqual(5);
   }, 15_000);
 
+  // Explicit timeout: same budget as the test above, for the same reason.
+  it("lands with the card overlay fully faded in when a territory is focused from the tree (I1)", async () => {
+    const user = userEvent.setup();
+    // Landing exactly on `nearAt` (the pre-fix behaviour) puts `fade` at
+    // exactly 0 — cards mounted but invisible right after the one
+    // keyboard/AT action meant to show them. Any `nearAt` reproduces it;
+    // this one is picked only to keep well clear of the wheel clamp
+    // (nearAt * (1 + fadeBand) = 5, far under fitScale * 64).
+    const thresholds = { midAt: 0.5, nearAt: 4 };
+
+    render(
+      <CorpusMap
+        spec={twoTerritories(1000, 1000)}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={thresholds}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /South/ }));
+
+    const card = document.querySelector('[data-card="b"]') as HTMLElement | null;
+    expect(card).not.toBeNull();
+    // The opacity style lives on the overlay wrapper (CardOverlay.tsx), one
+    // level up from the card itself.
+    const overlay = card?.parentElement as HTMLElement;
+    expect(overlay.style.opacity).toBe("1");
+  }, 15_000);
+
   // Explicit timeout: ~48 full renders + userEvent clicks measured at ~5.2s
   // on a loaded runner (load avg ~7-12), over the 5000ms default budget.
   it("focusing a territory lands in the near regime for awkward corpus extents (C3 sweep)", async () => {
@@ -173,7 +203,10 @@ describe("CorpusMap", () => {
     ];
     const failures: string[] = [];
     let swept = 0;
-    for (const nearAt of [100, 12.5]) {
+    // 64 is thresholds' own valid ceiling (resolveThresholds, I4: the wheel
+    // zoom clamp makes anything above it unreachable), swapped in for the
+    // pre-I4 sweep's 100.
+    for (const nearAt of [64, 12.5]) {
       for (const k of ks) {
         const ex = k * 1.37 + 0.11;
         const ey = ex * 0.73;

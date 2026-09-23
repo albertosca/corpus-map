@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import type { MapSpec } from "./shared/spec";
 import { DEFAULT_TUNING } from "./shared/tuning";
+import { fitSpec } from "./viewport/fit";
+import { toScreen } from "./viewport/viewport";
 
 const spec: MapSpec = {
   version: "1",
@@ -64,9 +66,14 @@ describe("CorpusMap interaction", () => {
   // immediately rather than on a real, unadvanced timer.
   let raf: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
+    // A non-zero, incrementing id — not the sentinel-shaped `0`, which
+    // reads the same as an unset ref and can mask a mock that was never
+    // actually wired in.
+    let rafSeq = 0;
     raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
       cb(0);
-      return 0;
+      rafSeq += 1;
+      return rafSeq;
     });
   });
   afterEach(() => {
@@ -328,7 +335,7 @@ describe("CorpusMap interaction", () => {
   it("shows the nearest node's name within the hover radius at the mid regime (metric 10)", () => {
     // midAt 0 puts the mount ratio (1) at or past the mid threshold; a
     // nearAt far out of reach keeps it from also crossing into "near".
-    const { container } = renderMap({ midAt: 0, nearAt: 100 });
+    const { container } = renderMap({ midAt: 0, nearAt: 64 });
     const el = surface(container);
     // Node a sits at screen (74, 24) (see the FIT_SCALE comment at the top
     // of this file); 6 px away, not exactly on it — `nearestWithin` ties an
@@ -349,7 +356,7 @@ describe("CorpusMap interaction", () => {
     // a second move in the same mount would find `rafId.current` still
     // non-null and never re-schedule a flush. Real, asynchronous
     // `requestAnimationFrame` does not have this ordering issue.
-    const { container } = renderMap({ midAt: 0, nearAt: 100 });
+    const { container } = renderMap({ midAt: 0, nearAt: 64 });
     const el = surface(container);
     // Node a is still the nearest node overall at this point, just outside
     // the radius.
@@ -375,7 +382,7 @@ describe("CorpusMap interaction", () => {
             renderCard={(n) => <div>{n.label}</div>}
             width={400}
             height={300}
-            thresholds={{ midAt: 0, nearAt: 100 }}
+            thresholds={{ midAt: 0, nearAt: 64 }}
             cardSize={NO_GROUPING}
           />
         </Profiler>,
@@ -437,7 +444,7 @@ describe("CorpusMap interaction", () => {
       return callbacks.length;
     });
     try {
-      const { container } = renderMap({ midAt: 0, nearAt: 100 });
+      const { container } = renderMap({ midAt: 0, nearAt: 64 });
       const el = surface(container);
       fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
       act(() => {
@@ -459,7 +466,7 @@ describe("CorpusMap interaction", () => {
     // midAt 0.5 lets a wheel zoom-out cross back below it (unlike the 0 used
     // elsewhere in this file, where the ratio — never negative — cannot
     // leave "mid").
-    const { container } = renderMap({ midAt: 0.5, nearAt: 100 });
+    const { container } = renderMap({ midAt: 0.5, nearAt: 64 });
     const el = surface(container);
     fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
@@ -486,7 +493,7 @@ describe("CorpusMap interaction", () => {
       return callbacks.length;
     });
     try {
-      const { container } = renderMap({ midAt: 0, nearAt: 100 });
+      const { container } = renderMap({ midAt: 0, nearAt: 64 });
       const el = surface(container);
       fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
       act(() => {
@@ -509,14 +516,14 @@ describe("CorpusMap interaction", () => {
   });
 
   it("shows nothing at the far regime, however close the pointer is to a node", () => {
-    const { container } = renderMap({ midAt: 100, nearAt: 200 });
+    const { container } = renderMap({ midAt: 60, nearAt: 64 });
     const el = surface(container);
     fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
   it("clears the hover name on pointerleave", () => {
-    const { container } = renderMap({ midAt: 0, nearAt: 100 });
+    const { container } = renderMap({ midAt: 0, nearAt: 64 });
     const el = surface(container);
     fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
@@ -653,5 +660,137 @@ describe("CorpusMap interaction", () => {
     fireEvent.pointerUp(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
     expect(onSelect).not.toHaveBeenCalled();
     expect((container.querySelector("[data-card]") as HTMLElement).style.left).toBe(before);
+  });
+
+  it("resolves hover for an on-screen node past the card cap, not just the first cardCap in spec order (C1)", () => {
+    const width = 960;
+    const height = 640;
+    const cols = 20;
+    const rows = 20;
+    // 400 nodes, all on screen at the fitted viewport: the default cardCap
+    // (200) would silently drop every node from index 200 on if hover were
+    // resolved through the same capped `visibleNodes` call the cards use.
+    const grid: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: Array.from({ length: cols * rows }, (_, i) => ({
+        id: `n${i}`,
+        label: `N${i}`,
+        x: (i % cols) * 10,
+        y: Math.floor(i / cols) * 10,
+        territory: null,
+      })),
+    };
+    const { container } = render(
+      <CorpusMap
+        spec={grid}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={width}
+        height={height}
+        thresholds={{ midAt: 0, nearAt: 64 }}
+        cardSize={NO_GROUPING}
+      />,
+    );
+    const el = surface(container);
+    // Node n350 (row 17, col 10) is past the cap in spec order. Same fit
+    // CorpusMap computes internally (FIT_PADDING 24, see the "spec swap"
+    // test in CorpusMap.test.tsx for the same literal).
+    const vp = fitSpec(grid, width, height, 24);
+    const [x, y] = toScreen(vp, 10 * 10, 17 * 10);
+    fireEvent.pointerMove(el, { clientX: x + 2, clientY: y, pointerId: 1 });
+    const hover = container.querySelector('[data-hover="n350"]');
+    expect(hover).not.toBeNull();
+    expect(hover?.textContent).toBe("N350");
+  });
+
+  it("does not select through a card faded below opacity 0.1, and does once faded in past it (C2)", () => {
+    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const id = this.getAttribute("data-card");
+      const [x, y, w, h] =
+        id === null
+          ? [0, 0, 400, 300]
+          : [Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 100, 40];
+      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      const onSelect = vi.fn();
+      // Mount ratio is always 1: nearAt 1 puts the mount exactly at the
+      // near threshold, where `fade` is defined to be exactly 0 — the
+      // hysteresis band's own invisible-but-mounted state (C2's ruling).
+      const { container } = render(
+        <CorpusMap
+          spec={spec}
+          renderCard={(n) => <div>{n.label}</div>}
+          width={400}
+          height={300}
+          thresholds={{ midAt: 0.5, nearAt: 1 }}
+          onSelect={onSelect}
+          cardSize={NO_GROUPING}
+        />,
+      );
+      const el = surface(container);
+      const cardAt = (id: string) => container.querySelector(`[data-card="${id}"]`) as HTMLElement;
+      // The opacity style lives on the overlay wrapper (CardOverlay.tsx),
+      // one level up from the card itself.
+      const overlayOpacity = () => (cardAt("a").parentElement as HTMLElement).style.opacity;
+      expect(overlayOpacity()).toBe("0");
+
+      // Node a's card box at mount is (80,24)-(180,64) (NO_GROUPING's +6
+      // gap on the anchor at (74,24), same arithmetic as the other
+      // press/release tests in this file). A card is still mounted there
+      // (aria-hidden, opacity 0) — without the C2 guard this would select.
+      fireEvent.pointerDown(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      expect(onSelect).not.toHaveBeenCalled();
+
+      // One wheel notch (factor ~1.2712), anchored on node a's own screen
+      // position (74, 24) so it stays on screen and does not pan away
+      // (see the "zooms in proportion to the wheel delta" test above for
+      // why anchoring at the viewport centre would push it off-screen
+      // instead). Crosses nearAt * (1 + fadeBand) = 1.25, landing
+      // cardOpacity at 1.
+      fireEvent.wheel(el, { deltaY: -120, clientX: 74, clientY: 24 });
+      expect(overlayOpacity()).toBe("1");
+      const box = { left: Number.parseFloat(cardAt("a").style.left), top: Number.parseFloat(cardAt("a").style.top) };
+      fireEvent.pointerDown(el, {
+        clientX: box.left + 10,
+        clientY: box.top + 10,
+        pointerId: 1,
+        button: 0,
+        isPrimary: true,
+      });
+      fireEvent.pointerUp(el, {
+        clientX: box.left + 10,
+        clientY: box.top + 10,
+        pointerId: 1,
+        button: 0,
+        isPrimary: true,
+      });
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+    } finally {
+      rects.mockRestore();
+    }
+  });
+
+  it("shows nothing while the point layer is faded below opacity 0.1, even squarely over a node (C2)", () => {
+    // midAt 1 puts the mount ratio (1) exactly at the mid threshold, where
+    // `fade` is defined to be exactly 0 — inside the "mid" regime (ratio >=
+    // midAt) but with the point layer not yet faded in.
+    const { container } = renderMap({ midAt: 1, nearAt: 64 });
+    const el = surface(container);
+    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    expect(container.querySelector("[data-hover]")).toBeNull();
+  });
+
+  it("clears the hover name on any wheel zoom inside mid/near, so it never lingers at a stale screen position (I2)", () => {
+    const { container } = renderMap({ midAt: 0, nearAt: 64 });
+    const el = surface(container);
+    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
+    fireEvent.wheel(el, { deltaY: -10, clientX: 200, clientY: 150 });
+    expect(container.querySelector("[data-hover]")).toBeNull();
   });
 });

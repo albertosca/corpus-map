@@ -2,7 +2,7 @@ import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMem
 import { AccessibleTree } from "./a11y/AccessibleTree";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
-import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime } from "./lod/lod";
+import { type LodThresholds, type Regime, resolveThresholds } from "./lod/lod";
 import { fade, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
 import { nearestWithin } from "./points/hover";
@@ -82,7 +82,7 @@ interface HoverState {
 
 export function CorpusMap(props: CorpusMapProps): ReactElement {
   const { spec: raw, renderCard, width, height, onSelect, onRegimeChange } = props;
-  const thresholds = props.thresholds ?? DEFAULT_THRESHOLDS;
+  const thresholds = useMemo(() => resolveThresholds(props.thresholds), [props.thresholds]);
   const tuning = useMemo(() => resolveTuning(props.tuning), [props.tuning]);
   const cardCap = props.cardCap ?? 200;
   // Not memoized: `layoutCards` is cheap and already recomputed every render
@@ -263,6 +263,14 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
         const target = Math.min(fit * MAX_ZOOM_IN, Math.max(fit / MAX_ZOOM_OUT, v.scale * factor));
         return zoomTo(v, e.clientX - rect.left, e.clientY - rect.top, target);
       });
+      // A wheel zoom moves every on-screen point, so a hover name resolved
+      // against the pre-zoom viewport is now anchored to the wrong screen
+      // position; there is no guarantee of a further pointer move to
+      // trigger a fresh resolution (I2). Clearing it here, rather than
+      // waiting for one, means the next move — or the render-phase regime
+      // check above — is what decides whether a hover reappears, never a
+      // stale one left over from before the zoom.
+      if (hoverRef.current !== null) setHover(null);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -318,8 +326,13 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
         // already-scheduled flush like this one can run. So by the time
         // this condition is false, `hoverRef.current` is already null;
         // there is nothing left here to clear.
-        if (drag.current === null && hp && (next === "mid" || next === "near")) {
-          const points = visibleNodes(spec, vp, width, height, cardCap).map((n) => {
+        if (drag.current === null && hp && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
+          // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
+          // calls: the canvas paints every on-screen point regardless of the
+          // card cap, so hover must be resolvable against all of them, not
+          // just the first `cardCap` in spec order (C1) — otherwise most
+          // on-screen points past the cap are silently unhoverable.
+          const points = visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).map((n) => {
             const [x, y] = toScreen(vp, n.x, n.y);
             return { id: n.id, x, y };
           });
@@ -366,6 +379,11 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
     const d = drag.current;
     drag.current = null;
     if (!d || !onSelect || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > CLICK_SLOP) return;
+    // Below opacity 0.1 a card is invisible but still mounted (the
+    // hysteresis fade band keeps it in the DOM at opacity 0 rather than
+    // unmounting it) — hit-testing it there would let a click on what the
+    // user sees as empty map select an item they never saw (C2).
+    if (cardOpacity < 0.1) return;
     const id = cardIdAt(rootRef.current, e.clientX, e.clientY);
     const node = id === null ? undefined : nodesById.get(id);
     if (node) onSelect(node);
@@ -429,9 +447,17 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
           // factor: `fitScale * (nearAt / (scale / fitScale))`-style paths
           // can land a float ulp below `fitScale * nearAt`, on the wrong
           // side of the threshold; `regimeAt`'s tolerance covers the
-          // residual ulp of this multiply.
+          // residual ulp of this multiply. Landing on `nearAt` itself would
+          // put the cards at exactly fade 0 (I1: `fade` is 0 AT its
+          // threshold, ramping to 1 only above it) — invisible cards right
+          // after the one keyboard/AT action meant to show them. Landing a
+          // full fade band above `nearAt` instead puts the fade at 1, same
+          // as any other zoom past the top of the band; clamped to the same
+          // wheel band a manual zoom is clamped to, so this can never land
+          // outside what the user could otherwise reach.
           const [cx, cy] = t.centroid;
-          const scale = fitScale * thresholds.nearAt;
+          const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
+          const scale = Math.min(fitScale * MAX_ZOOM_IN, Math.max(fitScale / MAX_ZOOM_OUT, target));
           setVp({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
         }}
         onSelect={onSelect}
