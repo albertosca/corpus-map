@@ -63,6 +63,59 @@ export function extent(points: readonly Point[]): number {
  */
 export function disksOutline(points: readonly Point[], r: number): Ring[] {
   if (points.length === 0 || !(r > 0)) return [];
+  return components(points, 2 * r).flatMap((group) => outlineGrid(group, r));
+}
+
+/**
+ * Groups of points whose disks of radius `link / 2` touch, by union-find over
+ * a grid of cell `link`. Outlining each group on its own grid keeps one far
+ * outlier from stretching a shared grid until a dense cluster falls between
+ * its vertices and disappears.
+ */
+export function components(points: readonly Point[], link: number): Point[][] {
+  const parent = points.map((_, i) => i);
+  const find = (i: number): number => {
+    let root = i;
+    while ((parent[root] ?? root) !== root) root = parent[root] ?? root;
+    let cur = i;
+    while (cur !== root) {
+      const next = parent[cur] ?? root;
+      parent[cur] = root;
+      cur = next;
+    }
+    return root;
+  };
+  const grid = new Map<string, number[]>();
+  points.forEach(([x, y], i) => {
+    const key = `${Math.floor(x / link)},${Math.floor(y / link)}`;
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(i);
+    else grid.set(key, [i]);
+  });
+  points.forEach(([x, y], i) => {
+    const gx = Math.floor(x / link);
+    const gy = Math.floor(y / link);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (const j of grid.get(`${gx + dx},${gy + dy}`) ?? []) {
+          if (j <= i) continue;
+          const q = points[j] as Point;
+          if (Math.hypot(q[0] - x, q[1] - y) <= link) parent[find(j)] = find(i);
+        }
+      }
+    }
+  });
+  const groups = new Map<number, Point[]>();
+  points.forEach((p, i) => {
+    const root = find(i);
+    const group = groups.get(root);
+    if (group) group.push(p);
+    else groups.set(root, [p]);
+  });
+  return [...groups.values()];
+}
+
+function outlineGrid(points: readonly Point[], r0: number): Ring[] {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -73,11 +126,16 @@ export function disksOutline(points: readonly Point[], r: number): Ring[] {
     if (x > maxX) maxX = x;
     if (y > maxY) maxY = y;
   }
+  // Grid capped at about MAX_CELLS per side. If the cap makes cells coarser
+  // than the disks, the disks grow to 1.5 cells: a coarse group dilates
+  // instead of falling between grid vertices and vanishing.
+  const coarse = Math.max(maxX - minX, maxY - minY) / (MAX_CELLS - 8);
+  const r = Math.max(r0, 1.5 * coarse);
+  const cell = Math.max(r0 / 2, coarse);
   minX -= 2 * r;
   minY -= 2 * r;
   maxX += 2 * r;
   maxY += 2 * r;
-  const cell = Math.max(r / 2, (maxX - minX) / MAX_CELLS, (maxY - minY) / MAX_CELLS);
   const nx = Math.ceil((maxX - minX) / cell) + 1;
   const ny = Math.ceil((maxY - minY) / cell) + 1;
   const field = new Float64Array(nx * ny).fill(Number.POSITIVE_INFINITY);

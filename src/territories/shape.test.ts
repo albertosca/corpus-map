@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateCorpus } from "../../fixtures/synthetic/generate";
 import type { MapSpec } from "../shared/spec";
-import { chaikin, contains, disksOutline, extent, type Point, ringArea, spacing } from "./shape";
+import { chaikin, components, contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "./shape";
 
 function pointsOf(spec: MapSpec, id: string): Point[] {
   const byId = new Map(spec.nodes.map((n) => [n.id, n]));
@@ -120,5 +120,92 @@ describe("shape helpers", () => {
       ]),
     ).toBe(4);
     expect(extent([])).toBe(0);
+  });
+
+  it("cluster+outlier: a tight 20-point cluster plus one outlier 5,000 units away", () => {
+    // Create a tight cluster of 20 points
+    const cluster: Point[] = [];
+    for (let i = 0; i < 20; i += 1) {
+      cluster.push([i % 5, Math.floor(i / 5)] as Point);
+    }
+    // Add one outlier far away
+    const points = [...cluster, [5000, 0] as Point];
+    const rings = disksOutline(points, 2.5 * 5); // r = 12.5
+    expect(rings).toHaveLength(2); // Should be 2 regions
+    // Every cluster point should be inside some ring
+    for (const p of cluster) {
+      expect(rings.some((r) => contains(r, p))).toBe(true);
+    }
+    // The outlier should be inside some ring
+    expect(rings.some((r) => contains(r, points[20] as Point))).toBe(true);
+  });
+
+  it("two points 2.83e9 apart with r = 1e6 give 2 rings", () => {
+    const points: Point[] = [
+      [0, 0],
+      [2.83e9, 0],
+    ];
+    const rings = disksOutline(points, 1e6);
+    expect(rings).toHaveLength(2);
+  });
+
+  it("chain of 10,000 points with r = 2.5 gives 1 ring with no non-finite vertices", () => {
+    const points: Point[] = [];
+    for (let i = 0; i < 10000; i += 1) {
+      points.push([i, ((i % 7) * 0.1) as number] as Point);
+    }
+    const rings = disksOutline(points, 2.5);
+    expect(rings).toHaveLength(1);
+    // Check that no vertex is non-finite
+    for (const ring of rings) {
+      for (const [x, y] of ring) {
+        expect(Number.isFinite(x)).toBe(true);
+        expect(Number.isFinite(y)).toBe(true);
+      }
+    }
+    // Check that approximately every 97th point is covered (rough check)
+    const ring = rings[0] as Ring;
+    let coveredCount = 0;
+    for (let i = 0; i < points.length; i += 97) {
+      if (contains(ring, points[i] as Point)) {
+        coveredCount += 1;
+      }
+    }
+    expect(coveredCount).toBeGreaterThan(0);
+  });
+
+  it("components groups points within the link distance and separates points beyond it", () => {
+    // Case 1: Two separate clusters far apart
+    const points1: Point[] = [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [100, 100],
+      [101, 100],
+    ];
+    const groups1 = components(points1, 5); // link = 5
+    expect(groups1).toHaveLength(2);
+
+    // Case 2: All points within link distance
+    const points2: Point[] = [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ];
+    const groups2 = components(points2, 2); // link = 2
+    expect(groups2).toHaveLength(1);
+
+    // Case 3: Three separate groups
+    const points3: Point[] = [
+      [0, 0],
+      [1, 0],
+      [10, 0],
+      [11, 0],
+      [20, 0],
+      [21, 0],
+    ];
+    const groups3 = components(points3, 2); // link = 2
+    expect(groups3).toHaveLength(3);
   });
 });
