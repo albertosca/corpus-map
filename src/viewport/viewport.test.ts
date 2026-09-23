@@ -45,3 +45,20 @@ describe("viewport", () => {
     expect(after[1]).toBeCloseTo(before[1], 9);
   });
 });
+
+describe("metric 3: the point under the cursor stays put", () => {
+  it("keeps the world point under the cursor within 0.5 px, and k in then k out returns", () => {
+    const start = { scale: 3, tx: 17, ty: -40 };
+    const [cx, cy] = [412.5, 233.25];
+    const anchor = toWorld(start, cx, cy);
+    let v = start;
+    for (let k = 0; k < 12; k += 1) {
+      v = zoomTo(v, cx, cy, v.scale * 1.27);
+      const [wx, wy] = toWorld(v, cx, cy);
+      expect(Math.hypot((wx - anchor[0]) * v.scale, (wy - anchor[1]) * v.scale)).toBeLessThan(0.5);
+    }
+    for (let k = 0; k < 12; k += 1) v = zoomTo(v, cx, cy, v.scale / 1.27);
+    expect(Math.abs(v.scale - start.scale) / start.scale).toBeLessThan(0.001);
+    expect(Math.hypot(v.tx - start.tx, v.ty - start.ty)).toBeLessThan(0.5);
+  });
+});
