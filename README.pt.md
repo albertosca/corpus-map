@@ -1,6 +1,6 @@
 🇺🇸 [English](README.md) · 🇧🇷 [Português](README.pt.md)
 
-[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml)
+[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml) ![gzip size](docs/badges/size.svg)
 
 Os limiares de cobertura de 90% de linhas / 85% de branches são impostos dentro do job `test`, e o relatório lcov é publicado como artefato de CI a cada execução; um badge de cobertura hospedado está deliberadamente ausente até que um serviço de cobertura (Codecov ou similar) seja conectado.
 

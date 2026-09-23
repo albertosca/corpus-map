@@ -22,7 +22,13 @@
     "lint": "biome check . && eslint --max-warnings 0 .",
     "format": "biome format --write .",
     "api:check": "node scripts/api-guard.mjs",
-    "api:update": "npm run build && node scripts/api-guard.mjs --update"
+    "api:update": "npm run build && node scripts/api-guard.mjs --update",
+    "size": "node scripts/size.mjs",
+    "size:badge": "npm run build && node scripts/size.mjs --write-badge"
+  },
+  "sizeLimit": {
+    "file": "dist/corpus-map.js",
+    "maxGzipBytes": 4596
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
