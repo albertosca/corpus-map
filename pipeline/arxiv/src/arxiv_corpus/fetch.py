@@ -32,7 +32,7 @@ BASE_URL = "https://export.arxiv.org/api/query"
 MAX_PAGE_SIZE = 2000
 MIN_PAGE_SIZE = 50
 MAX_PAGES = 20
-USER_AGENT = "corpus-map-arxiv-pipeline/0.1 (https://github.com/corpus-map; offline research corpus build)"
+USER_AGENT = "corpus-map-arxiv-pipeline/0.1 (https://github.com/albertosca/corpus-map; offline research corpus build)"
 
 _VERSION_SUFFIX = re.compile(r"v\d+$")
 
@@ -80,6 +80,53 @@ def _strip_version(raw_id: str) -> str:
     return _VERSION_SUFFIX.sub("", tail)
 
 
+def _required_text(parent: ET.Element, tag: str, context: str) -> str:
+    """The text of `parent`'s child `tag`, or a `ValueError` naming `context` and `tag`.
+
+    `context` identifies where in the feed this lookup happened (e.g. "arXiv feed" or
+    "arXiv entry 2609.26796"), so the raised message pins down both the missing element and
+    which response body it came from once the `Client` adds the request URL on top.
+    """
+    element = parent.find(tag, NAMESPACES)
+    if element is None or element.text is None:
+        raise ValueError(f"{context}: missing <{tag}>")
+    return element.text
+
+
+def _required_attr(parent: ET.Element, tag: str, attr: str, context: str) -> str:
+    """The `attr` attribute of `parent`'s child `tag`, or a `ValueError` naming `context`."""
+    element = parent.find(tag, NAMESPACES)
+    value = element.get(attr) if element is not None else None
+    if not value:
+        raise ValueError(f"{context}: missing <{tag}>")
+    return value
+
+
+def _parse_entry(entry: ET.Element) -> tuple[Paper, str]:
+    """Parse one `<entry>`, or raise `ValueError` for a malformed entry or arXiv's error feed."""
+    raw_id = _required_text(entry, "atom:id", "arXiv entry")
+    entry_id = _strip_version(raw_id)
+    context = f"arXiv entry {entry_id}"
+
+    title = _required_text(entry, "atom:title", context).strip()
+    if title == "Error" and "api/errors" in raw_id:
+        summary = _required_text(entry, "atom:summary", context).strip()
+        raise ValueError(f"arXiv API error: {summary}")
+
+    abstract = _required_text(entry, "atom:summary", context).strip()
+    published = _required_text(entry, "atom:published", context)
+    primary_category = _required_attr(entry, "arxiv:primary_category", "term", context)
+
+    paper = Paper(
+        id=entry_id,
+        title=title,
+        abstract=abstract,
+        category=primary_category,
+        year=int(published[:4]),
+    )
+    return paper, primary_category
+
+
 def parse_page(body: str) -> tuple[int, list[tuple[Paper, str]]]:
     """Parse one Atom response page.
 
@@ -87,28 +134,20 @@ def parse_page(body: str) -> tuple[int, list[tuple[Paper, str]]]:
     alongside the primary category term seen on that entry (the two match: `Paper.category`
     is set to the same primary category, so callers filtering on the tuple's second element
     need not re-derive it from the paper).
+
+    The arXiv API is an external boundary: a malformed or error-shaped response (a missing
+    element, arXiv's own error feed, or a body that is not XML at all) raises `ValueError`
+    naming what is wrong and, where available, which entry it came from, instead of an opaque
+    `AttributeError` far from the cause.
     """
-    root = ET.fromstring(body)
-    total_element = cast(ET.Element, root.find("opensearch:totalResults", NAMESPACES))
-    total = int(cast(str, total_element.text))
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as err:
+        raise ValueError(f"arXiv response is not valid XML: {err}") from err
 
-    results: list[tuple[Paper, str]] = []
-    for entry in root.findall("atom:entry", NAMESPACES):
-        raw_id = cast(str, cast(ET.Element, entry.find("atom:id", NAMESPACES)).text)
-        title = cast(str, cast(ET.Element, entry.find("atom:title", NAMESPACES)).text).strip()
-        abstract = cast(str, cast(ET.Element, entry.find("atom:summary", NAMESPACES)).text).strip()
-        published = cast(str, cast(ET.Element, entry.find("atom:published", NAMESPACES)).text)
-        primary_category = cast(ET.Element, entry.find("arxiv:primary_category", NAMESPACES)).get("term", "")
+    total = int(_required_text(root, "opensearch:totalResults", "arXiv feed"))
 
-        paper = Paper(
-            id=_strip_version(raw_id),
-            title=title,
-            abstract=abstract,
-            category=primary_category,
-            year=int(published[:4]),
-        )
-        results.append((paper, primary_category))
-
+    results = [_parse_entry(entry) for entry in root.findall("atom:entry", NAMESPACES)]
     return total, results
 
 
@@ -133,11 +172,14 @@ class Client:
     def total(self, category: str) -> int:
         """The `opensearch:totalResults` for `category`, via a `max_results=0` request."""
         url = build_query_url(category, start=0, max_results=0)
-        total, _entries = parse_page(self._fetch(url))
+        total, _entries = self._parse(url)
         return total
 
     def papers(self, category: str, want: int) -> list[Paper]:
         """Up to `want` papers whose primary category is `category`, newest first."""
+        if want <= 0:
+            return []
+
         collected: list[Paper] = []
         seen: set[str] = set()
         start = 0
@@ -145,7 +187,7 @@ class Client:
         for _page in range(MAX_PAGES):
             max_results = min(MAX_PAGE_SIZE, max(MIN_PAGE_SIZE, math.ceil((want - len(collected)) * 1.6)))
             url = build_query_url(category, start=start, max_results=max_results)
-            _total, entries = parse_page(self._fetch(url))
+            _total, entries = self._parse(url)
 
             for paper, primary_category in entries:
                 if primary_category != category or paper.id in seen:
@@ -167,6 +209,14 @@ class Client:
             want,
         )
         return collected
+
+    def _parse(self, url: str) -> tuple[int, list[tuple[Paper, str]]]:
+        """Fetch and parse `url`, naming it in the error if the response is malformed."""
+        body = self._fetch(url)
+        try:
+            return parse_page(body)
+        except ValueError as err:
+            raise ValueError(f"{url}: {err}") from err
 
     def _fetch(self, url: str) -> str:
         cached = self._read_cache(url)

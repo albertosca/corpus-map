@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from arxiv_corpus.fetch import (
+    USER_AGENT,
     Client,
     Paper,
     build_query_url,
@@ -104,6 +105,59 @@ def failing_get(url: str) -> str:
 
 def failing_sleep(seconds: float) -> None:
     raise AssertionError(f"sleep() must not be called for a cached URL, got {seconds}")
+
+
+MISSING_TITLE_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <summary>Some invented abstract.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-01T00:00:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
+MISSING_SUMMARY_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <title>Invented title</title>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-01T00:00:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
+MISSING_PUBLISHED_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <title>Invented title</title>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <summary>Some invented abstract.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <arxiv:primary_category term="cs.CL"/>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
+MISSING_PRIMARY_CATEGORY_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/abs/2609.26796v1</id>
+    <title>Invented title</title>
+    <updated>2026-01-01T00:00:00Z</updated>
+    <summary>Some invented abstract.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-01T00:00:00Z</published>
+    <author><name>A. Example</name></author>
+  </entry>"""
+
+ERROR_FEED_ENTRY = """
+  <entry>
+    <id>http://arxiv.org/api/errors#incorrect_id_format_for_2609.26796v1: 2609.26796v1</id>
+    <title>Error</title>
+    <summary>incorrect id format for 2609.26796v1</summary>
+    <updated>2026-01-01T00:00:00Z</updated>
+  </entry>"""
 
 
 def test_parse_page_parses_total_ids_years_and_primary_categories() -> None:
@@ -293,3 +347,99 @@ def test_cache_hit_returns_stored_body_without_get_or_sleep(tmp_path: Path) -> N
 def test_paper_is_a_frozen_dataclass() -> None:
     paper = Paper(id="1", title="t", abstract="a", category="cs.CL", year=2026)
     assert paper.id == "1"
+
+
+def test_parse_page_missing_title_raises_value_error_naming_entry_and_element() -> None:
+    body = make_atom(total=1, entries=[MISSING_TITLE_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:title>"):
+        parse_page(body)
+
+
+def test_parse_page_missing_summary_raises_value_error_naming_entry_and_element() -> None:
+    body = make_atom(total=1, entries=[MISSING_SUMMARY_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:summary>"):
+        parse_page(body)
+
+
+def test_parse_page_missing_published_raises_value_error_naming_entry_and_element() -> None:
+    body = make_atom(total=1, entries=[MISSING_PUBLISHED_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <atom:published>"):
+        parse_page(body)
+
+
+def test_parse_page_missing_primary_category_raises_value_error_naming_entry_and_element() -> None:
+    body = make_atom(total=1, entries=[MISSING_PRIMARY_CATEGORY_ENTRY])
+
+    with pytest.raises(ValueError, match=r"2609\.26796: missing <arxiv:primary_category>"):
+        parse_page(body)
+
+
+def test_parse_page_error_feed_raises_with_arxiv_summary() -> None:
+    body = make_atom(total=1, entries=[ERROR_FEED_ENTRY])
+
+    with pytest.raises(ValueError, match=r"incorrect id format for 2609\.26796v1"):
+        parse_page(body)
+
+
+def test_parse_page_structure_without_total_results_raises_value_error() -> None:
+    body = '<feed xmlns="http://www.w3.org/2005/Atom"><title>not really arXiv</title></feed>'
+
+    with pytest.raises(ValueError, match=r"missing <opensearch:totalResults>"):
+        parse_page(body)
+
+
+def test_parse_page_non_xml_body_raises_value_error() -> None:
+    with pytest.raises(ValueError, match=r"not valid XML"):
+        parse_page("this is not an atom feed, just plain text")
+
+
+def test_client_total_wraps_parse_error_with_request_url() -> None:
+    body = make_atom(total=1, entries=[])
+    body_without_total = body.replace(
+        "<opensearch:totalResults>1</opensearch:totalResults>",
+        "",
+    )
+    clock = FakeClock()
+    get = GetSpy([body_without_total], clock)
+    client = Client(get=get, sleep=clock.sleep, now=clock.now)
+
+    with pytest.raises(ValueError) as exc_info:
+        client.total("cs.CL")
+
+    message = str(exc_info.value)
+    assert "search_query" in message
+    assert "cs.CL" in message
+    assert "missing <opensearch:totalResults>" in message
+
+
+def test_client_papers_wraps_parse_error_with_request_url() -> None:
+    body = make_atom(total=1, entries=[MISSING_TITLE_ENTRY])
+    clock = FakeClock()
+    get = GetSpy([body], clock)
+    client = Client(get=get, sleep=clock.sleep, now=clock.now)
+
+    with pytest.raises(ValueError) as exc_info:
+        client.papers("cs.CL", want=1)
+
+    message = str(exc_info.value)
+    assert "search_query" in message
+    assert "cs.CL" in message
+    assert "missing <atom:title>" in message
+
+
+def test_papers_returns_empty_immediately_for_non_positive_want() -> None:
+    clock = FakeClock()
+    get = GetSpy([], clock)
+    client = Client(get=get, sleep=clock.sleep, now=clock.now)
+
+    result = client.papers("cs.CL", want=0)
+
+    assert result == []
+    assert get.calls == []
+
+
+def test_user_agent_names_the_real_repository() -> None:
+    assert "https://github.com/albertosca/corpus-map" in USER_AGENT
