@@ -67,12 +67,81 @@ export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
 export { DEFAULT_THEME } from "./shared/theme";
 
+// labels/contrast.d.ts
+type Rgba = [number, number, number, number];
+/** Parses `rgba(r,g,b,a)`, `rgb(r,g,b)` and `#rrggbb` — the notations the theme uses. */
+export declare function parseColor(color: string): Rgba;
+/** `top` composited over an opaque `bottom`. */
+export declare function over(top: Rgba, bottom: Rgba): Rgba;
+/** WCAG 2.2 contrast ratio between two opaque colours. */
+export declare function contrastRatio(a: Rgba, b: Rgba): number;
+export {};
+
 // labels/paintLabels.d.ts
 import type { MapSpec } from "../shared/spec";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
 export declare function paintLabels(surface: Surface, spec: MapSpec, vp: Viewport, theme: Theme): void;
+
+// labels/placement.d.ts
+import type { Point } from "../territories/shape";
+export type LabelClass = "large" | "medium" | "small";
+export interface LabelInput {
+    id: string;
+    name: string;
+    anchor: Point;
+    members: number;
+}
+export interface PlacedLabel {
+    id: string;
+    name: string;
+    anchor: Point;
+    labelClass: LabelClass;
+    width: number;
+    height: number;
+    /** The label is drawn when scale / fitScale >= activeFrom. */
+    activeFrom: number;
+}
+export type Measure = (text: string, font: string) => {
+    width: number;
+    height: number;
+};
+export declare const LABEL_PADDING = 2;
+/** Percentile rank in [0, 1] of each member count (ties share the lower rank). */
+export declare function labelClasses(inputs: readonly LabelInput[], cut: {
+    large: number;
+    medium: number;
+}): Map<string, LabelClass>;
+/** Scale at which two label boxes, anchored `dx`,`dy` apart in world units, stop overlapping. */
+export declare function separationScale(dx: number, dy: number, w: number, h: number): number;
+/**
+ * Active ranges after Been, Daiches and Yap (2006): labels in priority order
+ * (more members first, then id); each starts at the smallest ratio at which it
+ * no longer overlaps any higher-priority label already visible there. A label,
+ * once shown, stays shown on zoom in, never changes on pan, and the set shown
+ * depends only on the current ratio.
+ */
+export declare function placeLabels(inputs: readonly LabelInput[], fonts: Record<LabelClass, string>, cut: {
+    large: number;
+    medium: number;
+}, measure: Measure, fitScale: number): PlacedLabel[];
+/** Deterministic text measure for environments without a canvas (tests). */
+export declare function estimateText(text: string, font: string): {
+    width: number;
+    height: number;
+};
+
+// labels/pole.d.ts
+import type { Point, Ring } from "../territories/shape";
+/** Distance from `p` to the ring's outline, positive inside and negative outside. */
+export declare function signedDistance(p: Point, ring: Ring): number;
+/**
+ * The interior point farthest from the outline (pole of inaccessibility), by
+ * quadtree refinement: Garcia-Castellanos and Lombardo (2007), the idea behind
+ * Mapbox's polylabel. `precision` is in world units.
+ */
+export declare function poleOfInaccessibility(ring: Ring, precision: number): Point;
 
 // lod/lod.d.ts
 export type Regime = "far" | "mid" | "near";
