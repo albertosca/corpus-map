@@ -280,6 +280,13 @@ export declare function extent(points: readonly Point[]): number;
  * a territory is drawn as regions, not as regions with gaps.
  */
 export declare function disksOutline(points: readonly Point[], r: number): Ring[];
+/**
+ * Groups of points whose disks of radius `link / 2` touch, by union-find over
+ * a grid of cell `link`. Outlining each group on its own grid keeps one far
+ * outlier from stretching a shared grid until a dense cluster falls between
+ * its vertices and disappears.
+ */
+export declare function components(points: readonly Point[], link: number): Point[][];
 /** One pass of Chaikin corner cutting on a closed ring. */
 export declare function chaikin(ring: Ring): Ring;
 /** Even-odd point-in-polygon test. */
