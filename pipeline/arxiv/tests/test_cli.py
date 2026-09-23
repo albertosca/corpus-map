@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from arxiv_corpus import cli, export
+from arxiv_corpus.embed import HashEmbedder
+from arxiv_corpus.fetch import Client
+from arxiv_corpus.project import FirstTwoProjector
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture_get(url: str) -> str:
+    """Serve `count.atom` for the total-count request, `page.atom` for every papers page."""
+    if "max_results=0" in url:
+        return (FIXTURES / "count.atom").read_text(encoding="utf-8")
+    return (FIXTURES / "page.atom").read_text(encoding="utf-8")
+
+
+def make_fake_dependencies(cache_dir: Path) -> cli.Dependencies:
+    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_dir)
+    return cli.Dependencies(
+        client=client,
+        embedder=HashEmbedder,
+        projector=FirstTwoProjector,
+        today=lambda: date(2026, 9, 23),
+        model_name="hash-embedder-test",
+        umap_params={"fake": True},
+    )
+
+
+@pytest.fixture
+def fake_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "make_dependencies", make_fake_dependencies)
+
+
+# --- end to end ---
+
+
+def test_all_produces_a_spec_that_passes_check_spec(
+    fake_dependencies: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+
+    exit_code = cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "80", "--floor", "2"])
+
+    assert exit_code == 0
+    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    export.check_spec(spec)
+
+
+def test_all_output_spans_at_least_two_territories_from_the_fixture(fake_dependencies: None, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+
+    cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "80", "--floor", "2"])
+
+    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    assert {t["id"] for t in spec["territories"]} == {"cs.CL", "cs.LG"}
+    assert len(spec["nodes"]) == 3
+
+
+def test_all_writes_meta_with_the_injected_and_computed_fields(fake_dependencies: None, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+
+    cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "80", "--floor", "2"])
+
+    meta = json.loads((out_dir / "arxiv.meta.json").read_text(encoding="utf-8"))
+    assert meta["fetched_at"] == "2026-09-23"
+    assert meta["query"] == cli.QUERY_SHAPE
+    assert meta["n"] == 80
+    assert meta["floor"] == 2
+    assert meta["model"] == "hash-embedder-test"
+    assert meta["umap"] == {"fake": True}
+    assert meta["per_category"] == {"cs.CL": 2, "cs.LG": 1}
+    assert meta["attribution"] == export.ATTRIBUTION
+    assert meta["license_note"] == export.LICENSE_NOTE
+
+
+# --- stage isolation ---
+
+
+ZERO_TOTAL_ATOM = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    '<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" '
+    'xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">'
+    "<opensearch:totalResults>0</opensearch:totalResults>"
+    "</feed>"
+)
+
+
+def _fixture_get_with_an_empty_category(url: str) -> str:
+    """Like `_fixture_get`, but `cs.GL` (arXiv's own near-empty category) has zero papers."""
+    if "cs.GL" in url:
+        return ZERO_TOTAL_ATOM
+    return _fixture_get(url)
+
+
+def test_run_fetch_skips_fetching_a_category_whose_quota_is_zero(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    client = Client(
+        get=_fixture_get_with_an_empty_category,
+        sleep=lambda _seconds: None,
+        now=lambda: 0.0,
+        gap=0.0,
+        cache_dir=cache_dir,
+    )
+    deps = cli.Dependencies(
+        client=client,
+        embedder=HashEmbedder,
+        projector=FirstTwoProjector,
+        today=lambda: date(2026, 9, 23),
+        model_name="hash-embedder-test",
+        umap_params={"fake": True},
+    )
+
+    cli.run_fetch(deps, cache_dir, n=80, floor=2)
+
+    payload = json.loads((cache_dir / "stages" / "papers.json").read_text(encoding="utf-8"))
+    categories = {paper["category"] for paper in payload["papers"]}
+    assert "cs.GL" not in categories
+
+
+def test_each_stage_can_be_rerun_alone_from_cached_intermediates(fake_dependencies: None, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "80", "--floor", "2"]
+
+    assert cli.main(["fetch", *common]) == 0
+    stage_dir = cache_dir / "stages"
+    assert (stage_dir / "papers.json").exists()
+    assert not (stage_dir / "embeddings.npy").exists()
+
+    assert cli.main(["embed", *common]) == 0
+    assert (stage_dir / "embeddings.npy").exists()
+    assert not (stage_dir / "coordinates.npy").exists()
+
+    assert cli.main(["project", *common]) == 0
+    assert (stage_dir / "coordinates.npy").exists()
+    assert not (out_dir / "arxiv.json").exists()
+
+    # export alone, reading only the cached project output from the run above
+    assert cli.main(["export", *common]) == 0
+    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    export.check_spec(spec)
+
+
+def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "80", "--floor", "2"]
+
+    monkeypatch.setattr(cli, "make_dependencies", make_fake_dependencies)
+    cli.main(["fetch", *common])
+    cli.main(["embed", *common])
+    cli.main(["project", *common])
+
+    def failing_get(_url: str) -> str:
+        raise AssertionError("export must not call the network")
+
+    def failing_dependencies(cache_dir: Path) -> cli.Dependencies:
+        client = Client(get=failing_get, sleep=lambda _s: None, now=lambda: 0.0, cache_dir=cache_dir)
+        return cli.Dependencies(
+            client=client,
+            embedder=HashEmbedder,
+            projector=FirstTwoProjector,
+            today=lambda: date(2026, 9, 23),
+            model_name="hash-embedder-test",
+            umap_params={"fake": True},
+        )
+
+    monkeypatch.setattr(cli, "make_dependencies", failing_dependencies)
+
+    assert cli.main(["export", *common]) == 0
+    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    export.check_spec(spec)
+
+
+# --- pure helpers ---
+
+
+def test_default_out_dir_points_at_the_repo_demo_corpora_directory() -> None:
+    result = cli.default_out_dir()
+
+    assert result.name == "corpora"
+    assert result.parent.name == "demo"
+    assert (result.parent.parent / "package.json").exists()
+
+
+def test_repo_root_raises_when_no_package_json_is_found_above(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match=r"package\.json"):
+        cli._repo_root(tmp_path / "nested" / "module.py")
+
+
+def test_resolve_out_defaults_to_demo_corpora_when_none() -> None:
+    assert cli._resolve_out(None) == cli.default_out_dir()
+
+
+def test_resolve_out_keeps_an_explicit_value(tmp_path: Path) -> None:
+    assert cli._resolve_out(tmp_path) == tmp_path
+
+
+def test_resolve_cache_dir_defaults_to_dot_cache_when_none() -> None:
+    assert cli._resolve_cache_dir(None) == Path(".cache")
+
+
+def test_resolve_cache_dir_keeps_an_explicit_value(tmp_path: Path) -> None:
+    assert cli._resolve_cache_dir(tmp_path) == tmp_path
