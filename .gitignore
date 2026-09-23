@@ -4,3 +4,12 @@ dist-demo/
 coverage/
 .superpowers/
 .claude/worktrees/
+
+# pipeline/arxiv (Python, managed by uv)
+pipeline/arxiv/.cache/
+pipeline/arxiv/.venv/
+pipeline/arxiv/.mypy_cache/
+pipeline/arxiv/.pytest_cache/
+pipeline/arxiv/.ruff_cache/
+pipeline/arxiv/.coverage
+pipeline/arxiv/**/__pycache__/
