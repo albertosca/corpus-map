@@ -58,6 +58,33 @@ export interface CardOverlayProps {
 }
 export declare function CardOverlay({ spec, viewport, regime, cap, width, height, renderCard, }: CardOverlayProps): ReactElement | null;
 
+// cards/layout.d.ts
+export interface CardAnchor {
+    id: string;
+    x: number;
+    y: number;
+}
+export interface PlacedCard {
+    ids: string[];
+    x: number;
+    y: number;
+}
+/** Top-left corners of the eight candidates, in preference order: right, left, above, below, then the diagonals. */
+export declare function candidates(x: number, y: number, w: number, h: number, gap: number): Array<[number, number]>;
+/**
+ * Place a card beside each anchor, in the first of eight candidate positions
+ * that stays inside the box and overlaps no placed card (Christensen, Marks and
+ * Shieber 1995). An anchor with no free candidate joins the placed card nearest
+ * to it, which becomes a group card.
+ */
+export declare function layoutCards(anchors: readonly CardAnchor[], size: {
+    width: number;
+    height: number;
+}, box: {
+    width: number;
+    height: number;
+}, gap?: number): PlacedCard[];
+
 // index.d.ts
 export type { CorpusMapProps } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
@@ -180,6 +207,15 @@ import { type Viewport } from "../viewport/viewport";
  * spec. Above the cap, the canvas alone carries the field.
  */
 export declare function visibleNodes(spec: MapSpec, viewport: Viewport, width: number, height: number, cap: number): MapNode[];
+
+// points/hover.d.ts
+export interface ScreenPoint {
+    id: string;
+    x: number;
+    y: number;
+}
+/** The point nearest to (x, y) within `radius` pixels, or null. Ties go to the earlier point. */
+export declare function nearestWithin(points: readonly ScreenPoint[], x: number, y: number, radius: number): ScreenPoint | null;
 
 // points/paintPoints.d.ts
 import type { MapSpec } from "../shared/spec";
