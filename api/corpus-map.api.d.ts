@@ -107,11 +107,12 @@ export declare function contrastRatio(a: Rgba, b: Rgba): number;
 export {};
 
 // labels/paintLabels.d.ts
-import type { MapSpec } from "../shared/spec";
+import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintLabels(surface: Surface, spec: MapSpec, vp: Viewport, theme: Theme): void;
+/** Draws every placed name whose active range has started at `ratio`. */
+export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, ratio: number, theme: Theme): void;
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -229,14 +230,35 @@ export declare function paintPoints(surface: Surface, spec: MapSpec, vp: Viewpor
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";
 import type { Viewport } from "../viewport/viewport";
+import type { Scene } from "./scene";
 import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
 import type { Theme } from "./theme";
+/** Per-frame values a precomputed `Scene` does not carry: the regime, the fit ratio, and the point layer's fade. */
+export interface Frame {
+    regime: Regime;
+    ratio: number;
+    pointAlpha: number;
+}
 /**
  * The single place that decides paint order: boundaries, then points, then
  * names, so a name is never covered by a mark or by a later territory's fill.
  */
-export declare function paint(surface: Surface, spec: MapSpec, vp: Viewport, regime: Regime, theme: Theme): void;
+export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewport, frame: Frame, theme: Theme): void;
+
+// shared/scene.d.ts
+import { type Measure, type PlacedLabel } from "../labels/placement";
+import { type Ring } from "../territories/shape";
+import type { MapNode, MapSpec } from "./spec";
+import type { Theme } from "./theme";
+import type { Tuning } from "./tuning";
+/** Everything about a corpus that does not change with the viewport: computed once per spec. */
+export interface Scene {
+    byId: ReadonlyMap<string, MapNode>;
+    shapes: ReadonlyMap<string, Ring[]>;
+    labels: readonly PlacedLabel[];
+}
+export declare function buildScene(spec: MapSpec, tuning: Tuning, theme: Theme, measure: Measure, fitScale: number): Scene;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
@@ -279,7 +301,10 @@ export interface Surface {
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, x: number, y: number, r: number, fill: string): void;
+    /** Draws `text` centred on (x, y). */
     text(text: string, x: number, y: number, color: string, font: string): void;
+    /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
+    globalAlpha(alpha: number): void;
 }
 export declare class RecordingSurface implements Surface {
     cleared: number;
@@ -302,20 +327,27 @@ export declare class RecordingSurface implements Surface {
         color: string;
         font: string;
     }>;
-    calls: Array<"clear" | "polygon" | "circle" | "text">;
+    alphas: number[];
+    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, x: number, y: number, r: number, fill: string): void;
     text(text: string, x: number, y: number, color: string, font: string): void;
+    globalAlpha(alpha: number): void;
 }
 export declare function canvasSurface(ctx: CanvasRenderingContext2D): Surface;
 
 // shared/theme.d.ts
+import type { LabelClass } from "../labels/placement";
 export interface Theme {
     territoryFill: string;
     territoryStroke: string;
     territoryLabel: string;
-    territoryFont: string;
+    territoryFonts: Record<LabelClass, string>;
+    cardBackground: string;
+    cardBorder: string;
+    hoverBackground: string;
+    hoverText: string;
     visited: string;
     unvisited: string;
     pointRadius: number;
@@ -363,11 +395,11 @@ export declare function hullOf(points: Point[]): Point[];
 export {};
 
 // territories/paintTerritories.d.ts
-import type { MapNode, MapSpec } from "../shared/spec";
+import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintTerritories(surface: Surface, spec: MapSpec, vp: Viewport, byId: ReadonlyMap<string, MapNode>, theme: Theme): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, vp: Viewport, theme: Theme): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];

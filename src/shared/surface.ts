@@ -2,7 +2,10 @@ export interface Surface {
   clear(): void;
   polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
   circle(id: string, x: number, y: number, r: number, fill: string): void;
+  /** Draws `text` centred on (x, y). */
   text(text: string, x: number, y: number, color: string, font: string): void;
+  /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
+  globalAlpha(alpha: number): void;
 }
 
 export class RecordingSurface implements Surface {
@@ -10,7 +13,8 @@ export class RecordingSurface implements Surface {
   polygons: Array<{ points: Array<[number, number]>; fill: string; stroke: string }> = [];
   circles: Array<{ id: string; x: number; y: number; r: number; fill: string }> = [];
   texts: Array<{ text: string; x: number; y: number; color: string; font: string }> = [];
-  calls: Array<"clear" | "polygon" | "circle" | "text"> = [];
+  alphas: number[] = [];
+  calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha"> = [];
 
   clear() {
     this.calls.push("clear");
@@ -27,6 +31,10 @@ export class RecordingSurface implements Surface {
   text(text: string, x: number, y: number, color: string, font: string) {
     this.calls.push("text");
     this.texts.push({ text, x, y, color, font });
+  }
+  globalAlpha(alpha: number) {
+    this.calls.push("alpha");
+    this.alphas.push(alpha);
   }
 }
 
@@ -56,7 +64,12 @@ export function canvasSurface(ctx: CanvasRenderingContext2D): Surface {
     text(text, x, y, color, font) {
       ctx.fillStyle = color;
       ctx.font = font;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillText(text, x, y);
+    },
+    globalAlpha(alpha) {
+      ctx.globalAlpha = alpha;
     },
   };
 }

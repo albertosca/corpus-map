@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
+import { estimateText } from "./labels/placement";
+import { buildScene } from "./shared/scene";
 import type { MapSpec } from "./shared/spec";
+import { DEFAULT_THEME } from "./shared/theme";
+import { DEFAULT_TUNING } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
 import { toScreen } from "./viewport/viewport";
 
@@ -307,7 +311,15 @@ describe("spec swap", () => {
       );
       texts.length = 0;
       rerender(<CorpusMap spec={large} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />);
-      const [ex, ey] = toScreen(fitSpec(large, 400, 300, 24), 500, 500);
+      // The anchor is the pole of inaccessibility of the territory's shape
+      // (Task 5/6), not its raw centroid, so the expectation is computed the
+      // same way CorpusMap does: build the scene against the NEW spec's
+      // fitted viewport, never the stale one from before the swap.
+      const largeVp = fitSpec(large, 400, 300, 24);
+      const largeScene = buildScene(large, DEFAULT_TUNING, DEFAULT_THEME, estimateText, largeVp.scale);
+      const label = largeScene.labels.find((l) => l.id === "u");
+      if (!label) throw new Error("expected a placed label for territory 'u'");
+      const [ex, ey] = toScreen(largeVp, label.anchor[0], label.anchor[1]);
       const largeTexts = texts.filter((t) => t.text === "Large");
       expect(largeTexts.length).toBeGreaterThan(0);
       for (const t of largeTexts) {

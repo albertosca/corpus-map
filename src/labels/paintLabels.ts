@@ -1,11 +1,13 @@
-import type { MapSpec } from "../shared/spec";
+import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { toScreen, type Viewport } from "../viewport/viewport";
 
-export function paintLabels(surface: Surface, spec: MapSpec, vp: Viewport, theme: Theme): void {
-  for (const t of spec.territories) {
-    const [cx, cy] = toScreen(vp, t.centroid[0], t.centroid[1]);
-    surface.text(t.name, cx, cy, theme.territoryLabel, theme.territoryFont);
+/** Draws every placed name whose active range has started at `ratio`. */
+export function paintLabels(surface: Surface, scene: Scene, vp: Viewport, ratio: number, theme: Theme): void {
+  for (const l of scene.labels) {
+    if (ratio < l.activeFrom) continue;
+    const [x, y] = toScreen(vp, l.anchor[0], l.anchor[1]);
+    surface.text(l.name, x, y, theme.territoryLabel, theme.territoryFonts[l.labelClass]);
   }
 }

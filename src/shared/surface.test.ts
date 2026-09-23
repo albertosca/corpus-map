@@ -78,10 +78,12 @@ describe("canvasSurface", () => {
     expect(ctx.fillStyle).toBe("orange");
   });
 
-  it("renders text with fillStyle, font, and fillText", () => {
+  it("renders text with fillStyle, font, and fillText, centred on (x, y)", () => {
     const ctx = {
       fillStyle: "",
       font: "",
+      textAlign: "",
+      textBaseline: "",
       fillText: vi.fn(),
     } as unknown as CanvasRenderingContext2D;
     const surface = canvasSurface(ctx);
@@ -89,7 +91,16 @@ describe("canvasSurface", () => {
 
     expect(ctx.fillStyle).toBe("green");
     expect(ctx.font).toBe("bold 16px Arial");
+    expect(ctx.textAlign).toBe("center");
+    expect(ctx.textBaseline).toBe("middle");
     expect(ctx.fillText).toHaveBeenCalledWith("Hello", 50, 75);
+  });
+
+  it("sets ctx.globalAlpha", () => {
+    const ctx = { globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
+    const surface = canvasSurface(ctx);
+    surface.globalAlpha(0.5);
+    expect(ctx.globalAlpha).toBe(0.5);
   });
 });
 
@@ -99,5 +110,13 @@ describe("RecordingSurface", () => {
     surface.polygon([[0, 0]], "red", "blue");
     surface.text("hello", 10, 20, "black", "bold");
     expect(surface.calls).toEqual(["polygon", "text"]);
+  });
+
+  it("records globalAlpha calls as an 'alpha' call and in alphas", () => {
+    const surface = new RecordingSurface();
+    surface.globalAlpha(0.5);
+    surface.globalAlpha(1);
+    expect(surface.calls).toEqual(["alpha", "alpha"]);
+    expect(surface.alphas).toEqual([0.5, 1]);
   });
 });

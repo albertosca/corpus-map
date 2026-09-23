@@ -1,11 +1,14 @@
 import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibleTree } from "./a11y/AccessibleTree";
 import { CardOverlay } from "./cards/CardOverlay";
+import { estimateText } from "./labels/placement";
 import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime, regimeFor } from "./lod/lod";
 import { paint } from "./shared/paint";
+import { buildScene } from "./shared/scene";
 import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
+import { DEFAULT_TUNING } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
 import { panBy, type Viewport, zoomTo } from "./viewport/viewport";
 
@@ -83,6 +86,10 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const regime = regimeFor(vp.scale, thresholds);
+  // Computed once per spec/theme/fit: concave territory shapes and placed
+  // names. Absolute thresholds and no point fade until Task 7 rewires the
+  // regime to the relative ratio.
+  const scene = useMemo(() => buildScene(spec, DEFAULT_TUNING, theme, estimateText, fitScale), [spec, theme, fitScale]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,8 +104,8 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(canvasSurface(ctx), spec, vp, regime, theme);
-  }, [spec, vp, regime, theme, width, height]);
+    paint(canvasSurface(ctx), scene, spec, vp, { regime, ratio: vp.scale / fitScale, pointAlpha: 1 }, theme);
+  }, [spec, scene, vp, regime, theme, width, height, fitScale]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns
