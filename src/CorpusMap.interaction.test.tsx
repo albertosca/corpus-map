@@ -1,5 +1,5 @@
 import { fireEvent, render } from "@testing-library/react";
-import { act } from "react";
+import { act, Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import type { MapSpec } from "./shared/spec";
@@ -357,6 +357,74 @@ describe("CorpusMap interaction", () => {
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
+  it("costs zero additional commits while the pointer holds within radius of the same node across separate frames, then exactly one on a switch (metric 10/13)", () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      callbacks.push(cb);
+      return callbacks.length;
+    });
+    try {
+      let commits = 0;
+      const onRender: ProfilerOnRenderCallback = () => {
+        commits += 1;
+      };
+      const { container } = render(
+        <Profiler id="hover-commits" onRender={onRender}>
+          <CorpusMap
+            spec={spec}
+            renderCard={(n) => <div>{n.label}</div>}
+            width={400}
+            height={300}
+            thresholds={{ midAt: 0, nearAt: 100 }}
+            cardSize={NO_GROUPING}
+          />
+        </Profiler>,
+      );
+      const el = surface(container);
+
+      // Establish the hover on node a (screen (74, 24)) — this first
+      // commit is not part of what this test measures.
+      fireEvent.pointerMove(el, { clientX: 74 + 6, clientY: 24, pointerId: 1 });
+      act(() => {
+        for (const cb of callbacks.splice(0)) cb(0);
+      });
+      expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
+
+      commits = 0;
+      // Five more moves, each resolved on its own frame, all still within
+      // 12 px of node a: `nearestWithin` resolves the same node's own
+      // screen position every time, so the resolved hover never actually
+      // changes.
+      const nearA = [
+        { clientX: 74 + 5, clientY: 24 },
+        { clientX: 74 + 4, clientY: 24 },
+        { clientX: 74 + 6, clientY: 25 },
+        { clientX: 74 + 5, clientY: 25 },
+        { clientX: 74 + 6, clientY: 24 },
+      ];
+      for (const p of nearA) {
+        fireEvent.pointerMove(el, { ...p, pointerId: 1 });
+        act(() => {
+          for (const cb of callbacks.splice(0)) cb(0);
+        });
+      }
+      expect(commits).toBe(0);
+      expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
+
+      // A move within 12 px of node b (screen (326, 276)) resolves to a
+      // genuinely different hover: exactly one more commit, and the
+      // tooltip switches.
+      fireEvent.pointerMove(el, { clientX: 326 - 6, clientY: 276, pointerId: 1 });
+      act(() => {
+        for (const cb of callbacks.splice(0)) cb(0);
+      });
+      expect(commits).toBe(1);
+      expect(container.querySelector('[data-hover="b"]')).not.toBeNull();
+    } finally {
+      localRaf.mockRestore();
+    }
+  });
+
   it("clears a previously shown hover name once the pointer moves out of range, in a later frame", () => {
     // This file's default `requestAnimationFrame` mock resolves its
     // callback synchronously inside the call itself, which — as the test
@@ -404,11 +472,14 @@ describe("CorpusMap interaction", () => {
   });
 
   it("no-ops a hover flush that was interrupted by a press just before it ran (I11)", () => {
-    // A hover move schedules a frame that closes over the hover shown at
-    // that moment; if a press interrupts before that frame runs, the press
-    // has already cleared the hover synchronously (see `onPointerDown`) by
-    // the time the stale flush's own clear runs — a defensive no-op this
-    // test exists to exercise, not the thing that actually clears it.
+    // A hover move schedules a frame; if a press interrupts before that
+    // frame runs, `onPointerDown` has already cleared the hover
+    // synchronously (state and its effect both) by the time the stale
+    // flush finally runs — the flush's own not-dragging/right-regime
+    // condition is false by then (`drag.current` is no longer null), so it
+    // does nothing at all. This test exists to exercise that path, not to
+    // prove it clears anything — the assertion right after the press
+    // already shows the hover gone before the flush ever runs.
     const callbacks: FrameRequestCallback[] = [];
     const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
       callbacks.push(cb);
@@ -509,5 +580,78 @@ describe("CorpusMap interaction", () => {
     } finally {
       rects.mockRestore();
     }
+  });
+
+  it("selects a node using the shipped default cardSize (no cardSize prop) (I11)", () => {
+    // Reads each card's real, laid-out box, same as the group-card test
+    // above — this test's whole point is exercising the real 160x56
+    // default, not `NO_GROUPING`.
+    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const id = this.getAttribute("data-card");
+      const [x, y, w, h] =
+        id === null
+          ? [0, 0, 400, 300]
+          : [
+              Number.parseFloat(this.style.left),
+              Number.parseFloat(this.style.top),
+              Number.parseFloat(this.style.width),
+              Number.parseFloat(this.style.height),
+            ];
+      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      const onSelect = vi.fn();
+      const { container } = render(
+        <CorpusMap
+          spec={spec}
+          renderCard={(n) => <div>{n.label}</div>}
+          width={400}
+          height={300}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          onSelect={onSelect}
+        />,
+      );
+      const el = surface(container);
+      // No cardSize prop: the shipped default is 160x56. Node a's anchor
+      // (74, 24) is close enough to the top-left corner that the first six
+      // of `layoutCards`'s eight candidates (right, left, above, below, and
+      // the two upper diagonals) all run off the top or left edge of the
+      // 400x300 box; the surviving below-right candidate lands its card at
+      // (80, 30)-(240, 86).
+      fireEvent.pointerDown(el, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(el, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a", label: "A" }));
+    } finally {
+      rects.mockRestore();
+    }
+  });
+
+  it("presses, then a pointercancel interrupts before release: no selection and no pan after the cancel (I11)", () => {
+    const onSelect = vi.fn();
+    const { container } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(n) => <div>{n.label}</div>}
+        width={400}
+        height={300}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        onSelect={onSelect}
+        cardSize={NO_GROUPING}
+      />,
+    );
+    const el = surface(container);
+    const before = (container.querySelector("[data-card]") as HTMLElement).style.left;
+    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerCancel(el, { pointerId: 1 });
+    // A move after the cancel is not a continuation of the abandoned drag:
+    // `drag.current` is already null (cleared by the cancel), so this move
+    // is read as a hover point, not a pan.
+    fireEvent.pointerMove(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerUp(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect((container.querySelector("[data-card]") as HTMLElement).style.left).toBe(before);
   });
 });

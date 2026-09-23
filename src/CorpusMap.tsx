@@ -134,6 +134,22 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // accumulated pan (metric 13: resolving it synchronously in the move
   // handler instead would cost one commit per move).
   const hoverPoint = useRef<{ x: number; y: number } | null>(null);
+  // Mirrors `hover` for the frame-flush closure below, which is created at
+  // schedule time (the first move of a burst) and so cannot see a `hover`
+  // update from a *later* frame in the same burst via its own closed-over
+  // `hover` variable. Read, never written, inside the flush; a plain
+  // `setHover(newObject)` there — even when `newObject` is deeply equal to
+  // the current hover — creates a new object every call, which is never
+  // `Object.is`-equal to the current state, so React never bails out and a
+  // hover held steady over one node still costs a commit every frame.
+  // Comparing against this ref's fields instead, and skipping the call
+  // entirely when they match, is what keeps a steady hover — the pointer
+  // staying within radius of the same point across several frames — at
+  // zero commits.
+  const hoverRef = useRef<HoverState | null>(null);
+  useEffect(() => {
+    hoverRef.current = hover;
+  }, [hover]);
 
   useEffect(() => {
     return () => {
@@ -293,22 +309,41 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
         pending.current = null;
         if (acc) setVp((v) => panBy(v, acc.dx, acc.dy));
         const hp = hoverPoint.current;
+        // Not the applicable-regime/not-dragging/has-a-point condition's
+        // `else`: a press, a `pointerleave`, or leaving the mid/near
+        // regimes already clears `hover` synchronously at its own call
+        // site (`onPointerDown`, `onPointerLeave`, the render-phase check
+        // above) — including that update's effect, since each of those
+        // runs to completion, effects included, strictly before any
+        // already-scheduled flush like this one can run. So by the time
+        // this condition is false, `hoverRef.current` is already null;
+        // there is nothing left here to clear.
         if (drag.current === null && hp && (next === "mid" || next === "near")) {
           const points = visibleNodes(spec, vp, width, height, cardCap).map((n) => {
             const [x, y] = toScreen(vp, n.x, n.y);
             return { id: n.id, x, y };
           });
           const nearest = nearestWithin(points, hp.x, hp.y, tuning.hoverRadius);
-          // `nearest.id` is always a key of `nodesById`: `points` was built
-          // from `visibleNodes(spec, ...)`, which only ever returns `spec`'s
-          // own nodes.
-          setHover(
-            nearest
-              ? { id: nearest.id, label: (nodesById.get(nearest.id) as MapNode).label, x: nearest.x, y: nearest.y }
-              : null,
-          );
-        } else if (hover !== null) {
-          setHover(null);
+          const prevHover = hoverRef.current;
+          if (nearest) {
+            // Same node, same screen position as the currently shown hover:
+            // skip the call rather than dispatch a freshly-allocated (but
+            // deeply equal) object every frame the pointer holds still —
+            // `Object.is` would never consider two such objects equal, so
+            // React would never bail out and a steady hover would cost a
+            // commit on every frame (see the `hoverRef` comment above).
+            const same =
+              prevHover && prevHover.id === nearest.id && prevHover.x === nearest.x && prevHover.y === nearest.y;
+            if (!same) {
+              // `nearest.id` is always a key of `nodesById`: `points` was
+              // built from `visibleNodes(spec, ...)`, which only ever
+              // returns `spec`'s own nodes.
+              const label = (nodesById.get(nearest.id) as MapNode).label;
+              setHover({ id: nearest.id, label, x: nearest.x, y: nearest.y });
+            }
+          } else if (prevHover !== null) {
+            setHover(null);
+          }
         }
       });
     }

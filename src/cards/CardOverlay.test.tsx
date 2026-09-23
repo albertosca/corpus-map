@@ -174,10 +174,14 @@ describe("CardOverlay", () => {
   });
 
   it("renders a group badge for anchors that cannot each get their own card, and never mounts more cards than anchors", () => {
-    // Four anchors at the same point, in a box barely bigger than the card
-    // frame: none of `layoutCards`'s eight candidates fits with room for the
-    // 6 px gap, so the first anchor is placed clamped to the box corner and
-    // the other three each join it as a group member.
+    // Four anchors at the same point (0, 0), in a 60x60 box barely bigger
+    // than the 50x50 card frame: the first six candidates (right, left,
+    // above, below, and the two upper diagonals) all run off the top or
+    // left edge, so the first anchor lands at the seventh — the below-right
+    // candidate, (6, 6)-(56, 56) — and the other three, trying the same
+    // eight candidates from the same point, find every one of them either
+    // off the box or overlapping that placed card, so each joins it as a
+    // group member.
     const n = 4;
     const spec: MapSpec = {
       version: "1",
