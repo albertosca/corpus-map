@@ -5,6 +5,13 @@ ids arrive as `http://arxiv.org/abs/<id>v<n>` (the version suffix is stripped he
 primary category is the `term` attribute of `<arxiv:primary_category/>`, and the total is
 `<opensearch:totalResults>`. The API allows at most 2,000 results per request and asks for
 one request every 3 seconds.
+
+Verified live on 2026-09-23, running Task 6: `urllib.request.urlopen` gets a reproducible
+HTTP 406 from `export.arxiv.org`, while `curl` and `httpx` succeed against the identical URL
+and headers at the same moment (checked back-to-back, repeatedly) -- the arXiv edge blocks on
+the client's TLS/HTTP fingerprint, not on anything this module sends. `httpx` is already a
+transitive dependency of `sentence-transformers` (the `model` extra); this module promotes it
+to a direct, base dependency so the fetch stage works without the extra installed.
 """
 
 from __future__ import annotations
@@ -17,9 +24,9 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +58,10 @@ class Paper:
     year: int
 
 
-def urllib_get(url: str) -> str:  # pragma: no cover -- real network, never called in tests
-    request = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(request, timeout=30) as response:
-        return cast(bytes, response.read()).decode("utf-8")
+def http_get(url: str) -> str:  # pragma: no cover -- real network, never called in tests
+    response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+    response.raise_for_status()
+    return response.text
 
 
 def build_query_url(category: str, start: int, max_results: int) -> str:
@@ -175,8 +182,13 @@ class Client:
         self._last_request_at: float | None = None
 
     def total(self, category: str) -> int:
-        """The `opensearch:totalResults` for `category`, via a `max_results=0` request."""
-        url = build_query_url(category, start=0, max_results=0)
+        """The `opensearch:totalResults` for `category`, via a `max_results=1` request.
+
+        Verified live on 2026-09-23: `max_results=0` reliably returns arXiv's own HTTP 500
+        error feed (reproduced with plain `curl`, no client-side header involved), while
+        `max_results=1` returns the same `opensearch:totalResults` with one (unused) entry.
+        """
+        url = build_query_url(category, start=0, max_results=1)
         total, _entries = self._parse(url)
         return total
 

@@ -24,7 +24,7 @@ import numpy as np
 from arxiv_corpus.categories import CATEGORIES
 from arxiv_corpus.embed import BgeEmbedder, Embedder
 from arxiv_corpus.export import ATTRIBUTION, LICENSE_NOTE, build_spec, write_outputs
-from arxiv_corpus.fetch import BASE_URL, Client, Paper, urllib_get
+from arxiv_corpus.fetch import BASE_URL, Client, Paper, http_get
 from arxiv_corpus.project import Projector, UmapProjector, rescale
 from arxiv_corpus.sample import quotas
 
@@ -60,7 +60,7 @@ class Dependencies:
 
 def make_dependencies(cache_dir: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
     """The real factory: a throttled network client, the real embedder and projector."""
-    client = Client(get=urllib_get, sleep=time.sleep, now=time.monotonic, cache_dir=cache_dir / "responses")
+    client = Client(get=http_get, sleep=time.sleep, now=time.monotonic, cache_dir=cache_dir / "responses")
     return Dependencies(
         client=client,
         embedder=BgeEmbedder,

@@ -215,7 +215,7 @@ def test_parse_page_count_atom_has_total_and_no_entries() -> None:
     assert results == []
 
 
-def test_client_total_requests_max_results_zero() -> None:
+def test_client_total_requests_max_results_one() -> None:
     clock = FakeClock()
     get = GetSpy([read_fixture("count.atom")], clock)
     client = Client(get=get, sleep=clock.sleep, now=clock.now)
@@ -224,7 +224,7 @@ def test_client_total_requests_max_results_zero() -> None:
 
     assert result == 119789
     assert len(get.calls) == 1
-    assert "max_results=0" in get.calls[0][0]
+    assert "max_results=1" in get.calls[0][0]
     assert "cat%3Acs.CL" in get.calls[0][0] or "cat:cs.CL" in get.calls[0][0]
 
 
@@ -352,12 +352,12 @@ def test_cache_round_trip_avoids_second_request(tmp_path: Path) -> None:
     assert len(get.calls) == 1
     assert clock.sleep_calls == []
 
-    url = build_query_url("cs.CL", start=0, max_results=0)
+    url = build_query_url("cs.CL", start=0, max_results=1)
     assert cache_path(tmp_path, url).exists()
 
 
 def test_cache_hit_returns_stored_body_without_get_or_sleep(tmp_path: Path) -> None:
-    url = build_query_url("cs.CL", start=0, max_results=0)
+    url = build_query_url("cs.CL", start=0, max_results=1)
     stored = cache_path(tmp_path, url)
     stored.parent.mkdir(parents=True, exist_ok=True)
     stored.write_text(read_fixture("count.atom"), encoding="utf-8")
