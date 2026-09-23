@@ -10,6 +10,7 @@ the optional `model` extra.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -111,6 +112,23 @@ def _coordinates_path(cache_dir: Path) -> Path:
     return _stage_dir(cache_dir) / "coordinates.npy"
 
 
+def _papers_fingerprint_path(cache_dir: Path) -> Path:
+    return _stage_dir(cache_dir) / "papers.fingerprint"
+
+
+def _embeddings_fingerprint_path(cache_dir: Path) -> Path:
+    return _stage_dir(cache_dir) / "embeddings.fingerprint"
+
+
+def _coordinates_fingerprint_path(cache_dir: Path) -> Path:
+    return _stage_dir(cache_dir) / "coordinates.fingerprint"
+
+
+def _fingerprint(data: bytes) -> str:
+    """The sha256 hex digest of `data` -- the provenance token stages pass along."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def _require_cached(path: Path, prior_stage: str, what: str) -> None:
     """Raise a clear `ValueError` if `path` (this stage's expected input) is not there yet.
 
@@ -152,38 +170,70 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
         raise ValueError(f"short fetch, quota not met: {detail}")
 
     payload = {"n": n, "floor": floor, "papers": [asdict(paper) for paper in papers]}
+    payload_text = json.dumps(payload)
     stage_dir = _stage_dir(cache_dir)
     stage_dir.mkdir(parents=True, exist_ok=True)
-    _papers_path(cache_dir).write_text(json.dumps(payload), encoding="utf-8")
+    _papers_path(cache_dir).write_text(payload_text, encoding="utf-8")
+    _papers_fingerprint_path(cache_dir).write_text(_fingerprint(payload_text.encode("utf-8")), encoding="utf-8")
 
 
 def run_embed(deps: Dependencies, cache_dir: Path) -> None:
-    """Embed the cached papers' abstracts and cache the resulting vectors."""
+    """Embed the cached papers' abstracts and cache the resulting vectors.
+
+    The fingerprint of the papers actually consumed travels along in a sidecar, so `export`
+    can later tell whether the coordinates it is about to read trace back to today's
+    `papers.json` or to a fetch that has since been replaced.
+    """
     papers_path = _papers_path(cache_dir)
     _require_cached(papers_path, prior_stage="fetch", what="papers")
+    fingerprint_path = _papers_fingerprint_path(cache_dir)
+    _require_cached(fingerprint_path, prior_stage="fetch", what="papers fingerprint")
     payload = json.loads(papers_path.read_text(encoding="utf-8"))
     abstracts = [paper["abstract"] for paper in payload["papers"]]
     vectors = deps.embedder().embed(abstracts)
     np.save(_embeddings_path(cache_dir), vectors)
+    _embeddings_fingerprint_path(cache_dir).write_text(fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def run_project(deps: Dependencies, cache_dir: Path) -> None:
-    """Project the cached embeddings to 2D, rescale them, and cache the coordinates."""
+    """Project the cached embeddings to 2D, rescale them, and cache the coordinates.
+
+    Copies `embed`'s fingerprint sidecar forward unchanged -- see `run_embed`.
+    """
     embeddings_path = _embeddings_path(cache_dir)
     _require_cached(embeddings_path, prior_stage="embed", what="embeddings")
+    fingerprint_path = _embeddings_fingerprint_path(cache_dir)
+    _require_cached(fingerprint_path, prior_stage="embed", what="embeddings fingerprint")
     vectors = np.load(embeddings_path)
     xy = rescale(deps.projector().project(vectors))
     np.save(_coordinates_path(cache_dir), xy)
+    _coordinates_fingerprint_path(cache_dir).write_text(fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
-    """Build the checked `MapSpec` from the cached papers and coordinates, and write it."""
+    """Build the checked `MapSpec` from the cached papers and coordinates, and write it.
+
+    Refuses, before reading anything else, if the cached coordinates were produced from a
+    different `papers.json` than the one sitting in the cache now -- a refetch (same length
+    or not) must not get silently paired with stale coordinates from the fetch it replaced.
+    """
     papers_path = _papers_path(cache_dir)
     _require_cached(papers_path, prior_stage="fetch", what="papers")
     coordinates_path = _coordinates_path(cache_dir)
     _require_cached(coordinates_path, prior_stage="project", what="projected coordinates")
+    coordinates_fingerprint_path = _coordinates_fingerprint_path(cache_dir)
+    _require_cached(coordinates_fingerprint_path, prior_stage="project", what="coordinates fingerprint")
 
-    payload = json.loads(papers_path.read_text(encoding="utf-8"))
+    payload_text = papers_path.read_text(encoding="utf-8")
+    current_fingerprint = _fingerprint(payload_text.encode("utf-8"))
+    consumed_fingerprint = coordinates_fingerprint_path.read_text(encoding="utf-8")
+    if current_fingerprint != consumed_fingerprint:
+        raise ValueError(
+            "the cached coordinates were produced from a different papers.json than the one now in the "
+            "cache — run 'arxiv-corpus embed' (then 'project') to refresh them before exporting"
+        )
+
+    payload = json.loads(payload_text)
     papers = [Paper(**fields) for fields in payload["papers"]]
     xy = np.load(coordinates_path)
 

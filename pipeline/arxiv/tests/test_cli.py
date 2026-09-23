@@ -4,6 +4,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from arxiv_corpus import cli, export
@@ -273,6 +274,69 @@ def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_n
     assert cli.main(["export", *common]) == 0
     spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
     export.check_spec(spec)
+
+
+# --- provenance (I-2) ---
+
+
+def test_export_refuses_coordinates_from_a_different_fetch(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A refetch (same length or not) must not silently pair with stale coordinates."""
+    out_dir = tmp_path / "out"
+    cache_dir = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "1"]
+
+    assert cli.main(["all", *common]) == 0
+
+    papers_path = cache_dir / "stages" / "papers.json"
+    payload = json.loads(papers_path.read_text(encoding="utf-8"))
+    for i, paper in enumerate(payload["papers"]):
+        paper["id"] = f"9999.{i:05d}"
+    papers_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    exit_code = cli.main(["export", *common])
+
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "arxiv-corpus embed" in captured.err
+
+
+def test_run_embed_without_a_papers_fingerprint_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
+    """A `papers.json` with no fingerprint sidecar (e.g. a pre-existing cache) is as unusable
+    as a missing `papers.json` -- `embed` has nothing trustworthy to copy forward."""
+    cache_dir = tmp_path / "cache"
+    stage_dir = cache_dir / "stages"
+    stage_dir.mkdir(parents=True)
+    (stage_dir / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"papers fingerprint.*run 'arxiv-corpus fetch' first"):
+        cli.run_embed(deps, cache_dir)
+
+
+def test_run_project_without_an_embeddings_fingerprint_names_embed_as_the_predecessor(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    stage_dir = cache_dir / "stages"
+    stage_dir.mkdir(parents=True)
+    np.save(stage_dir / "embeddings.npy", np.zeros((1, 2), dtype=np.float32))
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"embeddings fingerprint.*run 'arxiv-corpus embed' first"):
+        cli.run_project(deps, cache_dir)
+
+
+def test_run_export_without_a_coordinates_fingerprint_names_project_as_the_predecessor(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+    stage_dir = cache_dir / "stages"
+    stage_dir.mkdir(parents=True)
+    (stage_dir / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
+    np.save(stage_dir / "coordinates.npy", np.zeros((0, 2), dtype=np.float64))
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"coordinates fingerprint.*run 'arxiv-corpus project' first"):
+        cli.run_export(deps, cache_dir, out_dir)
 
 
 # --- missing predecessor stage ---
