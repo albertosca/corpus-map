@@ -95,6 +95,12 @@ Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so 
 
 `theme` restyles the point field and territory strokes; both the `Theme` type and the library's `DEFAULT_THEME` are exported from `corpus-map`, so a consumer can type a custom theme or start from the default and override individual fields.
 
+`thresholds.midAt` and `thresholds.nearAt` are multiples of the fitted scale — the zoom at which the whole corpus fits the box — not absolute scale values, so `DEFAULT_THRESHOLDS = { midAt: 2, nearAt: 6 }` opens every corpus in the far regime regardless of its own extent, and reaching the mid or near regime only ever takes a 2x or 6x zoom-in from there.
+
+`tuning?: Partial<Tuning>` overrides any of the numbers the literature does not settle without touching code — wheel sensitivity, trackpad pinch gain, the per-event zoom cap, the level-of-detail hysteresis and cross-fade band, territory boundary padding, label size cutoffs, hover radius. `Tuning` and `DEFAULT_TUNING` are exported, so a consumer (or a tuning panel) can start from the defaults and override individual fields the same way as `theme`.
+
+`cardSize?: { width: number; height: number }` (default `{ width: 160, height: 56 }`) sets the frame the library draws around each card; `renderCard` only fills its content. The library places that frame beside the node's point — trying eight candidate positions around it before falling back to grouping the node into the nearest already-placed card, shown with a "+ N" badge — so cards never hang off a point's corner or cover each other. At the mid and near regimes, hovering the nearest point within `tuning.hoverRadius` screen pixels shows its label in a small tooltip.
+
 ## The demo
 
 Run `npm run dev` to open the demo viewer. During development it consumes the library through a Vite alias to `src/`, not the built package; what proves the built package is usable is CI, which runs `npm run build` and checks that the emitted `dist/index.d.ts` exists where `package.json` says it does. The gallery ships two corpora — periodic table elements and bright stars grouped by constellation — and neither is food, deliberately: a map spec validated by a single domain would be an unverified abstraction, and chemistry and astronomy are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.

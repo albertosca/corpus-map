@@ -6,14 +6,14 @@ Each feature owns a folder with its pure logic and its canvas painting together;
 
 | Folder / file | Holds |
 |---|---|
-| `viewport/` | `viewport.ts` (the `Viewport` transform: `toScreen`, `toWorld`, `panBy`, `zoomAt`, `zoomTo`) and `fit.ts` (`worldBounds`, `fitSpec`, the padded fit-to-extent computation) |
-| `lod/` | `lod.ts` (`Regime`, `LodThresholds`, `regimeFor`) and `visible.ts` (`visibleNodes`: on-screen filter plus the hard render cap) |
-| `territories/` | `hull.ts` (Andrew's monotone chain convex hull) and `paintTerritories.ts` (boundary fill and stroke) |
-| `points/` | `paintPoints.ts` (the point-field circles) |
-| `labels/` | `paintLabels.ts` (territory name text) |
-| `cards/` | `CardOverlay.tsx` (the `inert`, `aria-hidden` HTML overlay that renders `renderCard` per visible node) |
+| `viewport/` | `viewport.ts` (the `Viewport` transform: `toScreen`, `toWorld`, `panBy`, `zoomAt`, `zoomTo`), `fit.ts` (`worldBounds`, `fitSpec`, the padded fit-to-extent computation) and `wheel.ts` (`wheelZoomFactor`: a pure, `deltaMode`-normalised, `Tuning`-driven zoom factor per wheel event) |
+| `lod/` | `lod.ts` (`Regime`, `LodThresholds`, `DEFAULT_THRESHOLDS`) and `regime.ts` (`regimeAt`, the hysteresis regime transition, and `fade`, the zoom-driven cross-fade) plus `visible.ts` (`visibleNodes`: on-screen filter plus the hard render cap) |
+| `territories/` | `shape.ts` (`disksOutline`: concave, padded boundaries by marching squares over the union of member disks, plus `components`, `chaikin`, `spacing`, `extent`, `contains`, `ringArea`), `hull.ts` (Andrew's monotone chain convex hull; superseded by `shape.ts` for boundary computation and currently unused in production code, kept as a tested pure function) and `paintTerritories.ts` (boundary fill and stroke, reading `Scene.shapes`) |
+| `points/` | `paintPoints.ts` (the point-field circles) and `hover.ts` (`nearestWithin`: the pure nearest-point-in-radius hit test behind hover) |
+| `labels/` | `placement.ts` (`placeLabels`: active-range priority placement after Been, Daiches and Yap 2006, plus `labelClasses`, `separationScale`, `estimateText`), `pole.ts` (`poleOfInaccessibility`: the label anchor, by quadtree refinement after Garcia-Castellanos and Lombardo 2007), `useMeasure.ts` (the canvas-`measureText` hook, with `estimateText`'s deterministic fallback under jsdom), `contrast.ts` (`parseColor`, `over`, `contrastRatio`: the WCAG contrast check behind metric 9) and `paintLabels.ts` (draws each placed name whose active range has started) |
+| `cards/` | `layout.ts` (`layoutCards`: pure eight-candidate placement beside each anchor, with the nearest-card group fallback) and `CardOverlay.tsx` (the `inert`, `aria-hidden` HTML overlay that renders `renderCard` per placed card) |
 | `a11y/` | `AccessibleTree.tsx` (the parallel DOM tree that makes the map keyboard- and screen-reader-navigable) |
-| `shared/` | `spec.ts` (`MapNode`, `MapSpec`, `Territory`, `validateSpec`), `surface.ts` (`Surface` interface, `RecordingSurface` for tests, `canvasSurface` for the browser), `theme.ts` (`Theme`, `DEFAULT_THEME`), `paint.ts` (the compositor, see section 3) |
+| `shared/` | `spec.ts` (`MapNode`, `MapSpec`, `Territory`, `validateSpec`), `surface.ts` (`Surface` interface, `RecordingSurface` for tests, `canvasSurface` for the browser), `theme.ts` (`Theme`, `DEFAULT_THEME`), `tuning.ts` (`Tuning`, `DEFAULT_TUNING`, `resolveTuning`: every number the literature does not settle, validated and defaulted in one place), `scene.ts` (`Scene`, `buildScene`: see section 3) and `paint.ts` (the compositor, see section 3) |
 | `CorpusMap.tsx` | The component: pointer and wheel handling, viewport and regime state, drives the canvas ref through `paint()` and renders `CardOverlay` and `AccessibleTree` alongside it |
 | `index.ts` | The public door, see section 4 |
 
@@ -23,7 +23,9 @@ Outside `src/`: `fixtures/synthetic/generate.ts` is a seeded generator (`generat
 
 A `.ts` file in `src/` that is not a hook (a file named `use*.ts`) may not import `react` or `react-dom`, and may not read `window` or `document` — it decides, it does not act. Components (`.tsx`) and hooks are the only places that touch React or the DOM, and they apply what the pure code already decided. The rule is enforced by ESLint's `no-restricted-imports` and `no-restricted-globals` in `eslint.config.js`, scoped to `src/**/*.ts` and excluding `use*.ts` and test files, and is proven by a canary: a plain pure file with `import React` or a bare `document` reference fails lint.
 
-## 3. Paint order
+## 3. Scene and paint order
+
+`shared/scene.ts`'s `buildScene` computes everything about a corpus that does not change with the viewport — territory boundary shapes (`territories/shape.ts`) and placed territory names (`labels/placement.ts`, anchored by `labels/pole.ts`) — once per spec, not once per frame. `CorpusMap` memoizes the resulting `Scene` on the primitive `tuning`/`theme` fields `buildScene` actually reads, not on the `tuning`/`theme` objects themselves (both are minted fresh on every render for an inline literal prop), so a scene rebuild — measured at 70-135ms on 10,000 items — only happens when a value it depends on actually changes. Per-frame values that a precomputed `Scene` cannot carry (the current regime, the fit ratio, the point layer's fade) travel separately as a small `Frame` object.
 
 `shared/paint.ts` is the only place that orders drawing: territory boundaries, then points, then names, so a name is never covered by a mark or by a later territory's fill. A feature that wants to draw something adds its `paint*` function in its own folder and one call to it, in the right position, in the compositor — nothing else decides paint order, and nothing paints outside this function.
 
