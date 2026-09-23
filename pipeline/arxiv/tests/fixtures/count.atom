@@ -4,7 +4,21 @@
   <title>ArXiv Query: search_query=cat:cs.CL&amp;id_list=&amp;start=0&amp;max_results=1</title>
   <updated>2026-01-05T12:00:00Z</updated>
   <link href="https://export.arxiv.org/api/query?search_query=cat:cs.CL&amp;start=0&amp;max_results=1" rel="self" type="application/atom+xml"/>
-  <opensearch:itemsPerPage>0</opensearch:itemsPerPage>
+  <opensearch:itemsPerPage>1</opensearch:itemsPerPage>
   <opensearch:totalResults>119789</opensearch:totalResults>
   <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2601.00099v1</id>
+    <title>Invented Placeholder Title for the Count Fixture</title>
+    <updated>2026-01-05T12:00:00Z</updated>
+    <link href="https://arxiv.org/abs/2601.00099v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2601.00099v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Invented abstract for the max_results=1 count fixture, not otherwise used.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-01-05T12:00:00Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>B. Sample</name>
+    </author>
+  </entry>
 </feed>

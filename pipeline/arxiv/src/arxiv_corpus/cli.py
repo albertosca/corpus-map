@@ -123,14 +123,33 @@ def _require_cached(path: Path, prior_stage: str, what: str) -> None:
 
 
 def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
-    """Count and sample every `cs.*` category, then cache the resulting papers."""
+    """Count and sample every `cs.*` category, then cache the resulting papers.
+
+    A category arXiv itself reports as empty (`total == 0`) is skipped and named in a
+    stderr warning -- that is expected, not an error (see README.md's cs.NA/cs.SY note).
+    Any other category that comes back with fewer papers than its quota is a real
+    shortfall -- a transient paging problem, not an empty category -- and raises
+    `ValueError` naming every short category and the numbers, before anything is written.
+    """
     totals = {code: deps.client.total(code) for code in sorted(CATEGORIES)}
     quota = quotas(totals, n=n, floor=floor)
 
+    dropped = sorted(code for code in quota if totals[code] == 0)
+    if dropped:
+        print(f"dropped: {', '.join(dropped)} (arXiv reports 0 papers)", file=sys.stderr)
+
     papers: list[Paper] = []
+    short: dict[str, tuple[int, int]] = {}
     for code in sorted(CATEGORIES):
         if quota[code] > 0:
-            papers.extend(deps.client.papers(code, quota[code]))
+            got = deps.client.papers(code, quota[code])
+            if len(got) < quota[code]:
+                short[code] = (quota[code], len(got))
+            papers.extend(got)
+
+    if short:
+        detail = ", ".join(f"{code} got {have}/{want}" for code, (want, have) in sorted(short.items()))
+        raise ValueError(f"short fetch, quota not met: {detail}")
 
     payload = {"n": n, "floor": floor, "papers": [asdict(paper) for paper in papers]}
     stage_dir = _stage_dir(cache_dir)

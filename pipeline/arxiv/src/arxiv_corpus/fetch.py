@@ -228,23 +228,31 @@ class Client:
         return collected
 
     def _parse(self, url: str) -> tuple[int, list[tuple[Paper, str]]]:
-        """Fetch and parse `url`, naming it in the error if the response is malformed."""
-        body = self._fetch(url)
-        try:
-            return parse_page(body)
-        except ValueError as err:
-            raise ValueError(f"{url}: {err}") from err
+        """Fetch `url` (from cache or over the network) and parse it.
 
-    def _fetch(self, url: str) -> str:
+        A cached body was already proven to parse the last time it was written (see below),
+        so it is trusted here. A freshly fetched body is parsed *before* it is cached: only
+        a body that parses is written to disk. arXiv's own error feed, a truncated body, or
+        any other malformed HTTP 200 response is never cached -- caching it first would make
+        every later run replay the same broken body forever instead of asking arXiv again.
+        """
         cached = self._read_cache(url)
         if cached is not None:
-            return cached
+            return self._parse_or_raise(cached, url)
 
         self._throttle()
         body = self._get(url)
         self._last_request_at = self._now()
+        parsed = self._parse_or_raise(body, url)
         self._write_cache(url, body)
-        return body
+        return parsed
+
+    @staticmethod
+    def _parse_or_raise(body: str, url: str) -> tuple[int, list[tuple[Paper, str]]]:
+        try:
+            return parse_page(body)
+        except ValueError as err:
+            raise ValueError(f"{url}: {err}") from err
 
     def _throttle(self) -> None:
         if self._last_request_at is None:

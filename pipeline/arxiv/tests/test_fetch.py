@@ -208,11 +208,13 @@ def test_parse_page_preserves_multiline_title_raw() -> None:
     assert "\n" in title
 
 
-def test_parse_page_count_atom_has_total_and_no_entries() -> None:
+def test_parse_page_count_atom_has_total_and_one_unused_entry() -> None:
+    """`max_results=1` returns one entry alongside the total -- `Client.total()` ignores it."""
     total, results = parse_page(read_fixture("count.atom"))
 
     assert total == 119789
-    assert results == []
+    assert len(results) == 1
+    assert results[0][0].id == "2601.00099"
 
 
 def test_client_total_requests_max_results_one() -> None:
@@ -484,3 +486,24 @@ def test_papers_returns_empty_immediately_for_non_positive_want() -> None:
 
 def test_user_agent_names_the_real_repository() -> None:
     assert "https://github.com/albertosca/corpus-map" in USER_AGENT
+
+
+def test_error_feed_is_not_cached(tmp_path: Path) -> None:
+    """An unparseable response (arXiv's own error feed here) must never be cached -- caching
+    it before parsing would make every later run replay the same broken body forever instead
+    of asking arXiv again.
+    """
+    error_body = make_atom(total=1, entries=[ERROR_FEED_ENTRY])
+    good_body = read_fixture("page.atom")
+    clock = FakeClock()
+    get = GetSpy([error_body, good_body], clock)
+
+    client1 = Client(get=get, sleep=clock.sleep, now=clock.now, gap=0.0, cache_dir=tmp_path)
+    with pytest.raises(ValueError, match=r"incorrect id format for 2609\.26796v1"):
+        client1.papers("cs.CL", want=1)
+
+    client2 = Client(get=get, sleep=clock.sleep, now=clock.now, gap=0.0, cache_dir=tmp_path)
+    result = client2.papers("cs.CL", want=1)
+
+    assert [paper.id for paper in result] == ["2601.00001"]
+    assert len(get.calls) == 2
