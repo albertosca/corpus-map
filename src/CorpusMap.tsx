@@ -20,7 +20,18 @@ import { wheelZoomFactor } from "./viewport/wheel";
 export interface CorpusMapProps {
   spec: MapSpec;
   renderCard: (node: MapNode) => ReactNode;
-  /** When both `width` and `height` are given they win; otherwise the root fills its parent (`100%`), measured with a `ResizeObserver`. */
+  /**
+   * When both `width` and `height` are given they win as the box's source —
+   * no `ResizeObserver`, no waiting for a measurement, the map fits to them
+   * immediately. Otherwise the root fills its parent (`100%`) and its size
+   * comes from a `ResizeObserver` measurement instead, painting nothing
+   * until the first one arrives. Either way, a later change to the box
+   * (props changing, or a new measurement) keeps the current scale and
+   * keeps the world point that was at the old box's centre at the new box's
+   * centre — it does not refit. A new `spec` still refits. A consumer who
+   * wants to refit after a box change calls the imperative handle's
+   * `fit()`.
+   */
   width?: number | undefined;
   height?: number | undefined;
   thresholds?: LodThresholds | undefined;
@@ -82,6 +93,14 @@ interface HoverState {
   y: number;
 }
 
+/**
+ * Renders `spec` as a canvas map with a card overlay and an accessible
+ * parallel tree. The box comes from `width`/`height` when both are given,
+ * else from measuring the parent (see the `width`/`height` doc). A box
+ * change after the first keeps the current view — scale and centre — no
+ * matter which source it came from; a new `spec` refits. To refit after a
+ * box change, call the imperative handle's `fit()`.
+ */
 export function CorpusMap(props: CorpusMapProps): ReactElement {
   const { spec: raw, renderCard, onSelect, onRegimeChange } = props;
   const thresholds = useMemo(() => resolveThresholds(props.thresholds), [props.thresholds]);
@@ -133,15 +152,20 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   // is indistinguishable from a spec swap: both need a fresh fit and a fresh
   // regime).
   //
-  // A box-only change (showcase Task 2) is different: explicit `width`/
-  // `height` props changing is "acceptable for fixed boxes" (spec 4 §1's
-  // parenthetical) and keeps today's refit-and-reset behaviour exactly,
-  // since every existing consumer of this path already relies on it. A
-  // *measured* box changing — a window being resized — refits was "wrong for
-  // a window being resized" (same parenthetical): it keeps `vp.scale` and
+  // A box-only change (showcase Task 2; unified across both box sources in
+  // fix round 1, per the controller's binding ruling) keeps `vp.scale` and
   // keeps the world point that was at the old box's centre at the new box's
   // centre (`recenterOnBoxChange`), and does not reset the regime — the
-  // view, hysteresis included, is kept.
+  // view, hysteresis included, is kept — whether the box came from explicit
+  // `width`/`height` props or from the measurement. "Behaviour as today"
+  // for explicit props (spec 4 §1's first bullet) means only that there is
+  // no observer and the props win the *source* of the box; it does not mean
+  // every later change to those props refits, which is exactly the "window
+  // being resized" case the same section's second bullet motivates — a
+  // consumer who measures their own container and threads the numbers
+  // through as props is that case, not a different one. A consumer who
+  // wants a refit after a box change calls the imperative handle's `fit()`
+  // (Task 3).
   const [fitBasis, setFitBasis] = useState<{ spec: MapSpec; width: number; height: number } | null>(
     ready ? { spec, width, height } : null,
   );
@@ -152,12 +176,7 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     } else if (fitBasis.width !== width || fitBasis.height !== height) {
       setFitBasis({ spec, width, height });
-      if (explicitBox) {
-        setVp(fitted);
-        setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
-      } else {
-        setVp(recenterOnBoxChange(vp, fitBasis.width, fitBasis.height, width, height));
-      }
+      setVp(recenterOnBoxChange(vp, fitBasis.width, fitBasis.height, width, height));
     }
   }
   const fitScaleRef = useRef(fitScale);

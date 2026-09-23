@@ -7,7 +7,18 @@ import { type Tuning } from "./shared/tuning";
 export interface CorpusMapProps {
     spec: MapSpec;
     renderCard: (node: MapNode) => ReactNode;
-    /** When both `width` and `height` are given they win; otherwise the root fills its parent (`100%`), measured with a `ResizeObserver`. */
+    /**
+     * When both `width` and `height` are given they win as the box's source —
+     * no `ResizeObserver`, no waiting for a measurement, the map fits to them
+     * immediately. Otherwise the root fills its parent (`100%`) and its size
+     * comes from a `ResizeObserver` measurement instead, painting nothing
+     * until the first one arrives. Either way, a later change to the box
+     * (props changing, or a new measurement) keeps the current scale and
+     * keeps the world point that was at the old box's centre at the new box's
+     * centre — it does not refit. A new `spec` still refits. A consumer who
+     * wants to refit after a box change calls the imperative handle's
+     * `fit()`.
+     */
     width?: number | undefined;
     height?: number | undefined;
     thresholds?: LodThresholds | undefined;
@@ -24,6 +35,14 @@ export interface CorpusMapProps {
     /** Fired once on mount with the initial regime, then on every change. */
     onRegimeChange?: ((regime: Regime) => void) | undefined;
 }
+/**
+ * Renders `spec` as a canvas map with a card overlay and an accessible
+ * parallel tree. The box comes from `width`/`height` when both are given,
+ * else from measuring the parent (see the `width`/`height` doc). A box
+ * change after the first keeps the current view — scale and centre — no
+ * matter which source it came from; a new `spec` refits. To refit after a
+ * box change, call the imperative handle's `fit()`.
+ */
 export declare function CorpusMap(props: CorpusMapProps): ReactElement;
 
 // a11y/AccessibleTree.d.ts

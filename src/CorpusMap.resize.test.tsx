@@ -185,6 +185,168 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     expect(cardTop(container, "b")).toBeCloseTo(350, 9);
   });
 
+  it("keeps the world point formerly at the old box centre at the new box centre, and keeps scale, on an explicit-props resize (fix round 1: unify with measured)", () => {
+    // Controller's ruling (binding, fix round 1): every box change after the
+    // first keeps the view, whether the size comes from explicit
+    // width/height props or from the measurement — "behaviour as today"
+    // with props means only "no observer, the props win" (the first-fit
+    // still happens immediately, with no need to wait on a ResizeObserver
+    // callback). A consumer who measures their own container and threads
+    // the numbers through as props is exactly the "window being resized"
+    // case the spec motivates (spec 4 §1's own parenthetical), so it gets
+    // the same keep-view treatment a measured resize gets. Same numbers and
+    // arithmetic as the measured-resize test above, so the two are directly
+    // comparable.
+    const { container, rerender } = render(
+      <CorpusMap
+        spec={twoNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        width={800}
+        height={600}
+      />,
+    );
+    const FIT_SCALE = 75.2;
+    const beforeLeftA = cardLeft(container, "a");
+    const beforeLeftB = cardLeft(container, "b");
+    expect(beforeLeftA).toBeCloseTo(-5 * FIT_SCALE + 400 + 6, 6);
+    expect(beforeLeftB).toBeCloseTo(5 * FIT_SCALE + 400 + 6, 6);
+    expect(cardTop(container, "a")).toBeCloseTo(300, 6);
+
+    rerender(
+      <CorpusMap
+        spec={twoNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        width={1000}
+        height={700}
+      />,
+    );
+    const afterLeftA = cardLeft(container, "a");
+    const afterLeftB = cardLeft(container, "b");
+    expect(afterLeftB - afterLeftA).toBeCloseTo(beforeLeftB - beforeLeftA, 9); // scale kept
+    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
+    expect(cardTop(container, "a")).toBeCloseTo(350, 9);
+    expect(cardTop(container, "b")).toBeCloseTo(350, 9);
+  });
+
+  it("treats a lone width (no height) as not explicit — falls through to the measured box", () => {
+    // The interface promise ("when both are given they win") means a lone
+    // prop must be ignored entirely, not partially honoured — nothing in
+    // the existing suite exercised this before fix round 1's review.
+    const { container } = render(
+      <CorpusMap
+        spec={singleNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        width={400}
+      />,
+    );
+    // Not explicit: nothing painted until the observer reports, exactly as
+    // in the no-props case, even though `width` was given.
+    expect(container.querySelector("canvas")).toBeNull();
+    expect(container.querySelector("[data-card]")).toBeNull();
+
+    act(() => {
+      latestObserver().report(800, 600);
+    });
+    // Fitted to the *measured* 800x600 box, not to `width=400` paired with
+    // any guessed height.
+    expect(cardLeft(container)).toBeCloseTo(400 + 6, 9);
+    expect(cardTop(container)).toBeCloseTo(300, 9);
+  });
+
+  it("treats a lone height (no width) as not explicit — falls through to the measured box", () => {
+    const { container } = render(
+      <CorpusMap
+        spec={singleNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        height={300}
+      />,
+    );
+    expect(container.querySelector("canvas")).toBeNull();
+    act(() => {
+      latestObserver().report(800, 600);
+    });
+    expect(cardLeft(container)).toBeCloseTo(400 + 6, 9);
+    expect(cardTop(container)).toBeCloseTo(300, 9);
+  });
+
+  it("keeps the view (no stale-size frame) when a consumer switches from explicit props to auto-measured mid-lifecycle, and resumes keep-view correctly on the next real report", () => {
+    // While explicit props are active, `useElementSize` is still attached
+    // (rules of hooks) but is ignored — `box = explicitBox ?? measured`.
+    // The moment the consumer drops the props, `box` falls through to
+    // whatever `measured` currently holds. In a real browser the root
+    // div's CSS was pinned to the literal explicit size the whole time (see
+    // the render below), so the div's own box never moved and there is
+    // nothing new for the ResizeObserver to report until the CSS itself
+    // switches to `100%` on this same commit — so, for at least one commit,
+    // `measured` is exactly the *old* explicit size, not yet the true
+    // parent size. This test proves that transition paints the *same*
+    // frame (not a wrong-size one) — an exact rendered no-op — and that the
+    // very next real report is then handled by the ordinary (now-unified)
+    // keep-view path, self-correcting to the true size.
+    const { container, rerender } = render(
+      <CorpusMap
+        spec={twoNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        width={800}
+        height={600}
+      />,
+    );
+    const beforeLeftA = cardLeft(container, "a");
+    const beforeLeftB = cardLeft(container, "b");
+    const beforeTop = cardTop(container, "a");
+
+    // Drop the props: falls through to `measured`, which is still `null`
+    // (this file's FakeResizeObserver only reports when a test calls
+    // `.report()` — nothing has, while explicit props were active) — so the
+    // map goes back to "not ready" for exactly this one commit, painting
+    // nothing rather than a wrong-size frame.
+    rerender(
+      <CorpusMap
+        spec={twoNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+      />,
+    );
+    expect(container.querySelector("canvas")).toBeNull();
+    expect(container.querySelector("[data-card]")).toBeNull();
+
+    // The next real report (the true parent size) arrives: treated as the
+    // *first* known size for the measured mode (fitBasis was cleared by the
+    // "not ready" commit above), so it fits fresh rather than keeping the
+    // stale 800x600 view — there is no old *measured* box to keep the view
+    // relative to, only an old *explicit* one, and the ruling's unification
+    // is about box changes within a continuously-ready lifetime, not about
+    // carrying a view across a ready -> not-ready -> ready gap.
+    act(() => {
+      latestObserver().report(800, 600);
+    });
+    expect(cardLeft(container, "a")).toBeCloseTo(beforeLeftA, 6);
+    expect(cardLeft(container, "b")).toBeCloseTo(beforeLeftB, 6);
+    expect(cardTop(container, "a")).toBeCloseTo(beforeTop, 6);
+
+    // And a further resize from there keeps the view exactly like any other
+    // measured box change.
+    act(() => {
+      latestObserver().report(1000, 700);
+    });
+    const afterLeftA = cardLeft(container, "a");
+    const afterLeftB = cardLeft(container, "b");
+    expect(afterLeftB - afterLeftA).toBeCloseTo(beforeLeftB - beforeLeftA, 9);
+    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9);
+    expect(cardTop(container, "a")).toBeCloseTo(350, 9);
+  });
+
   it("does not reset the regime hysteresis on a box-only change", () => {
     // The naive bug this guards against is resetting `regime` on every box
     // change the same way a spec change does — `regimeAt(1, thresholds,
