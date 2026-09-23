@@ -187,7 +187,17 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
     Any other category that comes back with fewer papers than its quota is a real
     shortfall -- a transient paging problem, not an empty category -- and raises
     `ValueError` naming every short category and the numbers, before anything is written.
+
+    `--n` and `--floor` are validated before anything else (no network request yet) --
+    `quotas` itself already refuses a `floor` that cannot fit every non-empty category
+    inside `n`, but a non-positive `n` or a negative `floor` would otherwise reach it and
+    produce a confusing downstream error instead of a message naming the bad flag.
     """
+    if n <= 0:
+        raise ValueError(f"--n must be a positive integer, got {n}")
+    if floor < 0:
+        raise ValueError(f"--floor must be zero or a positive integer, got {floor}")
+
     totals = {code: deps.client.total(code) for code in sorted(CATEGORIES)}
     quota = quotas(totals, n=n, floor=floor)
 

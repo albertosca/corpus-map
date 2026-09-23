@@ -13,21 +13,24 @@ def quotas(totals: dict[str, int], n: int, floor: int = 20) -> dict[str, int]:
 
     Rules: a category with `total == 0` gets `0`. Every other ("non-empty") category gets
     `max(floor, round(n * total / sum(totals)))`, capped at its own `total`. If that leaves
-    the sum above `n`, one item at a time is taken from the largest quota still above
-    `floor` (ties broken by the smaller code) until the sum is `n` — always possible, because
-    the check below guarantees `floor` per non-empty category already fits inside `n`. If
-    that leaves the sum below `n` because caps held some categories down, the remainder is
-    given one item at a time to the largest category not yet at its cap (ties the same way);
-    if every category is already at its cap and the sum is still short, there simply is not
-    enough material to reach `n`, and this raises `ValueError` naming the numbers.
+    the sum above `n`, the excess is spread proportionally across every quota still above
+    `floor` (by how far above `floor` each one currently is, not always taken entirely from
+    whichever is largest) until the sum is `n` — always possible, because the check below
+    guarantees floor (or a category's own total, if that is smaller) per non-empty category
+    already fits inside `n`. If that leaves the sum below `n` because caps held some
+    categories down, the remainder is given one item at a time to the largest category not
+    yet at its cap (ties broken by the smaller code); if every category is already at its
+    cap and the sum is still short, there simply is not enough material to reach `n`, and
+    this raises `ValueError` naming the numbers.
 
-    Raises `ValueError` up front, naming the numbers, if `floor` times the number of
-    non-empty categories already exceeds `n` — there is no way to give everyone the floor.
+    Raises `ValueError` up front, naming the numbers, if `floor` (or a category's own total,
+    for a category whose total is below `floor`) summed across non-empty categories already
+    exceeds `n` — there is no way to give everyone at least what they need.
     """
     non_empty = {code: total for code, total in totals.items() if total > 0}
     result: dict[str, int] = {code: 0 for code, total in totals.items() if total <= 0}
 
-    floor_total = floor * len(non_empty)
+    floor_total = sum(min(floor, total) for total in non_empty.values())
     if floor_total > n:
         raise ValueError(
             f"floor {floor} across {len(non_empty)} non-empty categories requires {floor_total}, which exceeds n={n}"
@@ -47,13 +50,28 @@ def quotas(totals: dict[str, int], n: int, floor: int = 20) -> dict[str, int]:
 
 
 def _shrink(quota: dict[str, int], excess: int, floor: int) -> None:
-    """Take `excess` items, one at a time, from the largest quota above `floor`."""
-    for _ in range(excess):
-        code = min(
-            (c for c, q in quota.items() if q > floor),
-            key=lambda c: (-quota[c], c),
-        )
-        quota[code] -= 1
+    """Take `excess` items in total, spread across every quota above `floor` in proportion
+    to how far above `floor` it currently is -- the largest-remainder method, so the result
+    sums exactly and no single category absorbs the whole excess just for being largest.
+    """
+    eligible = [code for code, q in quota.items() if q > floor]
+    headroom = {code: quota[code] - floor for code in eligible}
+    headroom_total = sum(headroom.values())
+
+    exact = {code: excess * headroom[code] / headroom_total for code in eligible}
+    cuts = {code: int(exact[code]) for code in eligible}
+    remainder = excess - sum(cuts.values())
+
+    # The `remainder` units still owed go to the categories with the largest fractional
+    # share first (ties broken by ascending code) -- the standard largest-remainder method.
+    # `remainder` equals the sum of `len(eligible)` fractional parts (each in [0, 1)), so it
+    # is always strictly less than `len(eligible)` -- this slice never runs past the list.
+    order = sorted(eligible, key=lambda c: (-(exact[c] - cuts[c]), c))
+    for code in order[:remainder]:
+        cuts[code] += 1
+
+    for code, cut in cuts.items():
+        quota[code] -= cut
 
 
 def _grow(quota: dict[str, int], totals: dict[str, int], remaining: int, n: int) -> None:

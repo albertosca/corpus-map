@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from arxiv_corpus.sample import quotas
+from arxiv_corpus.sample import _shrink, quotas
 
 
 def test_quotas_proportional_case_sums_to_n() -> None:
@@ -41,6 +41,29 @@ def test_quotas_grows_uncapped_categories_when_caps_leave_a_remainder() -> None:
 
     assert result == {"cs.A": 334, "cs.B": 333, "cs.C": 333}
     assert sum(result.values()) == 1000
+
+
+def test_quotas_a_category_below_floor_is_not_double_counted_against_the_upfront_check() -> None:
+    """A category whose own total is below `floor` only needs its total, not the full
+    `floor`, to fit -- the upfront check must not count the full flat `floor` for it."""
+    result = quotas({"a": 5}, n=5, floor=20)
+
+    assert result == {"a": 5}
+
+
+def test_shrink_spreads_excess_proportionally_not_all_from_the_largest() -> None:
+    """The excess is spread across every quota above `floor` in proportion to how far above
+    `floor` it is -- not always taken entirely from whichever quota happens to be largest."""
+    quota = {"cs.A": 100, "cs.B": 40, "cs.C": 25}
+
+    _shrink(quota, excess=20, floor=20)
+
+    assert sum(quota.values()) == 145
+    assert quota["cs.A"] < 100
+    assert quota["cs.B"] < 40, "cs.B must lose some share too, not just cs.A"
+    assert quota["cs.C"] < 25, "cs.C must lose some share too, not just cs.A"
+    for value in quota.values():
+        assert value >= 20
 
 
 def test_quotas_floor_overflow_raises_naming_the_numbers() -> None:

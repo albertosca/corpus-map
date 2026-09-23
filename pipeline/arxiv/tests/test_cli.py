@@ -335,6 +335,39 @@ def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -
     assert meta["fetched_at"] == "2026-01-01"
 
 
+# --- quota validation (M-3) ---
+
+
+def test_main_exits_2_for_a_non_positive_n(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+
+    exit_code = cli.main(["fetch", "--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "0", "--floor", "1"])
+
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "--n" in captured.err
+    assert "0" in captured.err
+    assert not (cache_dir / "stages" / "papers.json").exists()
+
+
+def test_main_exits_2_for_a_negative_floor(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+
+    exit_code = cli.main(["fetch", "--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "-1"])
+
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "--floor" in captured.err
+    assert "-1" in captured.err
+    assert not (cache_dir / "stages" / "papers.json").exists()
+
+
 # --- provenance (I-2) ---
 
 
