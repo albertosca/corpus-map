@@ -42,7 +42,7 @@ describe("paint", () => {
   it("draws territory boundary and name at the far regime, and no points", () => {
     const s = new RecordingSurface();
     paintSpec(spec, s, "far");
-    expect(s.polygons.length).toBeGreaterThanOrEqual(1);
+    expect(s.polygons).toHaveLength(1);
     expect(s.texts.map((t) => t.text)).toContain("North");
     expect(s.circles).toHaveLength(0);
   });
@@ -50,7 +50,7 @@ describe("paint", () => {
   it("draws boundaries and every point at the mid regime", () => {
     const s = new RecordingSurface();
     paintSpec(spec, s, "mid");
-    expect(s.polygons.length).toBeGreaterThanOrEqual(1);
+    expect(s.polygons).toHaveLength(1);
     expect(s.circles).toHaveLength(4);
   });
 
