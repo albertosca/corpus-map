@@ -4,16 +4,16 @@ import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
 export interface CorpusMapProps {
-  spec: MapSpec;
-  renderCard: (node: MapNode) => ReactNode;
-  width: number;
-  height: number;
-  thresholds?: LodThresholds | undefined;
-  cardCap?: number | undefined;
-  theme?: Theme | undefined;
-  onSelect?: ((node: MapNode) => void) | undefined;
-  /** Fired once on mount with the initial regime, then on every change. */
-  onRegimeChange?: ((regime: Regime) => void) | undefined;
+    spec: MapSpec;
+    renderCard: (node: MapNode) => ReactNode;
+    width: number;
+    height: number;
+    thresholds?: LodThresholds | undefined;
+    cardCap?: number | undefined;
+    theme?: Theme | undefined;
+    onSelect?: ((node: MapNode) => void) | undefined;
+    /** Fired once on mount with the initial regime, then on every change. */
+    onRegimeChange?: ((regime: Regime) => void) | undefined;
 }
 export declare function CorpusMap(props: CorpusMapProps): ReactElement;
 
@@ -23,14 +23,14 @@ import type { Regime } from "../lod/lod";
 import type { MapNode, MapSpec, Territory } from "../shared/spec";
 import type { Viewport } from "../viewport/viewport";
 export interface AccessibleTreeProps {
-  spec: MapSpec;
-  regime: Regime;
-  viewport: Viewport;
-  width: number;
-  height: number;
-  cap: number;
-  onFocusTerritory?: ((territory: Territory) => void) | undefined;
-  onSelect?: ((node: MapNode) => void) | undefined;
+    spec: MapSpec;
+    regime: Regime;
+    viewport: Viewport;
+    width: number;
+    height: number;
+    cap: number;
+    onFocusTerritory?: ((territory: Territory) => void) | undefined;
+    onSelect?: ((node: MapNode) => void) | undefined;
 }
 /**
  * The canvas is decorative; this is the content. It mirrors the current
@@ -40,16 +40,7 @@ export interface AccessibleTreeProps {
  * for its cards. A corpus of ten thousand items never produces a tree of
  * ten thousand elements.
  */
-export declare function AccessibleTree({
-  spec,
-  regime,
-  viewport,
-  width,
-  height,
-  cap,
-  onFocusTerritory,
-  onSelect,
-}: AccessibleTreeProps): ReactElement;
+export declare function AccessibleTree({ spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect, }: AccessibleTreeProps): ReactElement;
 
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";
@@ -57,23 +48,15 @@ import type { Regime } from "../lod/lod";
 import type { MapNode, MapSpec } from "../shared/spec";
 import { type Viewport } from "../viewport/viewport";
 export interface CardOverlayProps {
-  spec: MapSpec;
-  viewport: Viewport;
-  regime: Regime;
-  cap: number;
-  width: number;
-  height: number;
-  renderCard: (node: MapNode) => ReactNode;
+    spec: MapSpec;
+    viewport: Viewport;
+    regime: Regime;
+    cap: number;
+    width: number;
+    height: number;
+    renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({
-  spec,
-  viewport,
-  regime,
-  cap,
-  width,
-  height,
-  renderCard,
-}: CardOverlayProps): ReactElement | null;
+export declare function CardOverlay({ spec, viewport, regime, cap, width, height, renderCard, }: CardOverlayProps): ReactElement | null;
 
 // index.d.ts
 export type { CorpusMapProps } from "./CorpusMap";
@@ -94,8 +77,8 @@ export declare function paintLabels(surface: Surface, spec: MapSpec, vp: Viewpor
 // lod/lod.d.ts
 export type Regime = "far" | "mid" | "near";
 export interface LodThresholds {
-  midAt: number;
-  nearAt: number;
+    midAt: number;
+    nearAt: number;
 }
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
 export declare function regimeFor(scale: number, t: LodThresholds): Regime;
@@ -111,13 +94,7 @@ import { type Viewport } from "../viewport/viewport";
  * trims what the user could actually see, not an arbitrary prefix of the
  * spec. Above the cap, the canvas alone carries the field.
  */
-export declare function visibleNodes(
-  spec: MapSpec,
-  viewport: Viewport,
-  width: number,
-  height: number,
-  cap: number,
-): MapNode[];
+export declare function visibleNodes(spec: MapSpec, viewport: Viewport, width: number, height: number, cap: number): MapNode[];
 
 // points/paintPoints.d.ts
 import type { MapSpec } from "../shared/spec";
@@ -141,28 +118,29 @@ export declare function paint(surface: Surface, spec: MapSpec, vp: Viewport, reg
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
 export interface MapNode {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  territory: string | null;
-  state?: NodeState;
-  badges?: string[];
-  meta?: unknown;
+    id: string;
+    label: string;
+    x: number;
+    y: number;
+    territory: string | null;
+    state?: NodeState;
+    badges?: string[];
+    meta?: unknown;
 }
 export interface Territory {
-  id: string;
-  name: string;
-  members: string[];
-  centroid: [number, number];
-  boundary?: Array<[number, number]>;
+    id: string;
+    name: string;
+    members: string[];
+    centroid: [number, number];
+    boundary?: Array<[number, number]>;
 }
 export interface MapSpec {
-  version: "1";
-  territories: Territory[];
-  nodes: MapNode[];
+    version: "1";
+    territories: Territory[];
+    nodes: MapNode[];
 }
-export declare class SpecError extends Error {}
+export declare class SpecError extends Error {
+}
 /**
  * The validator is the contract: everything the renderer relies on is
  * checked here, and nothing else in the library defends against a malformed
@@ -175,49 +153,49 @@ export declare function validateSpec(input: unknown): MapSpec;
 
 // shared/surface.d.ts
 export interface Surface {
-  clear(): void;
-  polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-  circle(id: string, x: number, y: number, r: number, fill: string): void;
-  text(text: string, x: number, y: number, color: string, font: string): void;
+    clear(): void;
+    polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
+    circle(id: string, x: number, y: number, r: number, fill: string): void;
+    text(text: string, x: number, y: number, color: string, font: string): void;
 }
 export declare class RecordingSurface implements Surface {
-  cleared: number;
-  polygons: Array<{
-    points: Array<[number, number]>;
-    fill: string;
-    stroke: string;
-  }>;
-  circles: Array<{
-    id: string;
-    x: number;
-    y: number;
-    r: number;
-    fill: string;
-  }>;
-  texts: Array<{
-    text: string;
-    x: number;
-    y: number;
-    color: string;
-    font: string;
-  }>;
-  calls: Array<"clear" | "polygon" | "circle" | "text">;
-  clear(): void;
-  polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-  circle(id: string, x: number, y: number, r: number, fill: string): void;
-  text(text: string, x: number, y: number, color: string, font: string): void;
+    cleared: number;
+    polygons: Array<{
+        points: Array<[number, number]>;
+        fill: string;
+        stroke: string;
+    }>;
+    circles: Array<{
+        id: string;
+        x: number;
+        y: number;
+        r: number;
+        fill: string;
+    }>;
+    texts: Array<{
+        text: string;
+        x: number;
+        y: number;
+        color: string;
+        font: string;
+    }>;
+    calls: Array<"clear" | "polygon" | "circle" | "text">;
+    clear(): void;
+    polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
+    circle(id: string, x: number, y: number, r: number, fill: string): void;
+    text(text: string, x: number, y: number, color: string, font: string): void;
 }
 export declare function canvasSurface(ctx: CanvasRenderingContext2D): Surface;
 
 // shared/theme.d.ts
 export interface Theme {
-  territoryFill: string;
-  territoryStroke: string;
-  territoryLabel: string;
-  territoryFont: string;
-  visited: string;
-  unvisited: string;
-  pointRadius: number;
+    territoryFill: string;
+    territoryStroke: string;
+    territoryLabel: string;
+    territoryFont: string;
+    visited: string;
+    unvisited: string;
+    pointRadius: number;
 }
 export declare const DEFAULT_THEME: Theme;
 
@@ -236,31 +214,25 @@ import type { MapNode, MapSpec } from "../shared/spec";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintTerritories(
-  surface: Surface,
-  spec: MapSpec,
-  vp: Viewport,
-  byId: ReadonlyMap<string, MapNode>,
-  theme: Theme,
-): void;
+export declare function paintTerritories(surface: Surface, spec: MapSpec, vp: Viewport, byId: ReadonlyMap<string, MapNode>, theme: Theme): void;
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";
 import type { Viewport } from "./viewport";
 export interface Bounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
 }
 export declare function worldBounds(spec: MapSpec): Bounds;
 export declare function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport;
 
 // viewport/viewport.d.ts
 export interface Viewport {
-  scale: number;
-  tx: number;
-  ty: number;
+    scale: number;
+    tx: number;
+    ty: number;
 }
 export declare function toScreen(v: Viewport, wx: number, wy: number): [number, number];
 export declare function toWorld(v: Viewport, sx: number, sy: number): [number, number];
