@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -110,6 +111,17 @@ def _coordinates_path(cache_dir: Path) -> Path:
     return _stage_dir(cache_dir) / "coordinates.npy"
 
 
+def _require_cached(path: Path, prior_stage: str, what: str) -> None:
+    """Raise a clear `ValueError` if `path` (this stage's expected input) is not there yet.
+
+    The stage split is the recovery mechanism a failed run relies on -- Task 6 runs stages
+    by hand -- so a missing intermediate must name both the file and the command that
+    produces it, not surface as a raw `FileNotFoundError` deep in `json.loads`/`np.load`.
+    """
+    if not path.exists():
+        raise ValueError(f"no cached {what} at {path} — run 'arxiv-corpus {prior_stage}' first")
+
+
 def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
     """Count and sample every `cs.*` category, then cache the resulting papers."""
     totals = {code: deps.client.total(code) for code in sorted(CATEGORIES)}
@@ -128,7 +140,9 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
 
 def run_embed(deps: Dependencies, cache_dir: Path) -> None:
     """Embed the cached papers' abstracts and cache the resulting vectors."""
-    payload = json.loads(_papers_path(cache_dir).read_text(encoding="utf-8"))
+    papers_path = _papers_path(cache_dir)
+    _require_cached(papers_path, prior_stage="fetch", what="papers")
+    payload = json.loads(papers_path.read_text(encoding="utf-8"))
     abstracts = [paper["abstract"] for paper in payload["papers"]]
     vectors = deps.embedder().embed(abstracts)
     np.save(_embeddings_path(cache_dir), vectors)
@@ -136,16 +150,23 @@ def run_embed(deps: Dependencies, cache_dir: Path) -> None:
 
 def run_project(deps: Dependencies, cache_dir: Path) -> None:
     """Project the cached embeddings to 2D, rescale them, and cache the coordinates."""
-    vectors = np.load(_embeddings_path(cache_dir))
+    embeddings_path = _embeddings_path(cache_dir)
+    _require_cached(embeddings_path, prior_stage="embed", what="embeddings")
+    vectors = np.load(embeddings_path)
     xy = rescale(deps.projector().project(vectors))
     np.save(_coordinates_path(cache_dir), xy)
 
 
 def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
     """Build the checked `MapSpec` from the cached papers and coordinates, and write it."""
-    payload = json.loads(_papers_path(cache_dir).read_text(encoding="utf-8"))
+    papers_path = _papers_path(cache_dir)
+    _require_cached(papers_path, prior_stage="fetch", what="papers")
+    coordinates_path = _coordinates_path(cache_dir)
+    _require_cached(coordinates_path, prior_stage="project", what="projected coordinates")
+
+    payload = json.loads(papers_path.read_text(encoding="utf-8"))
     papers = [Paper(**fields) for fields in payload["papers"]]
-    xy = np.load(_coordinates_path(cache_dir))
+    xy = np.load(coordinates_path)
 
     spec = build_spec(papers, xy)
     per_category = dict(sorted(Counter(paper.category for paper in papers).items()))
@@ -181,14 +202,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     out_dir = _resolve_out(args.out)
     deps = make_dependencies(cache_dir)
 
-    if args.stage in {"fetch", "all"}:
-        run_fetch(deps, cache_dir, args.n, args.floor)
-    if args.stage in {"embed", "all"}:
-        run_embed(deps, cache_dir)
-    if args.stage in {"project", "all"}:
-        run_project(deps, cache_dir)
-    if args.stage in {"export", "all"}:
-        run_export(deps, cache_dir, out_dir)
+    try:
+        if args.stage in {"fetch", "all"}:
+            run_fetch(deps, cache_dir, args.n, args.floor)
+        if args.stage in {"embed", "all"}:
+            run_embed(deps, cache_dir)
+        if args.stage in {"project", "all"}:
+            run_project(deps, cache_dir)
+        if args.stage in {"export", "all"}:
+            run_export(deps, cache_dir, out_dir)
+    except ValueError as err:
+        print(str(err), file=sys.stderr)
+        return 2
 
     return 0
 

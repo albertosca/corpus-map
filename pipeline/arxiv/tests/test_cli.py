@@ -184,6 +184,62 @@ def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_n
     export.check_spec(spec)
 
 
+# --- missing predecessor stage ---
+
+
+def test_run_embed_without_cached_papers_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"run 'arxiv-corpus fetch' first"):
+        cli.run_embed(deps, cache_dir)
+
+
+def test_run_project_without_cached_embeddings_names_embed_as_the_predecessor(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"run 'arxiv-corpus embed' first"):
+        cli.run_project(deps, cache_dir)
+
+
+def test_run_export_without_cached_papers_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+    deps = make_fake_dependencies(cache_dir)
+
+    with pytest.raises(ValueError, match=r"run 'arxiv-corpus fetch' first"):
+        cli.run_export(deps, cache_dir, out_dir)
+
+
+def test_run_export_without_cached_projection_names_project_as_the_predecessor(
+    fake_dependencies: None, tmp_path: Path
+) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "80", "--floor", "2"]
+    cli.main(["fetch", *common])  # papers cached; embeddings/coordinates deliberately not
+
+    deps = make_fake_dependencies(cache_dir)
+    with pytest.raises(ValueError, match=r"run 'arxiv-corpus project' first"):
+        cli.run_export(deps, cache_dir, out_dir)
+
+
+def test_main_prints_the_missing_predecessor_message_to_stderr_and_returns_nonzero(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+
+    exit_code = cli.main(["embed", "--cache-dir", str(cache_dir), "--out", str(out_dir)])
+
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "no cached papers" in captured.err
+    assert "run 'arxiv-corpus fetch' first" in captured.err
+    assert captured.out == ""
+
+
 # --- pure helpers ---
 
 

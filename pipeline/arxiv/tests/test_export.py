@@ -213,6 +213,26 @@ def test_check_spec_rejects_a_non_finite_coordinate() -> None:
         check_spec(spec)
 
 
+def test_check_spec_rejects_a_node_whose_territory_does_not_list_it_as_a_member() -> None:
+    """Mirrors the library's `validateSpec`: membership must hold in both directions."""
+    spec = _valid_spec()
+    node_id = cast(str, _nodes(spec)[0]["id"])
+    node_territory = cast(str, _nodes(spec)[0]["territory"])
+
+    patched_territories = []
+    for territory in _territories(spec):
+        if territory["id"] == node_territory:
+            copy = dict(territory)
+            copy["members"] = [m for m in cast("list[str]", territory["members"]) if m != node_id]
+            patched_territories.append(copy)
+        else:
+            patched_territories.append(territory)
+    spec["territories"] = patched_territories
+
+    with pytest.raises(ValueError, match="does not list"):
+        check_spec(spec)
+
+
 # --- write_outputs ---
 
 

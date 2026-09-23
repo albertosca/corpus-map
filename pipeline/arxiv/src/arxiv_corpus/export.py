@@ -83,13 +83,20 @@ def build_spec(papers: Sequence[Paper], xy: npt.NDArray[np.float64]) -> dict[str
 def check_spec(spec: dict[str, object]) -> None:
     """Sanity-check `spec` before it is written, raising `ValueError` on the first problem.
 
-    Checked: no duplicate node id, every territory member resolves to a known node, every
-    node's territory names a known territory, and every node coordinate is finite.
+    Checked: no duplicate node id, every node's territory names a known territory, that
+    territory in turn lists the node among its own members (and vice versa -- every
+    territory member resolves to a node that claims it), and every node coordinate is
+    finite. The two membership directions mirror the library's own `validateSpec`, which
+    requires both: the painter walks `members`, the tree walks `territory`, and they must
+    agree on which nodes a territory holds.
     """
     territories = cast("list[dict[str, object]]", spec["territories"])
     nodes = cast("list[dict[str, object]]", spec["nodes"])
 
-    territory_ids = {cast(str, territory["id"]) for territory in territories}
+    members_by_territory = {
+        cast(str, territory["id"]): cast("list[str]", territory["members"]) for territory in territories
+    }
+    territory_ids = set(members_by_territory)
 
     node_ids: set[str] = set()
     for node in nodes:
@@ -98,17 +105,19 @@ def check_spec(spec: dict[str, object]) -> None:
             raise ValueError(f"duplicate node id: {node_id}")
         node_ids.add(node_id)
 
-        territory = node["territory"]
+        territory = cast(str, node["territory"])
         if territory not in territory_ids:
             raise ValueError(f"node {node_id}: unknown territory {territory!r}")
+        if node_id not in members_by_territory[territory]:
+            raise ValueError(f"node {node_id}: territory {territory!r} does not list it among its members")
 
         if not _is_finite(node["x"]) or not _is_finite(node["y"]):
             raise ValueError(f"node {node_id}: non-finite coordinate ({node['x']!r}, {node['y']!r})")
 
-    for territory in territories:
-        for member in cast("list[str]", territory["members"]):
+    for territory_id, members in members_by_territory.items():
+        for member in members:
             if member not in node_ids:
-                raise ValueError(f"territory {territory['id']}: member {member!r} does not resolve")
+                raise ValueError(f"territory {territory_id}: member {member!r} does not resolve")
 
 
 def _is_finite(value: object) -> bool:
