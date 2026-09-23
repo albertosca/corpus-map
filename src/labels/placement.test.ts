@@ -37,7 +37,6 @@ const labels = placeLabels(
   FONTS,
   CUT,
   estimateText,
-  FIT,
 );
 
 function overlapping(shown: PlacedLabel[], scale: number): number {
@@ -59,18 +58,20 @@ const ratios = Array.from({ length: 201 }, (_, k) => 0.125 * 2 ** (k / 20));
 
 describe("placeLabels", () => {
   it("metric 6: no two visible names overlap at any sampled ratio", () => {
-    for (const ratio of ratios)
+    for (const ratio of ratios) {
+      const scale = ratio * FIT;
       expect(
         overlapping(
-          labels.filter((l) => ratio >= l.activeFrom),
-          ratio * FIT,
+          labels.filter((l) => scale >= l.activeFromScale),
+          scale,
         ),
       ).toBe(0);
+    }
   });
 
-  // Component level, through `paint`: a planted `if (... || ratio >
-  // l.activeFrom * 1.5 + 8) continue;` in `paintLabels` left every test in
-  // the old, pure-`placeLabels`-only version of this test green (it never
+  // Component level, through `paint`: a planted `if (... || vp.scale >
+  // l.activeFromScale * 1.5 + 8) continue;` in `paintLabels` left every test
+  // in the old, pure-`placeLabels`-only version of this test green (it never
   // called `paint`, so it could never see what `paintLabels` actually
   // draws). This version goes through `paint` into a `RecordingSurface` so
   // the same defect fails it.
@@ -81,21 +82,21 @@ describe("placeLabels", () => {
     const b = worldBounds(spec);
     const cx = (b.minX + b.maxX) / 2;
     const cy = (b.minY + b.maxY) / 2;
-    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText, fit.scale);
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     const vpAt = (ratio: number, panX = 0, panY = 0): Viewport => {
       const scale = fit.scale * ratio;
       return { scale, tx: width / 2 - cx * scale + panX, ty: height / 2 - cy * scale + panY };
     };
     const drawnNames = (ratio: number, panX = 0, panY = 0): Set<string> => {
       const s = new RecordingSurface();
-      paint(s, scene, spec, vpAt(ratio, panX, panY), { regime: "far", ratio, pointAlpha: 0 }, DEFAULT_THEME);
+      paint(s, scene, spec, vpAt(ratio, panX, panY), { regime: "far", pointAlpha: 0 }, DEFAULT_THEME);
       return new Set(s.texts.map((t) => t.text));
     };
     const onScreenNames = (ratio: number, panX: number, panY: number): Set<string> => {
       const vp = vpAt(ratio, panX, panY);
       const out = new Set<string>();
       for (const l of scene.labels) {
-        if (ratio < l.activeFrom) continue;
+        if (vp.scale < l.activeFromScale) continue;
         const [x, y] = toScreen(vp, l.anchor[0], l.anchor[1]);
         if (x >= 0 && x <= width && y >= 0 && y <= height) out.add(l.name);
       }
@@ -134,10 +135,10 @@ describe("placeLabels", () => {
 
   // Adds order-independence, which the paint-based test above does not
   // cover (it builds one `Scene` from the territories in their given
-  // order): `placeLabels` must assign the same `activeFrom` to every id
+  // order): `placeLabels` must assign the same `activeFromScale` to every id
   // whatever order its inputs arrive in, since priority is decided by
   // member count and id, not by array position.
-  it("metric 7 (order independence): placeLabels gives every id the same activeFrom whatever order the inputs arrive in", () => {
+  it("metric 7 (order independence): placeLabels gives every id the same activeFromScale whatever order the inputs arrive in", () => {
     const again = placeLabels(
       [...spec.territories]
         .reverse()
@@ -145,9 +146,8 @@ describe("placeLabels", () => {
       FONTS,
       CUT,
       estimateText,
-      FIT,
     );
-    const key = (ls: PlacedLabel[]) => ls.map((l) => `${l.id}:${l.activeFrom}`).sort();
+    const key = (ls: PlacedLabel[]) => ls.map((l) => `${l.id}:${l.activeFromScale}`).sort();
     expect(key(again)).toEqual(key(labels));
   });
 
@@ -168,10 +168,9 @@ describe("placeLabels", () => {
       FONTS,
       CUT,
       estimateText,
-      1,
     );
-    expect(stacked.find((l) => l.id === "a")?.activeFrom).toBe(0);
-    expect(stacked.filter((l) => l.activeFrom === Number.POSITIVE_INFINITY)).toHaveLength(2);
+    expect(stacked.find((l) => l.id === "a")?.activeFromScale).toBe(0);
+    expect(stacked.filter((l) => l.activeFromScale === Number.POSITIVE_INFINITY)).toHaveLength(2);
   });
 
   it("assigns three size classes by member-count percentile", () => {
@@ -189,7 +188,6 @@ describe("placeLabels", () => {
       FONTS,
       CUT,
       estimateText,
-      FIT,
     );
     const ids = tied.map((l) => l.id);
     expect(ids).toEqual(["a", "m", "z"]);

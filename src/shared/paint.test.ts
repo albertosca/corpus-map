@@ -30,11 +30,11 @@ function first<T>(items: readonly T[]): T {
 }
 
 function frameFor(regime: Regime, extra?: Partial<Frame>): Frame {
-  return { regime, ratio: 1, pointAlpha: 1, ...extra };
+  return { regime, pointAlpha: 1, ...extra };
 }
 
 function paintSpec(s: MapSpec, surface: RecordingSurface, regime: Regime, extra?: Partial<Frame>): void {
-  const scene = buildScene(s, DEFAULT_TUNING, DEFAULT_THEME, estimateText, 1);
+  const scene = buildScene(s, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   paint(surface, scene, s, vp, frameFor(regime, extra), DEFAULT_THEME);
 }
 
@@ -144,7 +144,7 @@ describe("paint", () => {
     expect(s.alphas).toHaveLength(0);
   });
 
-  it("does not draw a name whose activeFrom exceeds the current ratio", () => {
+  it("does not draw a name whose activeFromScale exceeds the current viewport scale", () => {
     const two: MapSpec = {
       version: "1",
       territories: [
@@ -161,17 +161,24 @@ describe("paint", () => {
         { id: "g", label: "G", x: 0.25, y: 0, territory: "small" },
       ],
     };
-    const scene = buildScene(two, DEFAULT_TUNING, DEFAULT_THEME, estimateText, 1);
+    const scene = buildScene(two, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     const small = scene.labels.find((l) => l.id === "small");
     if (!small) throw new Error("expected a placed label for 'small'");
-    expect(small.activeFrom).toBeGreaterThan(0);
+    expect(small.activeFromScale).toBeGreaterThan(0);
 
     const below = new RecordingSurface();
-    paint(below, scene, two, vp, { regime: "mid", ratio: small.activeFrom / 2, pointAlpha: 1 }, DEFAULT_THEME);
+    paint(
+      below,
+      scene,
+      two,
+      { ...vp, scale: small.activeFromScale / 2 },
+      { regime: "mid", pointAlpha: 1 },
+      DEFAULT_THEME,
+    );
     expect(below.texts.map((t) => t.text)).not.toContain("Small Territory");
 
     const above = new RecordingSurface();
-    paint(above, scene, two, vp, { regime: "mid", ratio: small.activeFrom, pointAlpha: 1 }, DEFAULT_THEME);
+    paint(above, scene, two, { ...vp, scale: small.activeFromScale }, { regime: "mid", pointAlpha: 1 }, DEFAULT_THEME);
     expect(above.texts.map((t) => t.text)).toContain("Small Territory");
   });
 });
@@ -182,8 +189,9 @@ describe("paint order", () => {
       version: "1",
       territories: [
         { id: "t1", name: "North", members: ["a", "b", "c"], centroid: [1, 1] },
-        // Far enough from t1 (dy = 100) that its name's activeFrom stays
-        // below ratio 1, so both names are visible for this order check.
+        // Far enough from t1 (dy = 100) that its name's activeFromScale
+        // stays well below the module `vp`'s scale of 10, so both names
+        // are visible for this order check.
         { id: "t2", name: "South", members: ["d", "e", "f"], centroid: [1, 101] },
       ],
       nodes: [

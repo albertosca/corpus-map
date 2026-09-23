@@ -176,17 +176,20 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
-  // Computed once per spec/tuning/theme/measure/fit: concave territory
-  // shapes and placed names. Keyed on the primitive values `buildScene`
-  // actually reads — not on the `tuning`/`theme` objects themselves, which
-  // `resolveTuning` and `props.theme ?? DEFAULT_THEME` both mint fresh on
-  // every render for an inline literal prop (spec 4's tuning panel does
-  // exactly that), which would rebuild the scene (70-135ms on 10k items)
-  // on every render. The literals below and the dependency list must both
-  // name every field `buildScene` reads — nothing more, nothing less —
-  // which is also why `buildScene` only asks for `Pick<Tuning, ...>` and
-  // `Pick<Theme, ...>`: passing the whole objects here would put the whole
-  // (unstable) objects back in the dependency list.
+  // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
+  // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
+  // the box a corpus is fitted into no longer belongs in this memo's key,
+  // and a resize (which only changes `fitScale`) costs no scene rebuild.
+  // Keyed on the primitive values `buildScene` actually reads — not on the
+  // `tuning`/`theme` objects themselves, which `resolveTuning` and
+  // `props.theme ?? DEFAULT_THEME` both mint fresh on every render for an
+  // inline literal prop (spec 4's tuning panel does exactly that), which
+  // would rebuild the scene (70-135ms on 10k items) on every render. The
+  // literals below and the dependency list must both name every field
+  // `buildScene` reads — nothing more, nothing less — which is also why
+  // `buildScene` only asks for `Pick<Tuning, ...>` and `Pick<Theme, ...>`:
+  // passing the whole objects here would put the whole (unstable) objects
+  // back in the dependency list.
   const measure = useMeasure();
   const scene = useMemo(
     () =>
@@ -204,11 +207,9 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
           },
         },
         measure,
-        fitScale,
       ),
     [
       spec,
-      fitScale,
       measure,
       tuning.hullPadding,
       tuning.labelClasses.large,
@@ -232,8 +233,8 @@ export function CorpusMap(props: CorpusMapProps): ReactElement {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(canvasSurface(ctx), scene, spec, vp, { regime: next, ratio, pointAlpha }, theme);
-  }, [spec, scene, vp, next, ratio, pointAlpha, theme, width, height]);
+    paint(canvasSurface(ctx), scene, spec, vp, { regime: next, pointAlpha }, theme);
+  }, [spec, scene, vp, next, pointAlpha, theme, width, height]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns

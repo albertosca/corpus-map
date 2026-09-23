@@ -16,8 +16,13 @@ export interface PlacedLabel {
   labelClass: LabelClass;
   width: number;
   height: number;
-  /** The label is drawn when scale / fitScale >= activeFrom. */
-  activeFrom: number;
+  /**
+   * Absolute scale units (`s_ij`, the same units as `Viewport.scale`, never
+   * divided by `fitScale`): the label is drawn when `vp.scale >=
+   * activeFromScale`. Keeping it absolute is what lets a resize — which only
+   * changes `fitScale` — skip a scene rebuild.
+   */
+  activeFromScale: number;
 }
 
 export type Measure = (text: string, font: string) => { width: number; height: number };
@@ -48,17 +53,16 @@ export function separationScale(dx: number, dy: number, w: number, h: number): n
 
 /**
  * Active ranges after Been, Daiches and Yap (2006): labels in priority order
- * (more members first, then id); each starts at the smallest ratio at which it
- * no longer overlaps any higher-priority label already visible there. A label,
- * once shown, stays shown on zoom in, never changes on pan, and the set shown
- * depends only on the current ratio.
+ * (more members first, then id); each starts at the smallest absolute scale
+ * at which it no longer overlaps any higher-priority label already visible
+ * there. A label, once shown, stays shown on zoom in, never changes on pan,
+ * and the set shown depends only on the current scale.
  */
 export function placeLabels(
   inputs: readonly LabelInput[],
   fonts: Record<LabelClass, string>,
   cut: { large: number; medium: number },
   measure: Measure,
-  fitScale: number,
 ): PlacedLabel[] {
   const classes = labelClasses(inputs, cut);
   const ordered = [...inputs].sort((a, b) => b.members - a.members || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -66,18 +70,17 @@ export function placeLabels(
   for (const l of ordered) {
     const labelClass = classes.get(l.id) ?? "small";
     const { width, height } = measure(l.name, fonts[labelClass]);
-    let activeFrom = 0;
+    let activeFromScale = 0;
     for (const p of placed) {
-      const s =
-        separationScale(
-          l.anchor[0] - p.anchor[0],
-          l.anchor[1] - p.anchor[1],
-          (width + p.width) / 2,
-          (height + p.height) / 2,
-        ) / fitScale;
-      if (p.activeFrom < s && s > activeFrom) activeFrom = s;
+      const s = separationScale(
+        l.anchor[0] - p.anchor[0],
+        l.anchor[1] - p.anchor[1],
+        (width + p.width) / 2,
+        (height + p.height) / 2,
+      );
+      if (p.activeFromScale < s && s > activeFromScale) activeFromScale = s;
     }
-    placed.push({ id: l.id, name: l.name, anchor: l.anchor, labelClass, width, height, activeFrom });
+    placed.push({ id: l.id, name: l.name, anchor: l.anchor, labelClass, width, height, activeFromScale });
   }
   return placed;
 }

@@ -136,8 +136,8 @@ import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-/** Draws every placed name whose active range has started at `ratio`. */
-export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, ratio: number, theme: Theme): void;
+/** Draws every placed name whose `activeFromScale` the viewport's current scale has reached. */
+export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme): void;
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -155,8 +155,13 @@ export interface PlacedLabel {
     labelClass: LabelClass;
     width: number;
     height: number;
-    /** The label is drawn when scale / fitScale >= activeFrom. */
-    activeFrom: number;
+    /**
+     * Absolute scale units (`s_ij`, the same units as `Viewport.scale`, never
+     * divided by `fitScale`): the label is drawn when `vp.scale >=
+     * activeFromScale`. Keeping it absolute is what lets a resize — which only
+     * changes `fitScale` — skip a scene rebuild.
+     */
+    activeFromScale: number;
 }
 export type Measure = (text: string, font: string) => {
     width: number;
@@ -172,15 +177,15 @@ export declare function labelClasses(inputs: readonly LabelInput[], cut: {
 export declare function separationScale(dx: number, dy: number, w: number, h: number): number;
 /**
  * Active ranges after Been, Daiches and Yap (2006): labels in priority order
- * (more members first, then id); each starts at the smallest ratio at which it
- * no longer overlaps any higher-priority label already visible there. A label,
- * once shown, stays shown on zoom in, never changes on pan, and the set shown
- * depends only on the current ratio.
+ * (more members first, then id); each starts at the smallest absolute scale
+ * at which it no longer overlaps any higher-priority label already visible
+ * there. A label, once shown, stays shown on zoom in, never changes on pan,
+ * and the set shown depends only on the current scale.
  */
 export declare function placeLabels(inputs: readonly LabelInput[], fonts: Record<LabelClass, string>, cut: {
     large: number;
     medium: number;
-}, measure: Measure, fitScale: number): PlacedLabel[];
+}, measure: Measure): PlacedLabel[];
 /** Deterministic text measure for environments without a canvas (tests). */
 export declare function estimateText(text: string, font: string): {
     width: number;
@@ -274,10 +279,15 @@ import type { Scene } from "./scene";
 import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
 import type { Theme } from "./theme";
-/** Per-frame values a precomputed `Scene` does not carry: the regime, the fit ratio, and the point layer's fade. */
+/**
+ * Per-frame values a precomputed `Scene` does not carry: the regime and the
+ * point layer's fade. No ratio here — a placed name now carries its own
+ * absolute `activeFromScale` (see `labels/placement.ts`), so `paintLabels`
+ * reads `vp.scale` directly instead of a fit-relative ratio threaded through
+ * the frame.
+ */
 export interface Frame {
     regime: Regime;
-    ratio: number;
     pointAlpha: number;
 }
 /**
@@ -305,7 +315,7 @@ export interface Scene {
  * every render for an inline literal prop) without depending on unstable
  * whole-object identity for fields it never uses.
  */
-export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts">, measure: Measure, fitScale: number): Scene;
+export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts">, measure: Measure): Scene;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";

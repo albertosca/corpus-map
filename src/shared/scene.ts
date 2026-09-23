@@ -30,7 +30,6 @@ export function buildScene(
   tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
   theme: Pick<Theme, "territoryFonts">,
   measure: Measure,
-  fitScale: number,
 ): Scene {
   const byId = new Map(spec.nodes.map((n) => [n.id, n]));
   // Territories too small to measure their own spacing get disks 1% of the corpus wide.
@@ -57,5 +56,5 @@ export function buildScene(
       ring && ring.length >= 3 ? poleOfInaccessibility(ring, extent(ring) * 0.01) : [t.centroid[0], t.centroid[1]];
     return { id: t.id, name: t.name, anchor, members: t.members.length };
   });
-  return { byId, shapes, labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure, fitScale) };
+  return { byId, shapes, labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure) };
 }

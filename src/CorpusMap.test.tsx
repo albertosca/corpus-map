@@ -451,6 +451,26 @@ describe("CorpusMap", () => {
       spy.mockRestore();
     }
   });
+
+  it("does not rebuild the scene on a resize (activeFromScale is absolute, so fitScale is out of the memo key)", () => {
+    const spy = vi.spyOn(sceneModule, "buildScene");
+    try {
+      // A tall box (height 2000 fixed) makes width the binding dimension of
+      // `fitSpec` throughout 400-700, so `fitScale` genuinely changes on
+      // every resize below — a fixture where it happened to stay constant
+      // (e.g. a square box) would pass this test whether or not `fitScale`
+      // is still part of the scene's memo key, proving nothing.
+      const tallHeight = 2000;
+      const { rerender } = render(<CorpusMap spec={spec} renderCard={() => null} width={400} height={tallHeight} />);
+      expect(spy).toHaveBeenCalledTimes(1);
+      for (const w of [500, 600, 700]) {
+        rerender(<CorpusMap spec={spec} renderCard={() => null} width={w} height={tallHeight} />);
+      }
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 function recordingContext(texts: Array<{ text: string; x: number; y: number }>): CanvasRenderingContext2D {
@@ -509,10 +529,11 @@ describe("spec swap", () => {
       rerender(<CorpusMap spec={large} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />);
       // The anchor is the pole of inaccessibility of the territory's shape
       // (Task 5/6), not its raw centroid, so the expectation is computed the
-      // same way CorpusMap does: build the scene against the NEW spec's
-      // fitted viewport, never the stale one from before the swap.
+      // same way CorpusMap does: build the scene against the NEW spec, then
+      // project through the NEW spec's fitted viewport, never the stale one
+      // from before the swap.
       const largeVp = fitSpec(large, 400, 300, 24);
-      const largeScene = buildScene(large, DEFAULT_TUNING, DEFAULT_THEME, estimateText, largeVp.scale);
+      const largeScene = buildScene(large, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
       const label = largeScene.labels.find((l) => l.id === "u");
       if (!label) throw new Error("expected a placed label for territory 'u'");
       const [ex, ey] = toScreen(largeVp, label.anchor[0], label.anchor[1]);

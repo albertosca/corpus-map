@@ -29,10 +29,10 @@ describe("point field", () => {
     // 10k is the parent spec's declared limit.
     const spec = generateCorpus({ seed: 1, size: 10_000 });
     const vp = { scale: 0.05, tx: 200, ty: 150 };
-    const frame = { regime: "mid" as const, ratio: 1, pointAlpha: 1 };
+    const frame = { regime: "mid" as const, pointAlpha: 1 };
 
     const sceneStart = performance.now();
-    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText, 1);
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     console.log(`buildScene: ${(performance.now() - sceneStart).toFixed(2)}ms for ${spec.nodes.length} items`);
 
     for (let i = 0; i < WARM_UPS; i += 1) paint(new RecordingSurface(), scene, spec, vp, frame, DEFAULT_THEME);
