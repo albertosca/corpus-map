@@ -53,10 +53,12 @@ class BgeEmbedder:
     PyTorch), so the base install and CI never see it.
     """
 
+    MODEL = "BAAI/bge-small-en-v1.5"
+
     def __init__(self) -> None:  # pragma: no cover -- needs the model extra
         from sentence_transformers import SentenceTransformer
 
-        self._model = SentenceTransformer("BAAI/bge-small-en-v1.5", device="cpu")
+        self._model = SentenceTransformer(self.MODEL, device="cpu")
 
     def embed(self, texts: Sequence[str]) -> npt.NDArray[np.float32]:  # pragma: no cover -- needs the model extra
         vectors = self._model.encode(list(texts), normalize_embeddings=True, batch_size=64)

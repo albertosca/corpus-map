@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import sys
 import time
@@ -59,15 +60,20 @@ class Dependencies:
 
 
 def make_dependencies(cache_dir: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
-    """The real factory: a throttled network client, the real embedder and projector."""
+    """The real factory: a throttled network client, the real embedder and projector.
+
+    `model_name` and `umap_params` are read off `BgeEmbedder`/`UmapProjector` themselves,
+    the single source of truth `__init__` also reads from -- so meta can never drift from
+    what actually ran (M-2).
+    """
     client = Client(get=http_get, sleep=time.sleep, now=time.monotonic, cache_dir=cache_dir / "responses")
     return Dependencies(
         client=client,
         embedder=BgeEmbedder,
         projector=UmapProjector,
         today=date.today,
-        model_name="BAAI/bge-small-en-v1.5",
-        umap_params={"n_neighbors": 15, "min_dist": 0.1, "metric": "cosine", "random_state": 42},
+        model_name=BgeEmbedder.MODEL,
+        umap_params=UmapProjector.PARAMS,
     )
 
 
@@ -142,6 +148,19 @@ def _embeddings_fingerprint_path(cache_dir: Path) -> Path:
 
 def _coordinates_fingerprint_path(cache_dir: Path) -> Path:
     return _stage_dir(cache_dir) / "coordinates.fingerprint"
+
+
+def _dependency_version(distribution: str) -> str | None:
+    """The installed version of `distribution`, or `None` if it is not installed.
+
+    The base install (no `--extra model`) never has `sentence-transformers` or `umap-learn`
+    on `sys.path`, so meta records `null` there rather than crashing export over metadata
+    about a model that never actually ran.
+    """
+    try:
+        return importlib.metadata.version(distribution)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def _fingerprint(data: bytes) -> str:
@@ -271,6 +290,10 @@ def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
         "floor": payload["floor"],
         "model": deps.model_name,
         "umap": deps.umap_params,
+        "model_versions": {
+            "sentence_transformers": _dependency_version("sentence-transformers"),
+            "umap_learn": _dependency_version("umap-learn"),
+        },
         "per_category": per_category,
         "attribution": ATTRIBUTION,
         "license_note": LICENSE_NOTE,

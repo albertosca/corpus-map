@@ -7,7 +7,7 @@ and only runs when the optional `model` extra is installed.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -33,10 +33,12 @@ class UmapProjector:
     install and CI never see it.
     """
 
+    PARAMS: ClassVar[dict[str, object]] = {"n_neighbors": 15, "min_dist": 0.1, "metric": "cosine", "random_state": 42}
+
     def __init__(self) -> None:  # pragma: no cover -- needs the model extra
         import umap
 
-        self._model = umap.UMAP(n_neighbors=15, min_dist=0.1, metric="cosine", random_state=42)
+        self._model = umap.UMAP(**self.PARAMS)
 
     def project(
         self, vectors: npt.NDArray[np.float32]

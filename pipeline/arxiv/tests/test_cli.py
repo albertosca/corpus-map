@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from arxiv_corpus import cli, export
-from arxiv_corpus.embed import HashEmbedder
+from arxiv_corpus.embed import BgeEmbedder, HashEmbedder
 from arxiv_corpus.fetch import Client
-from arxiv_corpus.project import FirstTwoProjector
+from arxiv_corpus.project import FirstTwoProjector, UmapProjector
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -91,9 +91,13 @@ def test_all_output_spans_at_least_two_territories_from_the_fixture(fake_depende
     assert len(spec["nodes"]) == 3
 
 
-def test_all_writes_meta_with_the_injected_and_computed_fields(fake_dependencies: None, tmp_path: Path) -> None:
+def test_all_writes_meta_with_the_injected_and_computed_fields(
+    fake_dependencies: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     out_dir = tmp_path / "out"
     cache_dir = tmp_path / "cache"
+    fake_versions = {"sentence-transformers": "9.9.9", "umap-learn": None}
+    monkeypatch.setattr(cli, "_dependency_version", lambda distribution: fake_versions[distribution])
 
     cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "3", "--floor", "1"])
 
@@ -104,9 +108,31 @@ def test_all_writes_meta_with_the_injected_and_computed_fields(fake_dependencies
     assert meta["floor"] == 1
     assert meta["model"] == "hash-embedder-test"
     assert meta["umap"] == {"fake": True}
+    assert meta["model_versions"] == {"sentence_transformers": "9.9.9", "umap_learn": None}
     assert meta["per_category"] == {"cs.CL": 2, "cs.LG": 1}
     assert meta["attribution"] == export.ATTRIBUTION
     assert meta["license_note"] == export.LICENSE_NOTE
+
+
+def test_dependency_version_returns_the_installed_version_of_a_base_dependency() -> None:
+    """`numpy` is a base (non-optional) dependency of this package, so it is always
+    installed, in the test suite's environment as everywhere else."""
+    assert cli._dependency_version("numpy") is not None
+
+
+def test_dependency_version_returns_none_for_an_uninstalled_distribution() -> None:
+    assert cli._dependency_version("definitely-not-a-real-package-xyz") is None
+
+
+def test_make_dependencies_reads_model_name_and_umap_params_off_the_real_classes(tmp_path: Path) -> None:
+    """`make_dependencies` never re-hardcodes the model name or UMAP parameters -- they come
+    from the same class constants `BgeEmbedder`/`UmapProjector` read at construction time
+    (M-2), so meta can never drift from what actually ran. Constructing `Dependencies` here
+    needs no model weights and makes no network request."""
+    deps = cli.make_dependencies(tmp_path)
+
+    assert deps.model_name == BgeEmbedder.MODEL
+    assert deps.umap_params == UmapProjector.PARAMS
 
 
 # --- stage isolation ---
