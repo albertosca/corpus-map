@@ -48,4 +48,41 @@ describe("wheelZoomFactor", () => {
     expect(t.labelClasses).toEqual({ large: 0.9, medium: 0.4 });
     expect(resolveTuning(undefined)).toEqual(DEFAULT_TUNING);
   });
+
+  it.each<[string, Record<string, number | Record<string, number>>]>([
+    ["wheelSensitivity: 0", { wheelSensitivity: 0 }],
+    ["wheelSensitivity: -0.5", { wheelSensitivity: -0.5 }],
+    ["wheelSensitivity: NaN", { wheelSensitivity: Number.NaN }],
+    ["wheelSensitivity: Infinity", { wheelSensitivity: Number.POSITIVE_INFINITY }],
+    ["pinchGain: 0", { pinchGain: 0 }],
+    ["pinchGain: -1", { pinchGain: -1 }],
+    ["pinchGain: NaN", { pinchGain: Number.NaN }],
+    ["maxZoomPerEvent: 1", { maxZoomPerEvent: 1 }],
+    ["maxZoomPerEvent: 0", { maxZoomPerEvent: 0 }],
+    ["maxZoomPerEvent: -1", { maxZoomPerEvent: -1 }],
+    ["maxZoomPerEvent: NaN", { maxZoomPerEvent: Number.NaN }],
+    ["hysteresis: 0.5", { hysteresis: 0.5 }],
+    ["hysteresis: 0.6", { hysteresis: 0.6 }],
+    ["hysteresis: -0.1", { hysteresis: -0.1 }],
+    ["hysteresis: NaN", { hysteresis: Number.NaN }],
+    ["fadeBand: -0.1", { fadeBand: -0.1 }],
+    ["fadeBand: NaN", { fadeBand: Number.NaN }],
+    ["hoverRadius: -1", { hoverRadius: -1 }],
+    ["hoverRadius: NaN", { hoverRadius: Number.NaN }],
+    ["labelClasses.large > 1", { labelClasses: { large: 1.1, medium: 0.5 } }],
+    ["labelClasses.large < 0", { labelClasses: { large: -0.1, medium: 0.5 } }],
+    ["labelClasses.large: NaN", { labelClasses: { large: Number.NaN, medium: 0.5 } }],
+    ["labelClasses.medium > large", { labelClasses: { large: 0.3, medium: 0.6 } }],
+    ["labelClasses.medium: NaN", { labelClasses: { large: 0.8, medium: Number.NaN } }],
+  ])("rejects invalid tuning: %s", (_, invalid) => {
+    expect(() => resolveTuning(invalid as Partial<Record<string, unknown>>)).toThrow(RangeError);
+    expect(() => resolveTuning(invalid as Partial<Record<string, unknown>>)).toThrow(/tuning\./);
+  });
+
+  it("accepts valid partial tunings", () => {
+    expect(() => resolveTuning({ pinchGain: 5, wheelSensitivity: 0.001 })).not.toThrow();
+    expect(() => resolveTuning({ hysteresis: 0, fadeBand: 0.5, hoverRadius: 0 })).not.toThrow();
+    expect(() => resolveTuning({ labelClasses: { large: 1, medium: 0 } })).not.toThrow();
+    expect(() => resolveTuning(undefined)).not.toThrow();
+  });
 });

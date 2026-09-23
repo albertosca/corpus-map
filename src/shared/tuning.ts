@@ -33,6 +33,44 @@ export const DEFAULT_TUNING: Tuning = {
   hoverRadius: 12,
 };
 
+function validateTuning(t: Tuning): void {
+  if (!Number.isFinite(t.wheelSensitivity) || t.wheelSensitivity <= 0) {
+    throw new RangeError(`tuning.wheelSensitivity must be a finite number > 0, got ${t.wheelSensitivity}`);
+  }
+  if (!Number.isFinite(t.pinchGain) || t.pinchGain <= 0) {
+    throw new RangeError(`tuning.pinchGain must be a finite number > 0, got ${t.pinchGain}`);
+  }
+  if (!Number.isFinite(t.maxZoomPerEvent) || t.maxZoomPerEvent <= 1) {
+    throw new RangeError(`tuning.maxZoomPerEvent must be a finite number > 1, got ${t.maxZoomPerEvent}`);
+  }
+  if (!Number.isFinite(t.hysteresis) || t.hysteresis < 0 || t.hysteresis >= 0.5) {
+    throw new RangeError(`tuning.hysteresis must be a finite number >= 0 and < 0.5, got ${t.hysteresis}`);
+  }
+  if (!Number.isFinite(t.fadeBand) || t.fadeBand < 0) {
+    throw new RangeError(`tuning.fadeBand must be a finite number >= 0, got ${t.fadeBand}`);
+  }
+  if (!Number.isFinite(t.hoverRadius) || t.hoverRadius < 0) {
+    throw new RangeError(`tuning.hoverRadius must be a finite number >= 0, got ${t.hoverRadius}`);
+  }
+  if (!Number.isFinite(t.labelClasses.large) || t.labelClasses.large < 0 || t.labelClasses.large > 1) {
+    throw new RangeError(`tuning.labelClasses.large must be a finite number in [0, 1], got ${t.labelClasses.large}`);
+  }
+  if (!Number.isFinite(t.labelClasses.medium) || t.labelClasses.medium < 0 || t.labelClasses.medium > 1) {
+    throw new RangeError(`tuning.labelClasses.medium must be a finite number in [0, 1], got ${t.labelClasses.medium}`);
+  }
+  if (t.labelClasses.medium > t.labelClasses.large) {
+    throw new RangeError(
+      `tuning.labelClasses.medium (${t.labelClasses.medium}) must be <= large (${t.labelClasses.large})`,
+    );
+  }
+}
+
 export function resolveTuning(partial: Partial<Tuning> | undefined): Tuning {
-  return { ...DEFAULT_TUNING, ...partial, labelClasses: { ...DEFAULT_TUNING.labelClasses, ...partial?.labelClasses } };
+  const result = {
+    ...DEFAULT_TUNING,
+    ...partial,
+    labelClasses: { ...DEFAULT_TUNING.labelClasses, ...partial?.labelClasses },
+  };
+  validateTuning(result);
+  return result;
 }
