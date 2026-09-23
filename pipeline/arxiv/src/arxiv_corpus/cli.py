@@ -33,7 +33,6 @@ STAGES = ("fetch", "embed", "project", "export", "all")
 
 DEFAULT_N = 8000
 DEFAULT_FLOOR = 20
-DEFAULT_CACHE_DIR = Path(".cache")
 
 # The query shape actually used, minus `start` (which varies per page) and with `category`
 # and `max_results` left as placeholders -- documentary, not a literal request URL.
@@ -88,12 +87,33 @@ def _repo_root(start: Path | None = None) -> Path:
     raise RuntimeError(f"could not find the repository root (no package.json above {current})")
 
 
+def default_cache_dir() -> Path:
+    """This package's own `.cache` directory, resolved from this package's location.
+
+    Anchored the same way `default_out_dir` is anchored to the repository root: run from
+    the repository root without `--cache-dir` and this still resolves under
+    `pipeline/arxiv/.cache` (which `.gitignore` covers), not `<cwd>/.cache` (which does not).
+    """
+    return _package_root() / ".cache"
+
+
+def _package_root(start: Path | None = None) -> Path:
+    """Walk up from `start` (default: this file) until a directory holding `pyproject.toml`."""
+    current = (start if start is not None else Path(__file__)).resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+    raise RuntimeError(f"could not find the arxiv-corpus package root (no pyproject.toml above {current})")
+
+
 def _resolve_out(out: Path | None) -> Path:
     return out if out is not None else default_out_dir()
 
 
 def _resolve_cache_dir(cache_dir: Path | None) -> Path:
-    return cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR
+    return cache_dir if cache_dir is not None else default_cache_dir()
 
 
 def _stage_dir(cache_dir: Path) -> Path:

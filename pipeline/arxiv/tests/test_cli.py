@@ -452,9 +452,30 @@ def test_resolve_out_keeps_an_explicit_value(tmp_path: Path) -> None:
     assert cli._resolve_out(tmp_path) == tmp_path
 
 
-def test_resolve_cache_dir_defaults_to_dot_cache_when_none() -> None:
-    assert cli._resolve_cache_dir(None) == Path(".cache")
+def test_resolve_cache_dir_defaults_to_the_package_cache_dir_when_none() -> None:
+    assert cli._resolve_cache_dir(None) == cli.default_cache_dir()
 
 
 def test_resolve_cache_dir_keeps_an_explicit_value(tmp_path: Path) -> None:
     assert cli._resolve_cache_dir(tmp_path) == tmp_path
+
+
+def test_default_cache_dir_points_at_the_package_cache_dir_not_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """From the repo root (or anywhere else) without `--cache-dir`, the cache still resolves
+    under `pipeline/arxiv/.cache` -- which `.gitignore` covers -- not `<cwd>/.cache`, which
+    does not (M-1)."""
+    monkeypatch.chdir(tmp_path)
+
+    result = cli.default_cache_dir()
+
+    assert result.name == ".cache"
+    assert result.parent.name == "arxiv"
+    assert (result.parent / "pyproject.toml").exists()
+    assert result != tmp_path / ".cache"
+
+
+def test_package_root_raises_when_no_pyproject_toml_is_found_above(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match=r"pyproject\.toml"):
+        cli._package_root(tmp_path / "nested" / "module.py")
