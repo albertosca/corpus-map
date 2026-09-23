@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canvasSurface } from "./surface";
+import { canvasSurface, RecordingSurface } from "./surface";
 
 describe("canvasSurface", () => {
   it("calls clearRect with canvas dimensions on clear()", () => {
@@ -90,5 +90,14 @@ describe("canvasSurface", () => {
     expect(ctx.fillStyle).toBe("green");
     expect(ctx.font).toBe("bold 16px Arial");
     expect(ctx.fillText).toHaveBeenCalledWith("Hello", 50, 75);
+  });
+});
+
+describe("RecordingSurface", () => {
+  it("records the sequence of method calls", () => {
+    const surface = new RecordingSurface();
+    surface.polygon([[0, 0]], "red", "blue");
+    surface.text("hello", 10, 20, "black", "bold");
+    expect(surface.calls).toEqual(["polygon", "text"]);
   });
 });

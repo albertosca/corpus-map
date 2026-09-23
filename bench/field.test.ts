@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THEME, paint } from "../src/shared/painter";
+import { paint } from "../src/shared/paint";
 import type { MapSpec, Territory } from "../src/shared/spec";
 import { RecordingSurface } from "../src/shared/surface";
+import { DEFAULT_THEME } from "../src/shared/theme";
 
 // One frame at 60fps. This is the stated target, not a measured figure — see
 // the note in docs/superpowers/specs/2026-09-13-corpus-map-design.md. It is

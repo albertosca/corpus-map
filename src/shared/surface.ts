@@ -10,17 +10,22 @@ export class RecordingSurface implements Surface {
   polygons: Array<{ points: Array<[number, number]>; fill: string; stroke: string }> = [];
   circles: Array<{ id: string; x: number; y: number; r: number; fill: string }> = [];
   texts: Array<{ text: string; x: number; y: number; color: string; font: string }> = [];
+  calls: Array<"clear" | "polygon" | "circle" | "text"> = [];
 
   clear() {
+    this.calls.push("clear");
     this.cleared += 1;
   }
   polygon(points: Array<[number, number]>, fill: string, stroke: string) {
+    this.calls.push("polygon");
     this.polygons.push({ points, fill, stroke });
   }
   circle(id: string, x: number, y: number, r: number, fill: string) {
+    this.calls.push("circle");
     this.circles.push({ id, x, y, r, fill });
   }
   text(text: string, x: number, y: number, color: string, font: string) {
+    this.calls.push("text");
     this.texts.push({ text, x, y, color, font });
   }
 }

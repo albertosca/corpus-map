@@ -2,9 +2,10 @@ import { type PointerEvent, type ReactElement, type ReactNode, useEffect, useMem
 import { AccessibleTree } from "./a11y/AccessibleTree";
 import { CardOverlay } from "./cards/CardOverlay";
 import { DEFAULT_THRESHOLDS, type LodThresholds, type Regime, regimeFor } from "./lod/lod";
-import { DEFAULT_THEME, paint, type Theme } from "./shared/painter";
+import { paint } from "./shared/paint";
 import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
+import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { fitSpec } from "./viewport/fit";
 import { panBy, type Viewport, zoomTo } from "./viewport/viewport";
 

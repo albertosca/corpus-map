@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THEME, paint } from "./painter";
+import { paint } from "./paint";
 import type { MapSpec } from "./spec";
 import { RecordingSurface } from "./surface";
+import { DEFAULT_THEME } from "./theme";
 
 const spec: MapSpec = {
   version: "1",
@@ -111,5 +112,34 @@ describe("paint", () => {
       [30, 0],
       [0, 30],
     ]);
+  });
+});
+
+describe("paint order", () => {
+  it("paints every boundary, then every point, then every name", () => {
+    const two: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "t1", name: "North", members: ["a", "b", "c"], centroid: [1, 1] },
+        { id: "t2", name: "South", members: ["d", "e", "f"], centroid: [1, 11] },
+      ],
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0, territory: "t1" },
+        { id: "b", label: "B", x: 2, y: 0, territory: "t1" },
+        { id: "c", label: "C", x: 1, y: 2, territory: "t1" },
+        { id: "d", label: "D", x: 0, y: 10, territory: "t2" },
+        { id: "e", label: "E", x: 2, y: 10, territory: "t2" },
+        { id: "f", label: "F", x: 1, y: 12, territory: "t2" },
+      ],
+    };
+    const s = new RecordingSurface();
+    paint(s, two, vp, "mid", DEFAULT_THEME);
+    expect(s.calls).toEqual(["clear", "polygon", "polygon", ...Array(6).fill("circle"), "text", "text"]);
+  });
+
+  it("paints boundaries then names, and no points, at the far regime", () => {
+    const s = new RecordingSurface();
+    paint(s, spec, vp, "far", DEFAULT_THEME);
+    expect(s.calls).toEqual(["clear", "polygon", "text"]);
   });
 });
