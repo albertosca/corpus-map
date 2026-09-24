@@ -39,7 +39,7 @@ interface MinimapProps {
 
 /**
  * The minimap's React half: a fixed-size canvas painted by the pure
- * `paintMinimap`, positioned in one of the box's corners. `aria-hidden`
+ * `paintMinimap`, in a wrapper positioned in one of the box's corners. `aria-hidden`
  * (spec 4 §1 — the accessible tree already offers territory navigation);
  * every pointer handler calls `stopPropagation` so a press or drag here
  * never reaches the map surface underneath — it can neither start a pan nor
@@ -64,7 +64,7 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
     paintMinimap(canvasSurface(ctx), scene, world, view, MINIMAP_SIZE, theme);
   }, [scene, world, view, theme]);
 
-  const pointAt = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const pointAt = (e: ReactPointerEvent<HTMLDivElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const vp = minimapFit(world, MINIMAP_SIZE);
@@ -72,31 +72,33 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
     onPoint(wx, wy);
   };
 
-  const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (e.button !== 0 || !e.isPrimary) return;
     dragging.current = true;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     pointAt(e);
   };
-  const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (!dragging.current) return;
     pointAt(e);
   };
-  const onPointerUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     dragging.current = false;
   };
-  const onPointerCancel = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const onPointerCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     dragging.current = false;
   };
 
+  // `aria-hidden` sits on a plain wrapper, not on the canvas: a canvas
+  // counts as focusable content to the a11y lint, while a div that only
+  // listens for pointer events does not, and hiding the wrapper hides the
+  // canvas inside it just the same.
   return (
-    // biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree already offers territory navigation (spec 4 §1); pointer-only, so hidden from AT regardless of default focusability.
-    <canvas
-      ref={canvasRef}
+    <div
       data-minimap=""
       aria-hidden="true"
       onPointerDown={onPointerDown}
@@ -111,6 +113,12 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
         touchAction: "none",
         cursor: "pointer",
       }}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        data-minimap-canvas=""
+        style={{ display: "block", width: MINIMAP_SIZE.width, height: MINIMAP_SIZE.height }}
+      />
+    </div>
   );
 }

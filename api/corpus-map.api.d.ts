@@ -353,7 +353,7 @@ interface MinimapProps {
 }
 /**
  * The minimap's React half: a fixed-size canvas painted by the pure
- * `paintMinimap`, positioned in one of the box's corners. `aria-hidden`
+ * `paintMinimap`, in a wrapper positioned in one of the box's corners. `aria-hidden`
  * (spec 4 §1 — the accessible tree already offers territory navigation);
  * every pointer handler calls `stopPropagation` so a press or drag here
  * never reaches the map surface underneath — it can neither start a pan nor

@@ -328,7 +328,7 @@ function topBarBox(container: HTMLElement): Box | null {
 /**
  * The minimap's footprint, as a hard-coded "known box" (the controller's
  * own framing) rather than read from the library's internal
- * `[data-minimap]` canvas — `src/minimap/Minimap.tsx` is not part of the
+ * `[data-minimap]` element — `src/minimap/Minimap.tsx` is not part of the
  * public API (`data-minimap` is an implementation detail, never documented
  * or exported), so this test deliberately does not couple itself to that
  * internal DOM shape. `MINIMAP_WIDTH`/`MINIMAP_HEIGHT`/`MINIMAP_MARGIN`

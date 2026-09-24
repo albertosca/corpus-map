@@ -123,7 +123,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
       const ctx = fakeCtx();
-      if (this.hasAttribute("data-minimap")) {
+      if (this.hasAttribute("data-minimap-canvas")) {
         (ctx as unknown as { clearRect: () => void }).clearRect = () => {
           minimapPaints += 1;
         };
@@ -335,7 +335,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement,
     ) {
-      if (this.hasAttribute("data-minimap")) {
+      if (this.hasAttribute("data-minimap-canvas")) {
         return {
           x: 12,
           y: 12,
