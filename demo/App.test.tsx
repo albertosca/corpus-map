@@ -1319,6 +1319,46 @@ describe("App (showcase Task 5)", () => {
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tuning" }));
     });
 
+    it("opening the panel (gear button or 't') moves focus into it", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      const dialog = screen.getByRole("dialog", { name: "Tuning" });
+      expect(dialog.contains(document.activeElement)).toBe(true);
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+      fireEvent.keyDown(document.body, { key: "t" });
+      expect(screen.getByRole("dialog", { name: "Tuning" }).contains(document.activeElement)).toBe(true);
+    });
+
+    it("opening the panel from the drawer's Close button moves focus into the panel, not to the page body", async () => {
+      await renderApp(PANEL_SPEC);
+      await screen.findByText(territoryButtonText(PANEL_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      const drawer = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      const drawerClose = within(drawer).getByRole("button", { name: "Close" });
+      expect(document.activeElement).toBe(drawerClose);
+
+      fireEvent.keyDown(drawerClose, { key: "t" });
+      expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull();
+      expect(screen.getByRole("dialog", { name: "Tuning" }).contains(document.activeElement)).toBe(true);
+    });
+
+    it("closing the panel with 't' while focus is inside it returns focus to the gear button", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      const reset = screen.getByRole("button", { name: "Reset" });
+      reset.focus();
+
+      fireEvent.keyDown(reset, { key: "t" });
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tuning" }));
+    });
+
     it("an invalid Tuning combination (labelClasses.medium > large) shows the tuning error without crashing the map", async () => {
       await renderApp();
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));

@@ -1,6 +1,6 @@
 import type { LodThresholds, Tuning } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { DRAWER_MAX_WIDTH } from "./Drawer";
 import { WheelCapture } from "./WheelCapture";
 
@@ -293,16 +293,44 @@ export function TuningPanel({
   const titleId = useId();
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // Opening moves focus into the panel (its Close button), so a keyboard
+  // user lands where the controls are, and opening it from the drawer's
+  // Close button (which unmounts with the drawer) never drops focus to the
+  // page body. Keyed on `open` alone: the parent re-renders on every view
+  // change, and a dependency on its callbacks would pull focus back here
+  // each time. On close, if focus was inside the panel it would fall to
+  // the body with the panel's DOM, so it goes back to the gear button
+  // instead; focus the user put anywhere else stays where it is.
+  const restoreFocus = useEffectEvent(() => {
+    returnFocusTo.current?.focus();
+  });
+  useEffect(() => {
+    if (!open) return;
+    closeButtonRef.current?.focus();
+    const panel = panelRef.current;
+    return () => {
+      const active = document.activeElement;
+      if (active === null || active === document.body || panel?.contains(active)) restoreFocus();
+    };
+  }, [open]);
+
+  // Escape reads the latest `onClose` through an effect event, so the
+  // listener neither goes stale nor re-subscribes on every parent render.
+  const onEscape = useEffectEvent(() => {
+    returnFocusTo.current?.focus();
+    onClose();
+  });
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      returnFocusTo.current?.focus();
-      onClose();
+      if (e.key === "Escape") onEscape();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose, returnFocusTo]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -348,6 +376,7 @@ export function TuningPanel({
 
   return (
     <aside
+      ref={panelRef}
       data-tuning-panel
       data-floating-control
       role="dialog"
@@ -359,7 +388,7 @@ export function TuningPanel({
         <h2 id={titleId} style={titleStyle}>
           Tuning
         </h2>
-        <button type="button" onClick={handleClose} style={iconButtonStyle}>
+        <button type="button" ref={closeButtonRef} onClick={handleClose} style={iconButtonStyle}>
           Close
         </button>
       </div>
