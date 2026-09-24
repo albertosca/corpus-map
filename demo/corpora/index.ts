@@ -26,6 +26,11 @@ async function loadArxiv(): Promise<MapSpec> {
   return validateSpec((module as { default: unknown }).default);
 }
 
+/** The synthetic corpus's picker label, e.g. "Synthetic (5,000 items)"; the demo passes the tuning panel's current size. */
+export function syntheticLabel(size: number): string {
+  return `Synthetic (${size.toLocaleString("en-US")} items)`;
+}
+
 /**
  * The gallery is the agnosticism proof: corpora from unrelated domains, plus
  * the real-world one and a synthetic one for scale testing. The demo picker
@@ -35,5 +40,5 @@ export const gallery: GalleryEntry[] = [
   { id: "arxiv", label: "Computer-science papers (arXiv metadata)", load: loadArxiv },
   { id: "elements", label: "Chemical elements", spec: elementsSpec },
   { id: "constellations", label: "Constellations", spec: constellationsSpec },
-  { id: "synthetic", label: "Synthetic (5,000 items)", spec: syntheticSpec },
+  { id: "synthetic", label: syntheticLabel(syntheticSpec.nodes.length), spec: syntheticSpec },
 ];

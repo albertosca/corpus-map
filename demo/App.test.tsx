@@ -1253,6 +1253,24 @@ describe("App (showcase Task 5)", () => {
       vi.doUnmock("../fixtures/synthetic/generate");
     });
 
+    it("the synthetic corpus's picker label shows the current size, following the panel and Reset", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      const option = (): string | null =>
+        (screen.getByLabelText("Corpus") as HTMLSelectElement).querySelector('option[value="synthetic"]')
+          ?.textContent ?? null;
+      expect(option()).toBe("Synthetic (5,000 items)");
+
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+      await screen.findByText(territoryButtonText(syntheticSpec));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
+      expect(option()).toBe("Synthetic (9,000 items)");
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect(option()).toBe("Synthetic (5,000 items)");
+    });
+
     it("the wheel capture table inside the panel records a real wheel event on the map surface", async () => {
       const { container } = await renderApp();
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));

@@ -8,7 +8,7 @@ import { Indicator } from "./components/Indicator";
 import { TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
 import { ZoomControls } from "./components/ZoomControls";
-import { type GalleryEntry, gallery } from "./corpora";
+import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
 
 interface ElementMeta {
   name: string;
@@ -240,6 +240,13 @@ export function App({ loadArxiv }: AppProps = {}) {
     [syntheticSeed, syntheticSize],
   );
 
+  // The picker's synthetic label follows the panel's size control.
+  const corpora = useMemo(
+    () =>
+      gallery.map((entry) => (entry.id === "synthetic" ? { ...entry, label: syntheticLabel(syntheticSize) } : entry)),
+    [syntheticSize],
+  );
+
   const activeEntry = gallery.find((entry) => entry.id === corpusId);
   if (!activeEntry) throw new Error(`unknown corpus id: ${corpusId}`);
 
@@ -435,7 +442,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         )}
       </div>
       <TopBar
-        corpora={gallery}
+        corpora={corpora}
         activeId={corpusId}
         onChange={handleCorpusChange}
         tuningOpen={panelOpen}
