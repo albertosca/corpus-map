@@ -466,9 +466,11 @@ export function App({ loadArxiv }: AppProps = {}) {
       <TuningPanel
         open={panelOpen}
         tuning={tuningDraft}
+        appliedTuning={appliedTuning}
         onTuningChange={handleTuningDraftChange}
         tuningError={tuningError}
         thresholds={thresholdsDraft}
+        appliedThresholds={appliedThresholds}
         onThresholdsChange={handleThresholdsDraftChange}
         thresholdsError={thresholdsError}
         cardSize={cardSize}

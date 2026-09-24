@@ -6,11 +6,17 @@ import { WheelCapture } from "./WheelCapture";
 
 export interface TuningPanelProps {
   open: boolean;
+  /** The draft the controls show, which may be invalid (see `tuningError`). */
   tuning: Tuning;
+  /** The last valid tuning, the one the map is using; "Copy as JSON" copies this, never a draft in error. */
+  appliedTuning: Tuning;
   onTuningChange: (next: Tuning) => void;
   /** The last `resolveTuning` RangeError message, or `null` while the current draft is valid. */
   tuningError: string | null;
+  /** The draft the controls show, which may be invalid (see `thresholdsError`). */
   thresholds: LodThresholds;
+  /** The last valid thresholds, the ones the map is using; "Copy as JSON" copies these. */
+  appliedThresholds: LodThresholds;
   onThresholdsChange: (next: LodThresholds) => void;
   /** The last `resolveThresholds` RangeError message, or `null` while the current draft is valid. */
   thresholdsError: string | null;
@@ -265,9 +271,11 @@ const SYNTHETIC_SIZE_STEP = 1000;
 export function TuningPanel({
   open,
   tuning,
+  appliedTuning,
   onTuningChange,
   tuningError,
   thresholds,
+  appliedThresholds,
   onThresholdsChange,
   thresholdsError,
   cardSize,
@@ -303,10 +311,26 @@ export function TuningPanel({
     onClose();
   };
 
+  // Copies what the map is actually using: a draft that shows an error
+  // would throw when pasted back into `resolveTuning`/`resolveThresholds`,
+  // so the last valid values go out instead, and the message says so.
   const handleCopyJson = () => {
-    const payload = JSON.stringify({ tuning, thresholds, cardSize }, null, 2);
+    const payload = JSON.stringify(
+      {
+        tuning: appliedTuning,
+        thresholds: appliedThresholds,
+        cardSize,
+        synthetic: { size: syntheticSize, seed: syntheticSeed },
+      },
+      null,
+      2,
+    );
+    const copied =
+      tuningError || thresholdsError
+        ? "Copied the last valid values; the draft in error was left out."
+        : "Copied to clipboard.";
     navigator.clipboard.writeText(payload).then(
-      () => setCopyMessage("Copied to clipboard."),
+      () => setCopyMessage(copied),
       () => setCopyMessage("Could not copy to clipboard."),
     );
   };

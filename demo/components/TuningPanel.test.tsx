@@ -27,9 +27,11 @@ function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
   const props: TuningPanelProps = {
     open: true,
     tuning: DEFAULT_TUNING,
+    appliedTuning: DEFAULT_TUNING,
     onTuningChange,
     tuningError: null,
     thresholds: DEFAULT_THRESHOLDS,
+    appliedThresholds: DEFAULT_THRESHOLDS,
     onThresholdsChange,
     thresholdsError: null,
     cardSize: DEFAULT_CARD_SIZE,
@@ -162,7 +164,7 @@ describe("TuningPanel (showcase Task 7)", () => {
   it("Copy as JSON writes valid JSON with every Tuning field, the thresholds, and the card size", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
-    renderPanel({ tuning: { ...DEFAULT_TUNING, pinchGain: 9 } });
+    renderPanel({ tuning: { ...DEFAULT_TUNING, pinchGain: 9 }, appliedTuning: { ...DEFAULT_TUNING, pinchGain: 9 } });
 
     fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
@@ -178,6 +180,44 @@ describe("TuningPanel (showcase Task 7)", () => {
     expect(payload.tuning.pinchGain).toBe(9);
     expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
     expect(payload.cardSize).toEqual(DEFAULT_CARD_SIZE);
+  });
+
+  it("Copy as JSON copies the last valid values, not a draft in error, and says so", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderPanel({
+      tuning: { ...DEFAULT_TUNING, labelClasses: { large: 0.2, medium: 0.9 } },
+      tuningError: "tuning.labelClasses.medium (0.9) must be <= tuning.labelClasses.large (0.2)",
+      appliedTuning: { ...DEFAULT_TUNING, pinchGain: 9 },
+      thresholds: { midAt: 10, nearAt: 6 },
+      thresholdsError: "thresholds.midAt (10) must be <= thresholds.nearAt (6)",
+      appliedThresholds: DEFAULT_THRESHOLDS,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+
+    const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as {
+      tuning: Record<string, unknown>;
+      thresholds: Record<string, unknown>;
+    };
+    expect(payload.tuning.pinchGain).toBe(9);
+    expect(payload.tuning.labelClasses).toEqual(DEFAULT_TUNING.labelClasses);
+    expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
+    await screen.findByText("Copied the last valid values; the draft in error was left out.");
+  });
+
+  it("Copy as JSON includes the synthetic corpus's size and seed", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderPanel({ syntheticSize: 7000, syntheticSeed: 42 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+
+    const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as { synthetic: unknown };
+    expect(payload.synthetic).toEqual({ size: 7000, seed: 42 });
+    await screen.findByText("Copied to clipboard.");
   });
 
   it("shows a message instead of throwing when the clipboard write rejects", async () => {
@@ -209,9 +249,11 @@ describe("TuningPanel (showcase Task 7)", () => {
       <TuningPanel
         open={false}
         tuning={DEFAULT_TUNING}
+        appliedTuning={DEFAULT_TUNING}
         onTuningChange={vi.fn()}
         tuningError={null}
         thresholds={DEFAULT_THRESHOLDS}
+        appliedThresholds={DEFAULT_THRESHOLDS}
         onThresholdsChange={vi.fn()}
         thresholdsError={null}
         cardSize={DEFAULT_CARD_SIZE}

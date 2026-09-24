@@ -1178,6 +1178,22 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText(/mid · 4\.0×/);
     });
 
+    it("Copy as JSON hands over the thresholds the map is using, not an invalid draft", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
+      expect(screen.getByRole("alert")).not.toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+      const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as { thresholds: unknown };
+      expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
+    });
+
     it("Reset restores the panel's tuning/thresholds controls to their defaults and clears the error", async () => {
       await renderApp();
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
