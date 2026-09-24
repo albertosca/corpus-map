@@ -37,6 +37,13 @@ const wrapStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 6,
+  // The wrapper's own declared width (Task 7 fix round 1): before this it
+  // was only implicitly `BUTTON_WIDTH` via its children's own `width`, with
+  // nothing on the container itself for `App.test.tsx`'s overflow check to
+  // read -- `checkAllFloatingControls` no longer walks descendant
+  // buttons/selects (see that helper's own doc comment), so the container
+  // has to state its own footprint explicitly.
+  width: BUTTON_WIDTH,
 };
 
 const buttonStyle: CSSProperties = {

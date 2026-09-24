@@ -112,25 +112,72 @@ function labelFor(el: HTMLElement): string {
 }
 
 /**
+ * `checkNoOverflowAt375` silently skips any of the five width/offset
+ * properties an element simply never set (`if (!raw || raw === "auto")
+ * continue`) — correct for the properties a control legitimately leaves
+ * unset (e.g. something anchored only by `right`, never `left`), but wrong
+ * when NONE of them are set: that element has nothing for the check to
+ * measure at all, and the loop still reports "checked" without asserting
+ * anything. Task 7 review's [Important] finding caught exactly this: the
+ * "Tuning" gear button set none of `width`/`maxWidth`/`minWidth`/`left`/
+ * `right`, so a test named "keeps ... its gear button within the
+ * floating-control overflow check" performed zero assertions on it.
+ *
+ * Every `data-floating-control` element must declare a `width` or
+ * `maxWidth` (something `checkNoOverflowAt375` can bound) AND a `left` or
+ * `right` (a horizontal anchor — every floating control here is
+ * `position: fixed`/`absolute`, anchored to a side, never centred by
+ * margin alone). Missing either one fails immediately, naming the
+ * element, instead of the previous silent no-op.
+ */
+function assertDeclaresOwnBox(el: HTMLElement, label: string): void {
+  const declaresWidth = (["width", "maxWidth"] as const).some((prop) => {
+    const raw = el.style[prop];
+    return !!raw && raw !== "auto";
+  });
+  expect(declaresWidth, `${label} declares no width/maxWidth — the overflow check has nothing to measure it with`).toBe(
+    true,
+  );
+  const declaresAnchor = (["left", "right"] as const).some((prop) => {
+    const raw = el.style[prop];
+    return !!raw && raw !== "auto";
+  });
+  expect(declaresAnchor, `${label} declares no left/right — the overflow check has nothing to measure it with`).toBe(
+    true,
+  );
+}
+
+/**
  * Walks every element `App` marks `data-floating-control` (the map's own
- * top bar, zoom controls, indicator, footer, and the load-error block), plus
- * each one's `button`/`select` descendants — the only elements that
- * currently carry their own width-like inline styles — and overflow-checks
- * every one. Fix round 2, Finding 2: the previous version of this test
- * hand-picked which elements to check, so a new floating control (the
- * load-error block and its "Try again" button, added in Fix round 1) could
- * slip past unnoticed; discovering them from the DOM instead means a future
- * one can't slip past the same way.
+ * top bar, zoom controls, indicator, footer, the load-error block, the
+ * tuning panel) and, for each one, first requires it to declare enough of
+ * its own geometry to be measured at all (`assertDeclaresOwnBox`), then
+ * overflow-checks it (`checkNoOverflowAt375`). Fix round 2, Finding 2: the
+ * previous version of this test hand-picked which elements to check;
+ * discovering them from the DOM instead means a future one can't slip past
+ * unnoticed.
+ *
+ * Task 7 fix round 1: no longer recurses into `button`/`select`
+ * descendants. A floating container that declares its own `width`/
+ * `maxWidth` already bounds whatever is wrapped inside it (normal block
+ * flow, or `flexWrap: "wrap"` where the container uses it) — the
+ * container's own footprint is what has to be right, not each button's.
+ * Checking descendants individually was also *how* the gear button's gap
+ * shipped undetected: a descendant with no geometry of its own (every
+ * plain `<button>` in this demo) just skipped every property check
+ * silently, the same false-pass `assertDeclaresOwnBox` now forbids at the
+ * container level. A real browser layout assertion (whether a nested
+ * button's rendered box, not just its inline style, ever exceeds its
+ * container) is out of reach here — jsdom has no layout engine — and
+ * stays a `BACKLOG.md` item rather than a false sense of coverage.
  */
 function checkAllFloatingControls(container: HTMLElement): void {
   const controls = Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"));
   expect(controls.length, "expected at least one [data-floating-control] element to check").toBeGreaterThan(0);
   for (const el of controls) {
     const label = labelFor(el);
+    assertDeclaresOwnBox(el, label);
     checkNoOverflowAt375(el, label);
-    for (const child of Array.from(el.querySelectorAll<HTMLElement>("button, select"))) {
-      checkNoOverflowAt375(child, `${label} > ${labelFor(child)}`);
-    }
   }
 }
 
@@ -1058,6 +1105,66 @@ describe("App (showcase Task 5)", () => {
       expect((screen.getByLabelText(/Mid at/) as HTMLInputElement).value).toBe(String(DEFAULT_THRESHOLDS.midAt));
     });
 
+    // task-7-review.md Minor finding #2: the only committed Reset test
+    // checked `pinchGain`/`midAt` alone, leaving `cardSize` and the
+    // synthetic size/seed controls unguarded against a regression.
+    it("Reset also restores cardSize, synthetic size and seed to their defaults", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+      await screen.findByText(territoryButtonText(syntheticSpec));
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.change(screen.getByLabelText(/Card width/), { target: { value: "280" } });
+      fireEvent.change(screen.getByLabelText(/Card height/), { target: { value: "140" } });
+      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
+      fireEvent.change(screen.getByLabelText(/Seed/), { target: { value: "77" } });
+      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("280");
+      expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("77");
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("160");
+      expect((screen.getByLabelText(/Card height/) as HTMLInputElement).value).toBe("56");
+      expect((screen.getByLabelText(/Synthetic size/) as HTMLInputElement).value).toBe("5000");
+      expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("1");
+    });
+
+    // task-7-review.md Minor finding #3: "regenerates only on a size/seed
+    // change" was true (verified live by the reviewer with a throwaway
+    // probe) but unguarded in the committed suite. Spies on the real
+    // `generateCorpus` (never replaces its behaviour) to count calls
+    // rather than asserting anything about its output.
+    it("regenerates the synthetic corpus only when its size or seed control changes, not on a panel toggle or a wheel zoom", async () => {
+      vi.doMock("../fixtures/synthetic/generate", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("../fixtures/synthetic/generate")>();
+        return { ...actual, generateCorpus: vi.fn(actual.generateCorpus) };
+      });
+      const generateModule = await import("../fixtures/synthetic/generate");
+      const generateCorpusSpy = generateModule.generateCorpus as unknown as ReturnType<typeof vi.fn>;
+
+      const { container } = await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+      await screen.findByText(territoryButtonText(syntheticSpec));
+
+      const callsAfterMount = generateCorpusSpy.mock.calls.length;
+      expect(callsAfterMount).toBeGreaterThan(0);
+
+      // Panel open, close, reopen, plus a wheel zoom on the real map
+      // surface -- none of these touch `syntheticSize`/`syntheticSeed`,
+      // so the memo must not re-run.
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.wheel(mapSurface(container), { deltaY: -20, deltaMode: 0, ctrlKey: false });
+      expect(generateCorpusSpy.mock.calls.length).toBe(callsAfterMount);
+
+      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
+      expect(generateCorpusSpy.mock.calls.length).toBe(callsAfterMount + 1);
+
+      vi.doUnmock("../fixtures/synthetic/generate");
+    });
+
     it("the wheel capture table inside the panel records a real wheel event on the map surface", async () => {
       const { container } = await renderApp();
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
@@ -1105,7 +1212,14 @@ describe("App (showcase Task 5)", () => {
       expect(screen.getByText(territoryButtonText(TINY_ARXIV_SPEC))).not.toBeNull();
     });
 
-    it("keeps the open tuning panel and its gear button within the floating-control overflow check", async () => {
+    // Renamed (Task 7 fix round 1): the previous name ("...and its gear
+    // button...") overclaimed — the gear button itself is nested inside
+    // the top bar and carries no geometry of its own on purpose
+    // (`checkAllFloatingControls` no longer walks descendants at all).
+    // What this actually proves is that the open tuning panel, and the
+    // top bar that bounds the gear button, both declare enough geometry
+    // to be measured and don't overflow at 375px — named accordingly.
+    it("keeps the open tuning panel, and the top bar that bounds its gear button, within the floating-control overflow check", async () => {
       const { container } = await renderApp();
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
       fireEvent.click(screen.getByRole("button", { name: "Tuning" }));

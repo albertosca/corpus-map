@@ -98,6 +98,14 @@ const errorStyle: CSSProperties = {
   justifyContent: "center",
   gap: 12,
   height: "100%",
+  // Explicit `left`/`width` (Task 7 fix round 1): a normal-flow block
+  // child of `data-map-shell` (which fills the viewport) already spans
+  // its parent's full width by default, but `App.test.tsx`'s overflow
+  // check now requires every `data-floating-control` element to declare
+  // its own geometry inline, not rely on default block sizing -- see
+  // `checkAllFloatingControls`'s own doc comment.
+  left: 0,
+  width: "100%",
   color: "#1a1d23",
   fontSize: 14,
 };
