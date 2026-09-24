@@ -87,25 +87,14 @@ describe("placeLabels", () => {
       const scale = fit.scale * ratio;
       return { scale, tx: width / 2 - cx * scale + panX, ty: height / 2 - cy * scale + panY };
     };
-    // Painted into a canvas with a MARGIN-wide border around the real
-    // `width` x `height` view, and the view shifted into its middle.
-    // `paintLabels` skips a name whose box would cross the canvas edge (a
-    // screen-bounds rule, tested in `paint.test.ts`); this metric is about
-    // which names placement selects at each scale, so the border keeps
-    // every name of the sweep (anchors reach ~120,000 px from the centre at
-    // the largest ratio) clear of that rule, as before it existed.
-    const MARGIN = 1e7;
+    // Painted into the real `width` x `height` canvas, so any visibility
+    // rule `paintLabels` applies at paint time is measured along with
+    // placement's own selection: a rule that depends on where a name sits
+    // on screen (such as skipping a name whose box crosses the edge) would
+    // make a name vanish on zoom in and fail clause (i).
     const drawnNames = (ratio: number, panX = 0, panY = 0): Set<string> => {
       const s = new RecordingSurface();
-      const vp = vpAt(ratio, panX + MARGIN, panY + MARGIN);
-      paint(
-        s,
-        scene,
-        spec,
-        vp,
-        { regime: "far", pointAlpha: 0, width: width + 2 * MARGIN, height: height + 2 * MARGIN },
-        DEFAULT_THEME,
-      );
+      paint(s, scene, spec, vpAt(ratio, panX, panY), { regime: "far", pointAlpha: 0, width, height }, DEFAULT_THEME);
       return new Set(s.texts.map((t) => t.text));
     };
     const onScreenNames = (ratio: number, panX: number, panY: number): Set<string> => {

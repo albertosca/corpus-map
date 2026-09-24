@@ -22,12 +22,12 @@ const spec: MapSpec = {
 };
 
 const vp = { scale: 10, tx: 0, ty: 0 };
-/** Large enough that every name the tests below expect lies whole inside it. */
+/** Larger than any name these tests paint, so none is skipped for its size. */
 const BOX = { width: 4000, height: 4000 };
 /**
- * `vp` shifted in from the canvas's top-left corner: `paintLabels` skips a
- * name whose box would cross the edge, and at `vp` the names of `spec`
- * (anchored near world (1, 1), screen (10, 10)) start left of x = 0.
+ * `vp` shifted in from the canvas's top-left corner, so the names of `spec`
+ * (anchored near world (1, 1), screen (10, 10) under `vp`) sit well inside
+ * the canvas and the tests that expect a name do not lean on edge clipping.
  */
 const LABEL_VP = { scale: 10, tx: 200, ty: 200 };
 
@@ -246,8 +246,10 @@ describe("paint order", () => {
 });
 
 describe("names at the canvas edge", () => {
-  // Each case puts one canvas edge half a pixel inside or outside the box
-  // of "North" (the only name `spec` places), measured from its anchor.
+  // `paintLabels` skips a name only when its box is larger than the canvas;
+  // where the name sits never enters the decision. Each case sizes or
+  // places the canvas half a pixel either side of the box of "North" (the
+  // only name `spec` places), measured from its anchor.
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   const north = scene.labels.find((l) => l.name === "North");
   if (!north) throw new Error("expected a placed label for North");
@@ -262,21 +264,28 @@ describe("names at the canvas edge", () => {
     return s.texts.map((t) => t.text);
   };
 
-  it("draws a name whose box lies whole inside the canvas", () => {
-    expect(drawn(LABEL_VP, ax + halfW + 0.5, ay + halfH + 0.5)).toEqual(["North"]);
-    // Shift the view so the box's left and top edges sit at x, y = 0.5.
-    const shifted = { ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) + 0.5, ty: LABEL_VP.ty - (ay - halfH) + 0.5 };
-    expect(drawn(shifted, 4000, 4000)).toEqual(["North"]);
+  // A view that puts the anchor at the centre of a `width` x `height` canvas.
+  const centred = (width: number, height: number) => ({
+    ...LABEL_VP,
+    tx: LABEL_VP.tx + width / 2 - ax,
+    ty: LABEL_VP.ty + height / 2 - ay,
   });
 
-  it("skips a name whose box would cross the right or bottom edge", () => {
-    expect(drawn(LABEL_VP, ax + halfW - 0.5, 4000)).toEqual([]);
-    expect(drawn(LABEL_VP, 4000, ay + halfH - 0.5)).toEqual([]);
+  it("skips a name wider or taller than the canvas, even centred in it", () => {
+    expect(drawn(centred(north.width - 0.5, 4000), north.width - 0.5, 4000)).toEqual([]);
+    expect(drawn(centred(4000, north.height - 0.5), 4000, north.height - 0.5)).toEqual([]);
   });
 
-  it("skips a name whose box would cross the left or top edge", () => {
-    expect(drawn({ ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) - 0.5 }, 4000, 4000)).toEqual([]);
-    expect(drawn({ ...LABEL_VP, ty: LABEL_VP.ty - (ay - halfH) - 0.5 }, 4000, 4000)).toEqual([]);
+  it("draws a name exactly as wide and as tall as the canvas", () => {
+    expect(drawn(centred(north.width, north.height), north.width, north.height)).toEqual(["North"]);
+  });
+
+  it("draws a name that fits the canvas but crosses its edge, left for the canvas to clip", () => {
+    // Box half a pixel past the left, top, right and bottom edges in turn.
+    expect(drawn({ ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) - 0.5 }, 4000, 4000)).toEqual(["North"]);
+    expect(drawn({ ...LABEL_VP, ty: LABEL_VP.ty - (ay - halfH) - 0.5 }, 4000, 4000)).toEqual(["North"]);
+    expect(drawn(LABEL_VP, ax + halfW - 0.5, 4000)).toEqual(["North"]);
+    expect(drawn(LABEL_VP, 4000, ay + halfH - 0.5)).toEqual(["North"]);
   });
 });
 

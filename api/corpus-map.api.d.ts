@@ -194,17 +194,19 @@ import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-/** The canvas's CSS size, which every drawn name must fit inside. */
+/** The canvas's CSS size; a name larger than it is never drawn. */
 export interface LabelBox {
     width: number;
     height: number;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
- * scale has reached and whose measured box lies whole inside the canvas.
- * A name that would cross the edge is skipped, not moved: skipping never
- * creates an overlap, and a name cut by the edge cannot be read anyway (a
- * long name on a phone-width fitted view appears once the user zooms in).
+ * scale has reached, except a name whose measured box is wider or taller
+ * than the canvas: it could never be read whole anywhere on screen (a long
+ * name on a phone-width view appears once the box is large enough).
+ * Where a name sits never enters the decision, so pan and zoom cannot make
+ * a name pop out: a name that fits slides off the edge, clipped by the
+ * canvas, and a position-dependent skip would break map-feel metric 7.
  */
 export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme, box: LabelBox): void;
 
@@ -436,8 +438,8 @@ import type { Surface } from "./surface";
 import type { Theme } from "./theme";
 /**
  * Per-frame values a precomputed `Scene` does not carry: the regime, the
- * point layer's fade, and the canvas's CSS size (a name whose box would
- * cross its edge is skipped, see `paintLabels`). No ratio here — a placed
+ * point layer's fade, and the canvas's CSS size (a name larger than the
+ * canvas is skipped, see `paintLabels`). No ratio here — a placed
  * name carries its own absolute `activeFromScale` (see
  * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
  * instead of a fit-relative ratio threaded through the frame.
