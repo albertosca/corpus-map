@@ -874,6 +874,46 @@ describe("App (showcase Task 5)", () => {
       expect(document.activeElement).toBe(mapShell);
     });
 
+    it("a view change while the drawer is open leaves focus where the user put it (Zoom in click)", async () => {
+      await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+      zoomIn.focus();
+      fireEvent.click(zoomIn);
+      expect(document.activeElement).toBe(zoomIn);
+    });
+
+    it("a wheel zoom on the map while the drawer is open leaves focus on the corpus picker", async () => {
+      const { container } = await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      const select = screen.getByLabelText("Corpus");
+      select.focus();
+      const surface = container.querySelector<HTMLElement>("[data-map-surface]");
+      expect(surface).not.toBeNull();
+      if (surface) fireEvent.wheel(surface, { deltaY: -100, clientX: 640, clientY: 400 });
+      expect(document.activeElement).toBe(select);
+    });
+
+    it("Escape still closes the drawer after the app re-rendered while it was open (the latest onClose is used)", async () => {
+      await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
     describe("keeping the zoom controls reachable beside the drawer (fix round 1)", () => {
       const originalInnerWidth = window.innerWidth;
 

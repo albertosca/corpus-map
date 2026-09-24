@@ -1,6 +1,6 @@
 import type { MapNode } from "corpus-map";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useEffectEvent, useId, useRef } from "react";
 
 export interface DrawerProps {
   /** The selected node, or `null` when nothing is selected — renders nothing in that case. */
@@ -202,17 +202,29 @@ export function Drawer({ node, territoryName, isArxiv, onClose, returnFocusTo }:
     onClose();
   };
 
+  // Focus moves to Close only when a node opens or changes. The parent
+  // passes a fresh `onClose` on every render, and it re-renders on every
+  // view change (zoom, wheel, drag), so an effect keyed on `onClose` would
+  // pull focus into the drawer each time the map moved.
   useEffect(() => {
-    if (!node) return;
-    closeButtonRef.current?.focus();
+    if (node) closeButtonRef.current?.focus();
+  }, [node]);
+
+  // The Escape listener reads the latest `onClose` through an effect event,
+  // so it neither goes stale nor re-subscribes when the parent re-renders.
+  const onEscape = useEffectEvent(() => {
+    returnFocusTo.current?.focus();
+    onClose();
+  });
+  const open = node !== null;
+  useEffect(() => {
+    if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      returnFocusTo.current?.focus();
-      onClose();
+      if (e.key === "Escape") onEscape();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [node, onClose, returnFocusTo]);
+  }, [open]);
 
   if (!node) return null;
 
