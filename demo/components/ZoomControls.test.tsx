@@ -3,7 +3,8 @@ import type { CorpusMapHandle } from "corpus-map";
 import type { RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DRAWER_MAX_WIDTH } from "./Drawer";
-import { ZoomControls } from "./ZoomControls";
+import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
+import { BUTTON_WIDTH, ZoomControls } from "./ZoomControls";
 
 function fakeHandleRef(): { ref: RefObject<CorpusMapHandle | null>; handle: CorpusMapHandle } {
   const handle: CorpusMapHandle = { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn() };
@@ -95,6 +96,44 @@ describe("ZoomControls (showcase Task 5)", () => {
       setViewportWidth(1280);
       fireEvent(window, new Event("resize"));
       expect(Number.parseFloat(el?.style.right ?? "")).toBeGreaterThan(DRAWER_MAX_WIDTH);
+    });
+  });
+
+  describe("staying clear of the minimap too, not just the drawer (showcase Task 6 fix round 2)", () => {
+    afterEach(() => {
+      setViewportWidth(ORIGINAL_INNER_WIDTH);
+    });
+
+    it("does NOT shift at 500px — wide enough to have shifted under fix round 1's drawer-only threshold (440), but not wide enough to clear the minimap/indicator column too", () => {
+      setViewportWidth(500);
+      const { ref } = fakeHandleRef();
+      const { container } = render(<ZoomControls mapRef={ref} drawerOpen={true} />);
+      const el = container.querySelector<HTMLElement>("[data-zoom-controls]");
+      // Stays at its default offset (drawer covers it) rather than the
+      // shifted DRAWER_MAX_WIDTH + GUTTER (332px) fix round 1 would have
+      // produced here — that shifted position would have landed the
+      // controls squarely on the minimap (`task-6-rereview.md`'s finding).
+      expect(el?.style.right).toBe("12px");
+    });
+
+    it("shifts once the viewport clears BOTTOM_LEFT_COLUMN_WIDTH + GUTTER past the shift, not just the drawer's own edge", () => {
+      const breakpoint = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
+
+      // One pixel below the breakpoint: still covered.
+      setViewportWidth(breakpoint - 1);
+      const { ref: refBelow } = fakeHandleRef();
+      const { container: belowContainer } = render(<ZoomControls mapRef={refBelow} drawerOpen={true} />);
+      expect(belowContainer.querySelector<HTMLElement>("[data-zoom-controls]")?.style.right).toBe("12px");
+
+      // Exactly at the breakpoint: shifted, and clears the column with a
+      // GUTTER-sized margin (parsed the same way the overflow guard reads
+      // inline values — no layout engine in jsdom).
+      setViewportWidth(breakpoint);
+      const { ref: refAt } = fakeHandleRef();
+      const { container: atContainer } = render(<ZoomControls mapRef={refAt} drawerOpen={true} />);
+      const el = atContainer.querySelector<HTMLElement>("[data-zoom-controls]");
+      const shiftedRight = Number.parseFloat(el?.style.right ?? "");
+      expect(shiftedRight).toBe(DRAWER_MAX_WIDTH + GUTTER);
     });
   });
 });

@@ -7,6 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // gets its own fresh module graph for `vi.doMock`/`vi.resetModules`.
 import type { AppProps } from "./App";
 import { DRAWER_MAX_WIDTH } from "./components/Drawer";
+import {
+  BOTTOM_LEFT_COLUMN_WIDTH,
+  GUTTER,
+  INDICATOR_LEFT,
+  INDICATOR_MAX_CONTENT_WIDTH,
+  MINIMAP_HEIGHT,
+  MINIMAP_MARGIN,
+  MINIMAP_WIDTH,
+} from "./components/floatingLayout";
+import { BUTTON_WIDTH } from "./components/ZoomControls";
 import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
 import { syntheticSpec } from "./corpora/synthetic";
@@ -119,6 +129,189 @@ function checkAllFloatingControls(container: HTMLElement): void {
     checkNoOverflowAt375(el, label);
     for (const child of Array.from(el.querySelectorAll<HTMLElement>("button, select"))) {
       checkNoOverflowAt375(child, `${label} > ${labelFor(child)}`);
+    }
+  }
+}
+
+/**
+ * A rectangle in viewport coordinates: `x0`/`x1` from the viewport's own
+ * left edge, `yFromBottom0`/`yFromBottom1` as distance from the viewport's
+ * bottom edge (matching how every box here is actually anchored — `bottom`,
+ * not `top` — except the assumed-fixed-height `VIEWPORT_HEIGHT_PX` used
+ * only for the one top-anchored control, the top bar).
+ */
+interface Box {
+  label: string;
+  x0: number;
+  x1: number;
+  yFromBottom0: number;
+  yFromBottom1: number;
+}
+
+/** Same parsing `checkNoOverflowAt375` already does (px/vw/%, no layout engine), pulled out so the pairwise sweep below can reuse it against widths other than 375. */
+function toPx(raw: string | undefined, viewportWidth: number): number {
+  if (!raw || raw === "auto") return 0;
+  const match = /^(-?[\d.]+)(vw|px|%)$/.exec(raw.trim());
+  if (!match) throw new Error(`"${raw}" is not a recognised vw/px/% length — extend toPx before trusting this box`);
+  const value = Number(match[1]);
+  return match[2] === "px" ? value : (value / 100) * viewportWidth; // every box here is `position: fixed`, so vw and % both resolve against the viewport
+}
+
+/** A fixed test viewport height (matches `FakeResizeObserver`'s own size, used throughout this file) — only needed to place the top-anchored top bar; nothing else in this sweep varies by height. */
+const VIEWPORT_HEIGHT_PX = 800;
+
+/**
+ * Height estimates for elements whose real height is content-driven and
+ * therefore not literally present as a single inline value (jsdom has no
+ * layout engine to measure it) — each derived from the same fixed
+ * ingredients (padding, border, font size) `task-6-rereview.md`'s own
+ * finding used to verify the zoom controls' overlap by hand, kept here so
+ * the pairwise sweep below can place a box on the y-axis too, not just x.
+ */
+const ZOOM_CONTROLS_HEIGHT_ESTIMATE = 101; // 3 buttons × (~15.6px line height + 12px padding + 2px border) + 2 × 6px gaps ≈ 100.8
+const INDICATOR_HEIGHT_ESTIMATE = 26; // ~15.6px line height + 8px padding + 2px border
+const TOPBAR_HEIGHT_ESTIMATE = 50; // ~24px content (15px label + a native <select>'s own default height) + 20px padding
+
+/** `[data-zoom-controls]`'s box: `right`/`bottom` are its own inline values; width comes from its first `<button>` child (the wrapper itself sets no `width`, only its buttons do — `flex-direction: column` sizes the wrapper to them). */
+function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const el = container.querySelector<HTMLElement>("[data-zoom-controls]");
+  const button = el?.querySelector<HTMLElement>("button");
+  if (!el || !button) return null;
+  const right = toPx(el.style.right, viewportWidth);
+  const bottom = toPx(el.style.bottom, viewportWidth);
+  const width = toPx(button.style.width, viewportWidth);
+  return {
+    label: "zoom-controls",
+    x0: viewportWidth - right - width,
+    x1: viewportWidth - right,
+    yFromBottom0: bottom,
+    yFromBottom1: bottom + ZOOM_CONTROLS_HEIGHT_ESTIMATE,
+  };
+}
+
+/** `[data-drawer]`'s box, present only while the drawer is open. `top: 0; bottom: 0` spans the full viewport height by construction, so every other box's y-band trivially falls inside it — only x matters for this one, same as fix round 1. */
+function drawerBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const el = container.querySelector<HTMLElement>("[data-drawer]");
+  if (!el) return null;
+  const right = toPx(el.style.right, viewportWidth);
+  const width = Math.min(toPx(el.style.width, viewportWidth), toPx(el.style.maxWidth, viewportWidth));
+  return {
+    label: "drawer",
+    x0: viewportWidth - right - width,
+    x1: viewportWidth - right,
+    yFromBottom0: 0,
+    yFromBottom1: VIEWPORT_HEIGHT_PX,
+  };
+}
+
+/** `[data-indicator]`'s box: `left`/`bottom` are its own inline values; width is `min(its own maxWidth, INDICATOR_MAX_CONTENT_WIDTH)` — the same model `ZoomControls`' own breakpoint is built from (`floatingLayout.ts`), so the test and the runtime code agree on what "wide enough" means. */
+function indicatorBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const el = container.querySelector<HTMLElement>("[data-indicator]");
+  if (!el) return null;
+  const left = toPx(el.style.left, viewportWidth);
+  const bottom = toPx(el.style.bottom, viewportWidth);
+  const width = Math.min(toPx(el.style.maxWidth, viewportWidth), INDICATOR_MAX_CONTENT_WIDTH);
+  return {
+    label: "indicator",
+    x0: left,
+    x1: left + width,
+    yFromBottom0: bottom,
+    yFromBottom1: bottom + INDICATOR_HEIGHT_ESTIMATE,
+  };
+}
+
+/** `[data-topbar]`'s box: `left: 0; right: 0` spans the full width; its height is estimated (see `TOPBAR_HEIGHT_ESTIMATE`) and placed from `VIEWPORT_HEIGHT_PX`, since it is the one top-anchored control among an otherwise bottom-anchored set. */
+function topBarBox(container: HTMLElement): Box | null {
+  const el = container.querySelector<HTMLElement>("[data-topbar]");
+  if (!el) return null;
+  return {
+    label: "topbar",
+    x0: 0,
+    x1: Number.POSITIVE_INFINITY,
+    yFromBottom0: VIEWPORT_HEIGHT_PX - TOPBAR_HEIGHT_ESTIMATE,
+    yFromBottom1: VIEWPORT_HEIGHT_PX,
+  };
+}
+
+/**
+ * The minimap's footprint, as a hard-coded "known box" (the controller's
+ * own framing) rather than read from the library's internal
+ * `[data-minimap]` canvas — `src/minimap/Minimap.tsx` is not part of the
+ * public API (`data-minimap` is an implementation detail, never documented
+ * or exported), so this test deliberately does not couple itself to that
+ * internal DOM shape. `MINIMAP_WIDTH`/`MINIMAP_HEIGHT`/`MINIMAP_MARGIN`
+ * (`floatingLayout.ts`) are the same constants `ZoomControls`' own
+ * breakpoint is built from.
+ */
+function minimapBox(): Box {
+  return {
+    label: "minimap (known box)",
+    x0: MINIMAP_MARGIN,
+    x1: MINIMAP_MARGIN + MINIMAP_WIDTH,
+    yFromBottom0: MINIMAP_MARGIN,
+    yFromBottom1: MINIMAP_MARGIN + MINIMAP_HEIGHT,
+  };
+}
+
+function boxesIntersect(a: Box, b: Box): boolean {
+  const xOverlap = a.x0 < b.x1 && b.x0 < a.x1;
+  const yOverlap = a.yFromBottom0 < b.yFromBottom1 && b.yFromBottom0 < a.yFromBottom1;
+  return xOverlap && yOverlap;
+}
+
+/**
+ * Every pair of the demo's *underlying* floating boxes — the zoom
+ * controls, the indicator, the top bar, and the minimap's known footprint
+ * — must not intersect, at the given viewport width, whether the drawer is
+ * open or closed. Computed entirely from inline values (`toPx`, the same
+ * technique `checkNoOverflowAt375` uses for a single element's own
+ * overflow), no layout engine involved (showcase Task 6 fix round 2).
+ *
+ * The drawer's own box is deliberately never one of the boxes checked
+ * here, even though it is `data-floating-control` too and `drawerBox`
+ * above can compute it: `task-6-rereview.md`'s own "Checked and clean"
+ * section explicitly confirms the drawer covering the *unshifted* zoom
+ * controls at a narrow width is the intended fallback, not a bug — a
+ * one-tap-reversible overlay is allowed to sit on top of whatever is
+ * beneath it, the same way it is allowed to sit on top of the map itself
+ * (`Drawer.tsx`'s own doc comment). What this check is actually for is the
+ * relationship *between* the controls that are not the drawer — in
+ * particular, whether the zoom controls' *shifted* position (only reached
+ * while the drawer is open and the viewport is wide) lands somewhere it
+ * shouldn't among them; the caller still sweeps both drawer states because
+ * that is what decides whether the controls are in their unshifted or
+ * shifted position, even though the drawer's own box plays no part in the
+ * assertion below.
+ *
+ * `[data-footer]` is deliberately left out too: it sets no fixed `width`
+ * (only a `maxWidth: "92vw"` ceiling) and allows wrapping
+ * (`whiteSpace: "normal"`), so unlike the indicator (`nowrap` + ellipsis,
+ * genuinely bounded by its own short, known-format text) there is no
+ * defensible width estimate to give it from inline values alone — jsdom
+ * cannot measure the wrapped text either. A rough hand check against its
+ * two possible disclosure strings suggests it may already sit close to, or
+ * over, the zoom controls' unshifted position at some of these widths,
+ * independent of the drawer or anything this fix round touches (footer's
+ * own styling and the controls' unshifted `right: 12` are both unchanged
+ * since showcase Task 5) — flagged in this round's report as an unverified
+ * hypothesis for a follow-up, not fixed or asserted here.
+ */
+function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: number): void {
+  const boxes = [
+    zoomControlsBox(container, viewportWidth),
+    indicatorBox(container, viewportWidth),
+    topBarBox(container),
+    minimapBox(),
+  ].filter((b): b is Box => b !== null);
+
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i] as Box;
+      const b = boxes[j] as Box;
+      expect(
+        boxesIntersect(a, b),
+        `${a.label} [${a.x0.toFixed(1)},${a.x1.toFixed(1)}]x[${a.yFromBottom0},${a.yFromBottom1}] and ${b.label} [${b.x0.toFixed(1)},${b.x1.toFixed(1)}]x[${b.yFromBottom0},${b.yFromBottom1}] intersect at viewport width ${viewportWidth}`,
+      ).toBe(false);
     }
   }
 }
@@ -632,6 +825,86 @@ describe("App (showcase Task 5)", () => {
         checkAllFloatingControls(container);
         const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
         expect(zoom?.style.right).toBe("12px");
+      });
+    });
+
+    describe("clearing the minimap and indicator too, not just the drawer (fix round 2)", () => {
+      const originalInnerWidth = window.innerWidth;
+
+      /** `window.innerWidth` is read at mount and kept live via a `resize` listener (`ZoomControls`). */
+      function setViewportWidth(width: number): void {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+      }
+
+      afterEach(() => {
+        setViewportWidth(originalInnerWidth);
+      });
+
+      /**
+       * `task-6-rereview.md`'s own sweep, reproduced here so it runs on
+       * every future change rather than once during review: two widths
+       * below `WIDE_ENOUGH_TO_SHIFT_PX`'s old (fix round 1) value of 440,
+       * the whole 440-588 band the finding named as colliding with the
+       * minimap under that old threshold, then a spread up through a
+       * clearly-wide desktop width.
+       */
+      const SWEEP_WIDTHS = [375, 440, 480, 588, 600, 768, 1024, 1280];
+
+      it("no two floating boxes intersect at any swept width, with the drawer open or with it closed", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        zoomToNear();
+        const nodeButton = await screen.findByRole("button", { name: "A Tiny Paper About Testing" });
+
+        for (const width of SWEEP_WIDTHS) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+
+          // Drawer closed — trivially safe (the unshifted `right: 12` never
+          // reaches the bottom-left column at these widths), checked anyway
+          // so a future change to the unshifted position is covered too.
+          checkNoFloatingBoxIntersections(container, width);
+
+          // Drawer open — the actual case fix round 1 broke and this round fixes.
+          fireEvent.click(nodeButton);
+          await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+          checkNoFloatingBoxIntersections(container, width);
+
+          fireEvent.keyDown(document, { key: "Escape" });
+          expect(screen.queryByRole("dialog")).toBeNull();
+        }
+      });
+
+      it("the breakpoint itself is derived from BOTTOM_LEFT_COLUMN_WIDTH, not just the drawer, and clears both it and the drawer", async () => {
+        const breakpoint = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
+        setViewportWidth(breakpoint);
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        zoomToNear();
+        fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+        await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+        const zoom = zoomControlsBox(container, breakpoint);
+        const drawer = drawerBox(container, breakpoint);
+        const minimap = minimapBox();
+        expect(zoom).not.toBeNull();
+        expect(drawer).not.toBeNull();
+        const z = zoom as NonNullable<typeof zoom>;
+        const d = drawer as NonNullable<typeof drawer>;
+
+        // The breakpoint's own formula has one GUTTER for the column
+        // clearance and, separately, one GUTTER on each side of the
+        // shifted position's own footprint (before the drawer, and after
+        // the button width) — so at this exact boundary the shifted
+        // controls clear the minimap/indicator column by 2×GUTTER, not
+        // just one; the important part is that it is strictly more than
+        // zero (a real, positive margin), parsed from inline values, no
+        // layout engine.
+        const columnRight = Math.max(minimap.x1, INDICATOR_LEFT + INDICATOR_MAX_CONTENT_WIDTH);
+        expect(z.x0 - columnRight).toBe(2 * GUTTER);
+        // And, unchanged from fix round 1, still clears the drawer's own
+        // left edge by exactly one GUTTER.
+        expect(d.x0 - z.x1).toBe(GUTTER);
       });
     });
   });

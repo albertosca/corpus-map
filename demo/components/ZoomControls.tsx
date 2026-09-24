@@ -2,6 +2,7 @@ import type { CorpusMapHandle } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useState } from "react";
 import { DRAWER_MAX_WIDTH } from "./Drawer";
+import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
 
 interface ZoomControlsProps {
   mapRef: RefObject<CorpusMapHandle | null>;
@@ -9,21 +10,25 @@ interface ZoomControlsProps {
   drawerOpen?: boolean | undefined;
 }
 
-/** Breathing room between the controls and the drawer's edge, and between the controls and the viewport edge below that. */
-const GUTTER = 12;
-
-/** The buttons' own width — shared with `buttonStyle` below and with the breakpoint calculation. */
-const BUTTON_WIDTH = 84;
+/** The buttons' own width — shared with `buttonStyle` below and with the breakpoint calculation; exported so the test can compute the same breakpoint rather than duplicating the number. */
+export const BUTTON_WIDTH = 84;
 
 /**
- * The controls' own footprint (a gutter, the button width, another gutter)
- * plus the drawer's own width ceiling plus the gutter between them: below
- * this viewport width there is nowhere to put the controls that does not
- * overlap the open drawer, so `ZoomControls` falls back to letting the
- * drawer cover it (reversible — see `Drawer.tsx`'s own doc comment) rather
- * than shifting into other floating controls or off screen.
+ * The shifted position's own footprint (a gutter, the button width,
+ * another gutter) plus the drawer's own width ceiling plus the gutter
+ * between them, plus — showcase Task 6 fix round 2 — the bottom-left
+ * column's own width (the minimap, or the indicator above it if that is
+ * wider) plus a gutter past it, since the first version of this shift
+ * (fix round 1) only cleared the drawer and, for a stretch of
+ * intermediate viewport widths, landed the controls directly on top of
+ * the minimap and, at those same widths, close enough to the indicator to
+ * matter (`task-6-rereview.md`'s new [Important] finding). Below this
+ * viewport width there is nowhere to put the controls that clears both
+ * the drawer AND that column, so `ZoomControls` falls back to letting the
+ * drawer cover it (reversible — see `Drawer.tsx`'s own doc comment)
+ * rather than landing on other floating controls or off screen.
  */
-const WIDE_ENOUGH_TO_SHIFT_PX = GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
+const WIDE_ENOUGH_TO_SHIFT_PX = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
 
 const wrapStyle: CSSProperties = {
   position: "fixed",
