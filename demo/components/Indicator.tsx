@@ -39,7 +39,7 @@ const style: CSSProperties = {
 export function Indicator({ view }: IndicatorProps): ReactElement | null {
   if (!view) return null;
   return (
-    <div data-indicator style={style}>
+    <div data-indicator data-floating-control style={style}>
       {view.regime} · {view.ratio.toFixed(1)}× · {view.visibleCount} items
     </div>
   );

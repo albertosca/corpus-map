@@ -32,7 +32,7 @@ const buttonStyle: CSSProperties = {
  */
 export function ZoomControls({ mapRef }: ZoomControlsProps): ReactElement {
   return (
-    <div data-zoom-controls style={wrapStyle}>
+    <div data-zoom-controls data-floating-control style={wrapStyle}>
       <button type="button" style={buttonStyle} onClick={() => mapRef.current?.zoomIn()}>
         Zoom in
       </button>

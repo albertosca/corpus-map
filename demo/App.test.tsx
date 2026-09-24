@@ -91,6 +91,37 @@ function checkNoOverflowAt375(el: HTMLElement, label: string): void {
   }
 }
 
+/** The element's own identifying `data-*` attribute name (besides `data-floating-control`), or its tag name if it has none. */
+function labelFor(el: HTMLElement): string {
+  const dataAttr = Array.from(el.attributes).find(
+    (a) => a.name.startsWith("data-") && a.name !== "data-floating-control",
+  );
+  return dataAttr ? dataAttr.name.slice("data-".length) : el.tagName.toLowerCase();
+}
+
+/**
+ * Walks every element `App` marks `data-floating-control` (the map's own
+ * top bar, zoom controls, indicator, footer, and the load-error block), plus
+ * each one's `button`/`select` descendants — the only elements that
+ * currently carry their own width-like inline styles — and overflow-checks
+ * every one. Fix round 2, Finding 2: the previous version of this test
+ * hand-picked which elements to check, so a new floating control (the
+ * load-error block and its "Try again" button, added in Fix round 1) could
+ * slip past unnoticed; discovering them from the DOM instead means a future
+ * one can't slip past the same way.
+ */
+function checkAllFloatingControls(container: HTMLElement): void {
+  const controls = Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"));
+  expect(controls.length, "expected at least one [data-floating-control] element to check").toBeGreaterThan(0);
+  for (const el of controls) {
+    const label = labelFor(el);
+    checkNoOverflowAt375(el, label);
+    for (const child of Array.from(el.querySelectorAll<HTMLElement>("button, select"))) {
+      checkNoOverflowAt375(child, `${label} > ${labelFor(child)}`);
+    }
+  }
+}
+
 /** Mocks the arXiv dynamic import with an already-resolved payload, then imports and renders a fresh `App`. */
 async function renderApp(arxivPayload: unknown = TINY_ARXIV_SPEC) {
   vi.doMock("./corpora/arxiv.json", () => ({ default: arxivPayload }));
@@ -229,20 +260,7 @@ describe("App (showcase Task 5)", () => {
     const footer = container.querySelector<HTMLElement>("[data-footer]");
     expect(footer?.style.position).toBe("fixed");
 
-    for (const [label, el] of [
-      ["topbar", topbar],
-      ["select", screen.getByLabelText("Corpus") as HTMLSelectElement],
-      ["zoom-controls", zoom],
-      ...Array.from(zoom?.querySelectorAll<HTMLElement>("button") ?? []).map((b, i): [string, HTMLElement] => [
-        `zoom-button-${i}`,
-        b,
-      ]),
-      ["indicator", indicator],
-      ["footer", footer],
-    ] as Array<[string, HTMLElement | null]>) {
-      if (!el) throw new Error(`${label} not found`);
-      checkNoOverflowAt375(el, label);
-    }
+    checkAllFloatingControls(container);
   });
 
   describe("Fix round 1 — failed arXiv load recovers, and the switch-away-and-back race", () => {
@@ -256,7 +274,7 @@ describe("App (showcase Task 5)", () => {
         .mockRejectedValueOnce(new Error("network drop"))
         .mockReturnValueOnce(retryPromise);
       const { App } = await import("./App");
-      render(createElement<AppProps>(App, { loadArxiv }));
+      const { container } = render(createElement<AppProps>(App, { loadArxiv }));
 
       await screen.findByText("Could not load the corpus.");
       // No apology, no jargon, and it says what to do next.
@@ -265,11 +283,17 @@ describe("App (showcase Task 5)", () => {
       // The corpus select stays usable even while the map failed to load.
       expect((screen.getByLabelText("Corpus") as HTMLSelectElement).disabled).toBe(false);
 
+      // Fix round 2, Finding 2: the load-error block and its "Try again"
+      // button are floating controls too — checked here, while the error
+      // state is actually on screen, since the general layout-sanity test
+      // never triggers this branch.
+      checkAllFloatingControls(container);
+
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
       // The stale error must not linger while the retry itself is still in
-      // flight — this is what proves the retry's own `attempt` tag (not
-      // just its eventual success) is what makes it stop showing.
+      // flight — this is what proves clearing on a fresh load key (not just
+      // the retry's eventual success) is what makes it stop showing.
       await waitFor(() => {
         expect(screen.queryByText("Could not load the corpus.")).toBeNull();
       });
@@ -336,6 +360,110 @@ describe("App (showcase Task 5)", () => {
       });
       await screen.findByText(territoryButtonText(FRESH_SPEC));
       expect(screen.queryByText(territoryButtonText(STALE_SPEC))).toBeNull();
+    });
+  });
+
+  describe("Fix round 2 — every load start gets its own attempt identity", () => {
+    /** A `loadArxiv` mock whose Nth call's controls (resolve/reject) are pushed to `controls` in call order. */
+    function controllableLoader(): {
+      loadArxiv: () => Promise<MapSpec>;
+      controls: Array<{ resolve: (spec: MapSpec) => void; reject: (err: Error) => void }>;
+    } {
+      const controls: Array<{ resolve: (spec: MapSpec) => void; reject: (err: Error) => void }> = [];
+      const loadArxiv = vi.fn<() => Promise<MapSpec>>(
+        () =>
+          new Promise<MapSpec>((resolve, reject) => {
+            controls.push({ resolve, reject });
+          }),
+      );
+      return { loadArxiv, controls };
+    }
+
+    it("switching away from a failed load and back shows Loading, not the stale error, while the fresh load is in flight", async () => {
+      const { loadArxiv, controls } = controllableLoader();
+      const { App } = await import("./App");
+      render(createElement<AppProps>(App, { loadArxiv }));
+
+      await waitFor(() => expect(loadArxiv).toHaveBeenCalledTimes(1));
+      const first = controls[0];
+      if (!first) throw new Error("expected the first load's controls to exist");
+      await act(async () => {
+        first.reject(new Error("network drop"));
+      });
+      await screen.findByText("Could not load the corpus.");
+
+      // Switch away, then back to arXiv, before the fresh load settles —
+      // the re-reviewer's exact scenario: this is an *implicit* retry
+      // (never touches `retryToken`), so a scheme that only tags a fresh
+      // attempt on "Try again" clicks misses it entirely.
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await screen.findByText(territoryButtonText(elementsSpec));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
+
+      await waitFor(() => expect(loadArxiv).toHaveBeenCalledTimes(2));
+      // A genuinely fresh load is now in flight; the previous, already-
+      // settled error must not still be on screen.
+      expect(screen.queryByText("Could not load the corpus.")).toBeNull();
+      expect(screen.getByText("Loading corpus…")).not.toBeNull();
+
+      const second = controls[1];
+      if (!second) throw new Error("expected the second load's controls to exist");
+      await act(async () => {
+        second.resolve(TINY_ARXIV_SPEC);
+      });
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+    });
+
+    it("pins: switching away from a loaded corpus and back re-imports rather than reusing the cached spec", async () => {
+      const loadArxiv = vi.fn<() => Promise<MapSpec>>().mockResolvedValue(TINY_ARXIV_SPEC);
+      const { App } = await import("./App");
+      render(createElement<AppProps>(App, { loadArxiv }));
+
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      expect(loadArxiv).toHaveBeenCalledTimes(1);
+
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await screen.findByText(territoryButtonText(elementsSpec));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      // Pinned, not asserted as "the only correct choice": every switch
+      // back into arXiv re-imports rather than reusing a cached spec. The
+      // real dynamic import this stands in for is itself cheap to call
+      // again — the browser's own module cache serves a second
+      // `import()` of the same specifier without a network re-fetch — so
+      // there is no caching layer here that could quietly go stale.
+      expect(loadArxiv).toHaveBeenCalledTimes(2);
+    });
+
+    it("pins: a stale failure that arrives after a later success does not override it", async () => {
+      const { loadArxiv, controls } = controllableLoader();
+      const { App } = await import("./App");
+      render(createElement<AppProps>(App, { loadArxiv }));
+
+      await waitFor(() => expect(loadArxiv).toHaveBeenCalledTimes(1));
+
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await screen.findByText(territoryButtonText(elementsSpec));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
+      await waitFor(() => expect(loadArxiv).toHaveBeenCalledTimes(2));
+
+      const second = controls[1];
+      if (!second) throw new Error("expected the second load's controls to exist");
+      await act(async () => {
+        second.resolve(TINY_ARXIV_SPEC);
+      });
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      // The stale FIRST attempt now fails, late — must not override the
+      // success already on screen.
+      const first = controls[0];
+      if (!first) throw new Error("expected the first load's controls to exist");
+      await act(async () => {
+        first.reject(new Error("stale network drop"));
+      });
+      expect(screen.getByText(territoryButtonText(TINY_ARXIV_SPEC))).not.toBeNull();
+      expect(screen.queryByText("Could not load the corpus.")).toBeNull();
     });
   });
 });

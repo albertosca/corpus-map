@@ -48,7 +48,7 @@ export function TopBar({ corpora, activeId, onChange }: TopBarProps): ReactEleme
   };
 
   return (
-    <header data-topbar style={barStyle}>
+    <header data-topbar data-floating-control style={barStyle}>
       <strong style={{ fontSize: 15 }}>corpus-map</strong>
       <label htmlFor="corpus-select" style={labelStyle}>
         Corpus

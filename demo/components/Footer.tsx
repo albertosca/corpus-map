@@ -39,7 +39,7 @@ export function Footer({ corpusId }: FooterProps): ReactElement | null {
   const text = DISCLOSURE[corpusId];
   if (!text) return null;
   return (
-    <footer data-footer style={style}>
+    <footer data-footer data-floating-control style={style}>
       {text}
     </footer>
   );

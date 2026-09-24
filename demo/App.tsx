@@ -114,19 +114,26 @@ interface CurrentCorpus {
 }
 
 /**
- * The one async corpus's (arXiv's) most recent settled load, tagged with
- * the `retryToken` it was started under — never cleared by a synchronous
- * `setState` at the top of the load effect (that pattern trips ESLint's
- * `react-hooks/set-state-in-effect`, and for good reason: it costs an extra,
- * always-unconditional render on every single effect run). Instead, `attempt`
- * lets render itself decide whether a stored result is still current: a
- * fresh retry bumps `retryToken`, so the *previous* attempt's stored result
- * — success or error — no longer matches and is treated as absent, exactly
- * as if it had been cleared, with no extra render and no extra state.
+ * The one async corpus's (arXiv's) most recently settled load.
+ *
+ * Fix round 2: this used to carry an `attempt` number tagged with the
+ * `retryToken` a load was started under, filtered by `attempt === retryToken`
+ * in render. That scheme missed a real case a re-review caught: switching
+ * away from arXiv after a failed load, then switching *back*, starts a
+ * fresh load without ever touching `retryToken` — so the fresh attempt's
+ * tag was identical to the stale, already-settled error's tag, and the
+ * stale error kept showing while the fresh load was genuinely in flight.
+ * `App` now clears this outright, during render (see `renderedLoadKey`
+ * below), the moment the rendered `(corpusId, retryToken)` pair itself
+ * changes from what was rendered last — true on every corpus switch and
+ * every retry, round trips included, with nothing to keep in sync by hand.
+ * The load effect's own `cancelled` closure (unchanged) still separately
+ * protects against a stale promise being *written* late; this protects
+ * against an already-written stale result still being *shown*.
  */
 type AsyncResult =
-  | { status: "ready"; id: GalleryEntry["id"]; attempt: number; spec: MapSpec }
-  | { status: "error"; id: GalleryEntry["id"]; attempt: number };
+  | { status: "ready"; id: GalleryEntry["id"]; spec: MapSpec }
+  | { status: "error"; id: GalleryEntry["id"] };
 
 export interface AppProps {
   /**
@@ -154,10 +161,12 @@ export function App({ loadArxiv }: AppProps = {}) {
   // corpus is read straight from `gallery` below, so switching between them
   // never shows a "Loading corpus…" flash while an effect catches up.
   const [asyncResult, setAsyncResult] = useState<AsyncResult | null>(null);
+  // The `(corpusId, retryToken)` pair `asyncResult` was last kept for — see
+  // `AsyncResult`'s own doc comment.
+  const [renderedLoadKey, setRenderedLoadKey] = useState<string | null>(null);
   // Bumped by the "Try again" button to force the load effect below to
   // re-run for the *same* corpusId (a dependency array only re-fires an
-  // effect on a value that actually changed), and to mark any previous
-  // attempt's stored result stale (see `AsyncResult`'s own doc comment).
+  // effect on a value that actually changed).
   const [retryToken, setRetryToken] = useState(0);
   const [view, setView] = useState<CorpusMapView | null>(null);
   const mapRef = useRef<CorpusMapHandle>(null);
@@ -165,8 +174,25 @@ export function App({ loadArxiv }: AppProps = {}) {
   const activeEntry = gallery.find((entry) => entry.id === corpusId);
   if (!activeEntry) throw new Error(`unknown corpus id: ${corpusId}`);
 
-  const currentAsync =
-    asyncResult && asyncResult.id === corpusId && asyncResult.attempt === retryToken ? asyncResult : null;
+  // Adjusted during render, not in an effect — the same pattern
+  // `CorpusMap.tsx` itself uses for its own `fitBasis` (compare a stored
+  // basis against what render is about to show, react synchronously before
+  // anything paints), rather than an effect whose entire synchronous body
+  // would be an unconditional `setState` call (Fix round 1 hit exactly that
+  // ESLint error, `react-hooks/set-state-in-effect`, trying to do this
+  // inside the load effect). `effectiveAsyncResult` — not the raw
+  // `asyncResult` state — is what the rest of this render uses, so a
+  // just-detected transition is reflected in *this* render's output too,
+  // not only the next one.
+  const loadKey = `${corpusId}:${retryToken}`;
+  const isFreshLoadKey = renderedLoadKey !== loadKey;
+  if (isFreshLoadKey) {
+    setRenderedLoadKey(loadKey);
+    if (asyncResult !== null) setAsyncResult(null);
+  }
+  const effectiveAsyncResult = isFreshLoadKey ? null : asyncResult;
+
+  const currentAsync = effectiveAsyncResult && effectiveAsyncResult.id === corpusId ? effectiveAsyncResult : null;
   const current: CurrentCorpus | null =
     "spec" in activeEntry
       ? { id: activeEntry.id, spec: activeEntry.spec }
@@ -180,13 +206,12 @@ export function App({ loadArxiv }: AppProps = {}) {
     if (!entry || "spec" in entry) return;
     const load = loadArxiv ?? entry.load;
     let cancelled = false;
-    const attempt = retryToken;
     load().then(
       (spec) => {
-        if (!cancelled) setAsyncResult({ status: "ready", id: entry.id, attempt, spec });
+        if (!cancelled) setAsyncResult({ status: "ready", id: entry.id, spec });
       },
       () => {
-        if (!cancelled) setAsyncResult({ status: "error", id: entry.id, attempt });
+        if (!cancelled) setAsyncResult({ status: "error", id: entry.id });
       },
     );
     return () => {
@@ -212,9 +237,9 @@ export function App({ loadArxiv }: AppProps = {}) {
         {current ? (
           <CorpusMap ref={mapRef} spec={current.spec} renderCard={CARDS[current.id]} minimap onViewChange={setView} />
         ) : hasError ? (
-          <div data-load-error role="alert" style={errorStyle}>
+          <div data-load-error data-floating-control role="alert" style={errorStyle}>
             <p style={{ margin: 0 }}>Could not load the corpus.</p>
-            <button type="button" onClick={handleRetry} style={retryButtonStyle}>
+            <button type="button" data-retry onClick={handleRetry} style={retryButtonStyle}>
               Try again
             </button>
           </div>
