@@ -166,14 +166,14 @@ export declare function layoutCards(anchors: readonly CardAnchor[], size: {
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
-export { DEFAULT_THRESHOLDS } from "./lod/lod";
+export { DEFAULT_THRESHOLDS, resolveThresholds } from "./lod/lod";
 export type { MinimapCorner } from "./minimap/Minimap";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
 export { DEFAULT_THEME } from "./shared/theme";
 export type { Tuning } from "./shared/tuning";
-export { DEFAULT_TUNING } from "./shared/tuning";
+export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 
 // labels/contrast.d.ts
 type Rgba = [number, number, number, number];

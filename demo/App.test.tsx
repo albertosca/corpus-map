@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { MapSpec } from "corpus-map";
+import { DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Type-only: safe to import statically even though every test imports the
@@ -905,6 +906,241 @@ describe("App (showcase Task 5)", () => {
         // And, unchanged from fix round 1, still clears the drawer's own
         // left edge by exactly one GUTTER.
         expect(d.x0 - z.x1).toBe(GUTTER);
+      });
+    });
+  });
+
+  describe("Tuning panel and wheel capture (showcase Task 7)", () => {
+    /** Same two-filler-plus-centre-pair shape as `SELECT_SPEC` above, kept local to this describe block. */
+    const PANEL_SPEC: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "west", "east"], centroid: [0, 0] },
+      ],
+      nodes: [
+        {
+          id: "p1",
+          label: "A Tiny Paper About Testing",
+          x: -0.0001,
+          y: 0,
+          territory: "cs.AI",
+          meta: { year: 2026, url: "https://arxiv.org/abs/0000.00001" },
+        },
+        { id: "west", label: "West filler", x: -1, y: 0, territory: "cs.AI" },
+        { id: "east", label: "East filler", x: 1, y: 0, territory: "cs.AI" },
+      ],
+    };
+
+    function zoomToNear(): void {
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      }
+    }
+
+    function mapSurface(container: HTMLElement): HTMLElement {
+      const el = container.querySelector<HTMLElement>("[data-map-surface]");
+      if (!el) throw new Error("expected the map surface to be mounted");
+      return el;
+    }
+
+    it("the gear button toggles the tuning panel", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      expect(screen.getByRole("dialog", { name: "Tuning" })).not.toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+    });
+
+    it("'t' opens and closes the tuning panel", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      fireEvent.keyDown(document, { key: "t" });
+      expect(screen.getByRole("dialog", { name: "Tuning" })).not.toBeNull();
+
+      fireEvent.keyDown(document, { key: "t" });
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+    });
+
+    it("'t' typed with a modifier, or while a panel input has focus, does not toggle the panel", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      fireEvent.keyDown(document, { key: "t", ctrlKey: true });
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      expect(screen.getByRole("dialog", { name: "Tuning" })).not.toBeNull();
+
+      // Revert-check target: dropping the input/select/textarea guard in
+      // App.tsx's keydown handler must fail this assertion (the panel would
+      // close instead of staying open).
+      const pinchGainInput = screen.getByLabelText(/Pinch gain/);
+      fireEvent.keyDown(pinchGainInput, { key: "t" });
+      expect(screen.getByRole("dialog", { name: "Tuning" })).not.toBeNull();
+    });
+
+    it("opening the panel closes the drawer, and selecting a node closes the panel (mutual exclusion)", async () => {
+      await renderApp(PANEL_SPEC);
+      await screen.findByText(territoryButtonText(PANEL_SPEC));
+      zoomToNear();
+      const nodeButton = await screen.findByRole("button", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.click(nodeButton);
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      expect(screen.getByRole("dialog", { name: "Tuning" })).not.toBeNull();
+      expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull();
+
+      fireEvent.click(nodeButton);
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+    });
+
+    it("changing pinchGain via the panel reaches the map's own tuning prop (observed through a ctrl-wheel zoom)", async () => {
+      const { container } = await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      await screen.findByText("far · 1.0× · 2 items");
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      // Revert-check target: if this change never reached `CorpusMap`'s own
+      // `tuning` prop, the ratio below would settle at the default
+      // pinchGain's factor (exp(50×5×0.002) ≈ 1.65, never reaching the
+      // `maxZoomPerEvent` clamp) instead of the clamp itself.
+      fireEvent.change(screen.getByLabelText(/Pinch gain/), { target: { value: "20" } });
+
+      // Default pinchGain (5): factor = exp(50×5×0.002) = exp(0.5) ≈ 1.65,
+      // below `maxZoomPerEvent`'s clamp of 2. pinchGain 20 pushes the same
+      // event past the clamp (exp(50×20×0.002) = exp(2) ≈ 7.39, clamped to
+      // 2) — ratio 2.0 is reachable in one event only once the new
+      // pinchGain actually took effect.
+      fireEvent.wheel(mapSurface(container), { deltaY: -50, deltaMode: 0, ctrlKey: true });
+      await screen.findByText(/mid · 2\.0×/);
+    });
+
+    it("an invalid thresholds combination (midAt > nearAt) shows the error and the map keeps the previous thresholds", async () => {
+      const { container } = await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      await screen.findByText("far · 1.0× · 2 items");
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
+
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/thresholds\.midAt \(10\) must be <= thresholds\.nearAt \(6\)/);
+
+      // Two full-clamp wheel-in events (each capped at `maxZoomPerEvent`'s
+      // default of 2×) land at ratio 4 — inside the *default* midAt=2
+      // regime's mid band. If the invalid draft (midAt=10) had reached the
+      // map instead of being rejected, ratio 4 would still read "far".
+      fireEvent.wheel(mapSurface(container), { deltaY: -600, deltaMode: 0, ctrlKey: false });
+      fireEvent.wheel(mapSurface(container), { deltaY: -600, deltaMode: 0, ctrlKey: false });
+      await screen.findByText(/mid · 4\.0×/);
+    });
+
+    it("Reset restores the panel's tuning/thresholds controls to their defaults and clears the error", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+
+      fireEvent.change(screen.getByLabelText(/Pinch gain/), { target: { value: "12" } });
+      fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
+      expect(screen.getByRole("alert")).not.toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect((screen.getByLabelText(/Pinch gain/) as HTMLInputElement).value).toBe(String(DEFAULT_TUNING.pinchGain));
+      expect((screen.getByLabelText(/Mid at/) as HTMLInputElement).value).toBe(String(DEFAULT_THRESHOLDS.midAt));
+    });
+
+    it("the wheel capture table inside the panel records a real wheel event on the map surface", async () => {
+      const { container } = await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+
+      fireEvent.wheel(mapSurface(container), { deltaY: -33, deltaMode: 0, ctrlKey: true });
+
+      const table = screen.getByRole("table");
+      const rows = within(table).getAllByRole("row");
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      const firstDataRow = rows[1] as HTMLElement;
+      const cells = within(firstDataRow).getAllByRole("cell");
+      expect(cells.map((c) => c.textContent)).toEqual(["-33.00", "0", "yes", "-"]);
+    });
+
+    it("the panel's own Close button and Escape both close it and return focus to the gear button", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      await screen.findByRole("dialog", { name: "Tuning" });
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tuning" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      await screen.findByRole("dialog", { name: "Tuning" });
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tuning" }));
+    });
+
+    it("an invalid Tuning combination (labelClasses.medium > large) shows the tuning error without crashing the map", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+
+      fireEvent.change(screen.getByLabelText(/Label class: large/), { target: { value: "0.2" } });
+      fireEvent.change(screen.getByLabelText(/Label class: medium/), { target: { value: "0.9" } });
+
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/tuning\.labelClasses\.medium/);
+      // The map itself must still be on screen, not crashed by an invalid
+      // `tuning` prop reaching `CorpusMap`.
+      expect(screen.getByText(territoryButtonText(TINY_ARXIV_SPEC))).not.toBeNull();
+    });
+
+    it("keeps the open tuning panel and its gear button within the floating-control overflow check", async () => {
+      const { container } = await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      await screen.findByRole("dialog", { name: "Tuning" });
+      checkAllFloatingControls(container);
+    });
+
+    describe("keeping the zoom controls reachable beside the tuning panel", () => {
+      const originalInnerWidth = window.innerWidth;
+
+      function setViewportWidth(width: number): void {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+      }
+
+      afterEach(() => {
+        setViewportWidth(originalInnerWidth);
+      });
+
+      it("on a wide viewport, shifts the zoom controls' right edge left of the panel's left edge while the panel is open", async () => {
+        setViewportWidth(1280);
+        const { container } = await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        await screen.findByRole("dialog", { name: "Tuning" });
+
+        // Revert-check target: dropping `|| panelOpen` from `App.tsx`'s
+        // `<ZoomControls drawerOpen={...} />` wiring must fail this
+        // assertion — the controls would stay at their unshifted `right`
+        // offset, directly under the open panel.
+        const panel = container.querySelector<HTMLElement>("[data-tuning-panel]");
+        const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
+        const panelRight = Number.parseFloat(panel?.style.right ?? "");
+        const panelLeftFromViewportRight = panelRight + DRAWER_MAX_WIDTH;
+        const zoomRight = Number.parseFloat(zoom?.style.right ?? "");
+        expect(zoomRight).toBeGreaterThan(panelLeftFromViewportRight);
       });
     });
   });
