@@ -1,6 +1,7 @@
 import type { CorpusMapHandle, CorpusMapView, MapNode, MapSpec } from "corpus-map";
 import { CorpusMap } from "corpus-map";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
 import { Indicator } from "./components/Indicator";
 import { TopBar } from "./components/TopBar";
@@ -169,7 +170,17 @@ export function App({ loadArxiv }: AppProps = {}) {
   // effect on a value that actually changed).
   const [retryToken, setRetryToken] = useState(0);
   const [view, setView] = useState<CorpusMapView | null>(null);
+  // The selected node's drawer (showcase Task 6). `null` until an
+  // `onSelect` fires; a corpus switch clears it in `handleCorpusChange`
+  // below so a stale selection from the corpus just left can never show.
+  const [selected, setSelected] = useState<MapNode | null>(null);
   const mapRef = useRef<CorpusMapHandle>(null);
+  // Not part of the library's own DOM (it wraps `CorpusMap`, whose own
+  // `[data-map-surface]` root carries no tabIndex/role of its own) — made
+  // programmatically focusable here (`tabIndex={-1}`: never in the Tab
+  // order, only reachable via `.focus()`) so the drawer has somewhere to
+  // return focus to when it closes.
+  const mapShellRef = useRef<HTMLDivElement>(null);
 
   const activeEntry = gallery.find((entry) => entry.id === corpusId);
   if (!activeEntry) throw new Error(`unknown corpus id: ${corpusId}`);
@@ -222,20 +233,37 @@ export function App({ loadArxiv }: AppProps = {}) {
   // A corpus switch invalidates whatever the previous corpus's map reported;
   // the indicator should read nothing until the new map's own mount fires
   // `onViewChange` again, never a stale count from the corpus just left.
+  // The drawer closes too — a selection belongs to the corpus it was made
+  // in, and must never keep showing once that corpus is gone.
   const handleCorpusChange = (id: GalleryEntry["id"]) => {
     setCorpusId(id);
     setView(null);
+    setSelected(null);
   };
 
   const handleRetry = () => {
     setRetryToken((t) => t + 1);
   };
 
+  // The territory a selected node belongs to, by full name
+  // (`spec.territories[].name`) rather than its id — resolved here, once,
+  // from whichever spec is actually on screen, so `Drawer` itself never
+  // needs to know how a `MapSpec` is shaped.
+  const territoryName =
+    selected && current ? (current.spec.territories.find((t) => t.id === selected.territory)?.name ?? null) : null;
+
   return (
     <div data-app-shell style={shellStyle}>
-      <div data-map-shell style={mapShellStyle}>
+      <div ref={mapShellRef} tabIndex={-1} data-map-shell style={mapShellStyle}>
         {current ? (
-          <CorpusMap ref={mapRef} spec={current.spec} renderCard={CARDS[current.id]} minimap onViewChange={setView} />
+          <CorpusMap
+            ref={mapRef}
+            spec={current.spec}
+            renderCard={CARDS[current.id]}
+            minimap
+            onViewChange={setView}
+            onSelect={setSelected}
+          />
         ) : hasError ? (
           <div data-load-error data-floating-control role="alert" style={errorStyle}>
             <p style={{ margin: 0 }}>Could not load the corpus.</p>
@@ -253,6 +281,13 @@ export function App({ loadArxiv }: AppProps = {}) {
       <ZoomControls mapRef={mapRef} />
       <Indicator view={view} />
       <Footer corpusId={corpusId} />
+      <Drawer
+        node={selected}
+        territoryName={territoryName}
+        isArxiv={current?.id === "arxiv"}
+        onClose={() => setSelected(null)}
+        returnFocusTo={mapShellRef}
+      />
     </div>
   );
 }

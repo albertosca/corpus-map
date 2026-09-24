@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { MapSpec } from "corpus-map";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -464,6 +464,124 @@ describe("App (showcase Task 5)", () => {
       });
       expect(screen.getByText(territoryButtonText(TINY_ARXIV_SPEC))).not.toBeNull();
       expect(screen.queryByText("Could not load the corpus.")).toBeNull();
+    });
+  });
+
+  describe("Selected-item drawer (showcase Task 6)", () => {
+    /**
+     * Selection only reaches `onSelect` through the accessible tree's own
+     * per-node buttons, which only exist at the "near" regime
+     * (`AccessibleTree`), for whichever nodes `visibleNodes` currently
+     * considers on screen. `TINY_ARXIV_SPEC`'s own two nodes sit exactly at
+     * its world bounds' extremes, so `fit`'s view just barely contains them
+     * at ratio 1 and *any* further zoom-in (which shrinks the view about
+     * the box centre) pushes both out of view before "near" is even
+     * reached — there is no zoom level where they are both in view and in
+     * the near regime. `SELECT_SPEC` below carries the same two papers
+     * (same ids, labels and meta as `TINY_ARXIV_SPEC`'s `p1`/`p2`, so every
+     * assertion below reads the same) placed a hair off dead centre
+     * instead, plus two filler nodes far out at the bounds' actual extremes
+     * — the fit still centres on (0, 0), so `p1`/`p2` stay on screen no
+     * matter how far in the box zooms.
+     */
+    const SELECT_SPEC: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2", "west", "east"], centroid: [0, 0] },
+      ],
+      nodes: [
+        {
+          id: "p1",
+          label: "A Tiny Paper About Testing",
+          x: -0.0001,
+          y: 0,
+          territory: "cs.AI",
+          meta: { year: 2026, url: "https://arxiv.org/abs/0000.00001" },
+        },
+        {
+          id: "p2",
+          label: "Another Tiny Paper",
+          x: 0.0001,
+          y: 0,
+          territory: "cs.AI",
+          meta: { year: 2025, url: "https://arxiv.org/abs/0000.00002" },
+        },
+        { id: "west", label: "West filler", x: -1, y: 0, territory: "cs.AI" },
+        { id: "east", label: "East filler", x: 1, y: 0, territory: "cs.AI" },
+      ],
+    };
+
+    /**
+     * Each "Zoom in" click multiplies the ratio by
+     * `exp(120 * DEFAULT_TUNING.wheelSensitivity)` (~1.27x); ten clicks
+     * clears the default `nearAt` threshold of 6 with room to spare, well
+     * under the `MAX_ZOOM_IN` clamp of 64x.
+     */
+    function zoomToNear(): void {
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      }
+    }
+
+    it("opens the drawer with the exact label and the arXiv link on selecting a node, and passes the floating-control overflow check", async () => {
+      const { container } = await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      expect(screen.queryByRole("dialog")).toBeNull();
+
+      zoomToNear();
+      const nodeButton = await screen.findByRole("button", { name: "A Tiny Paper About Testing" });
+      fireEvent.click(nodeButton);
+
+      const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      const link = within(dialog).getByRole("link", { name: "Open on arXiv" });
+      expect(link.getAttribute("href")).toBe("https://arxiv.org/abs/0000.00001");
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(within(dialog).getByText("Published 2026")).not.toBeNull();
+      expect(within(dialog).getByText("Artificial Intelligence")).not.toBeNull();
+
+      // The drawer is floating UI like every other demo control — this is
+      // the same style-based check the rest of the shell already passes,
+      // now walking the drawer too because it carries `data-floating-control`.
+      checkAllFloatingControls(container);
+    });
+
+    it("selecting a different node while open updates the drawer in place instead of closing it", async () => {
+      await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Another Tiny Paper" }));
+      await screen.findByRole("dialog", { name: "Another Tiny Paper" });
+      expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull();
+    });
+
+    it("switching corpus while the drawer is open closes it — a stale selection from the corpus just left must never show", async () => {
+      await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await screen.findByText(territoryButtonText(elementsSpec));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("Escape closes the drawer and returns focus to the map surface", async () => {
+      const { container } = await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      const mapShell = container.querySelector("[data-map-shell]");
+      expect(document.activeElement).toBe(mapShell);
     });
   });
 });
