@@ -118,7 +118,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     expect(el?.style.left).toBe("");
   });
 
-  it("does not repaint on an unrelated parent re-render — only when the view (x, y, w, h) actually changed (fix round 1, finding 2)", () => {
+  it("does not repaint on an unrelated parent re-render, but does repaint on a real view change — a pan and a box resize (fix round 1, finding 2; extended fix round 2)", () => {
     let minimapPaints = 0;
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
@@ -130,8 +130,21 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       }
       return ctx;
     } as unknown as typeof original;
+    // A drag (below) is frame-coalesced through `scheduleFrame`/`rafId`, the
+    // same queue-then-flush stub CorpusMap.handle.test.tsx's coalescing test
+    // uses, so the pan's one scheduled frame runs on demand.
+    const callbacks: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      callbacks.push(cb);
+      return callbacks.length;
+    });
+    const flush = () => {
+      act(() => {
+        for (const cb of callbacks.splice(0)) cb(0);
+      });
+    };
     try {
-      const { rerender } = render(
+      const { container, rerender } = render(
         <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
       );
       expect(minimapPaints).toBe(1);
@@ -143,8 +156,30 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
       );
       expect(minimapPaints).toBe(1);
+
+      // Fix round 2 (re-review): the assertions above alone only prove "no
+      // spurious repaint" — freezing `viewWorld`'s `useMemo` deps to `[]`
+      // (a minimap that never repaints again after mount) would leave both
+      // of them green too, since neither ever drives a real view change and
+      // checks the count actually moves. A genuine pan must bump it.
+      const el = surface(container);
+      fireEvent.pointerDown(el, { clientX: 0, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      fireEvent.pointerMove(el, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      fireEvent.pointerUp(el, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      flush();
+      expect(minimapPaints).toBe(2);
+
+      // And a genuine box resize (showcase Task 2's own `recenterOnBoxChange`
+      // path — a view change with no pointer interaction at all) must bump
+      // it again: `width` alone changing shifts `vp.tx`, which is exactly
+      // the kind of view change a `[]`-frozen memo would also miss.
+      rerender(
+        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={800} height={300} minimap={true} />,
+      );
+      expect(minimapPaints).toBe(3);
     } finally {
       HTMLCanvasElement.prototype.getContext = original;
+      raf.mockRestore();
     }
   });
 
