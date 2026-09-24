@@ -380,7 +380,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(canvasSurface(ctx), scene, spec, vp, { regime: next, pointAlpha }, theme);
+    paint(canvasSurface(ctx), scene, spec, vp, { regime: next, pointAlpha, width, height }, theme);
   }, [spec, scene, vp, next, pointAlpha, theme, width, height]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the

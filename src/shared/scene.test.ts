@@ -123,7 +123,7 @@ describe("buildScene", () => {
     const fit = fitSpec(corpus, width, height, 24);
     const scene = buildScene(corpus, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     const surface = new RecordingSurface();
-    paint(surface, scene, corpus, fit, { regime: "far", pointAlpha: 0 }, DEFAULT_THEME);
+    paint(surface, scene, corpus, fit, { regime: "far", pointAlpha: 0, width, height }, DEFAULT_THEME);
 
     expect(surface.texts.length).toBeGreaterThan(0);
     const boxes = surface.texts.map((t) => {

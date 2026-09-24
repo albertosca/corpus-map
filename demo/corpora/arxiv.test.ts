@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { estimateText, LABEL_PADDING } from "../../src/labels/placement";
+import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
+import { fade, regimeAt } from "../../src/lod/regime";
+import { paint } from "../../src/shared/paint";
+import { buildScene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
 import { SpecError, validateSpec } from "../../src/shared/spec";
+import { RecordingSurface } from "../../src/shared/surface";
+import { DEFAULT_THEME } from "../../src/shared/theme";
+import { DEFAULT_TUNING } from "../../src/shared/tuning";
+import { fitSpec } from "../../src/viewport/fit";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
 // typed off the ~1.8 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
@@ -82,4 +91,56 @@ describe("the arXiv corpus", () => {
   it("arxiv.meta.json's attribution is exactly the arXiv sentence", () => {
     expect(meta.attribution).toBe(ATTRIBUTION);
   });
+});
+
+/**
+ * Acceptance 2 of the showcase spec, automated: the demo opens on the real
+ * arXiv corpus at the fitted view, in the far regime, with every drawn name
+ * whole inside the box and no two names overlapping. Built through the
+ * same pipeline `CorpusMap` uses (`buildScene`, `fitSpec` with its 24 px
+ * padding, `paint`), with `estimateText` standing in for a real browser's
+ * text metrics.
+ */
+describe("acceptance 2: the fitted arXiv view", () => {
+  const spec = validateSpec(rawSpec);
+  const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+
+  for (const [width, height] of [
+    [1440, 900],
+    [375, 812],
+  ] as const) {
+    it(`at ${width}x${height}: far regime, names drawn, none overlapping, none crossing the canvas edge`, () => {
+      const regime = regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis);
+      expect(regime).toBe("far");
+
+      const fit = fitSpec(spec, width, height, 24);
+      const surface = new RecordingSurface();
+      const pointAlpha = fade(1, DEFAULT_THRESHOLDS.midAt, DEFAULT_TUNING.fadeBand);
+      paint(surface, scene, spec, fit, { regime, pointAlpha, width, height }, DEFAULT_THEME);
+
+      const boxes = surface.texts.map((t) => ({ text: t.text, x: t.x, y: t.y, ...estimateText(t.text, t.font) }));
+      expect(boxes.length).toBeGreaterThan(0);
+
+      const crossing = boxes
+        .filter(
+          (b) =>
+            b.x - b.width / 2 < 0 || b.x + b.width / 2 > width || b.y - b.height / 2 < 0 || b.y + b.height / 2 > height,
+        )
+        .map((b) => b.text);
+      expect(crossing).toEqual([]);
+
+      const overlapping: string[] = [];
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          const a = boxes[i];
+          const b = boxes[j];
+          if (!a || !b) continue;
+          const ox = Math.abs(a.x - b.x) < (a.width + b.width) / 2 + LABEL_PADDING;
+          const oy = Math.abs(a.y - b.y) < (a.height + b.height) / 2 + LABEL_PADDING;
+          if (ox && oy) overlapping.push(`${a.text} / ${b.text}`);
+        }
+      }
+      expect(overlapping).toEqual([]);
+    });
+  }
 });

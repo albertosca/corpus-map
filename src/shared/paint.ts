@@ -9,15 +9,18 @@ import type { Surface } from "./surface";
 import type { Theme } from "./theme";
 
 /**
- * Per-frame values a precomputed `Scene` does not carry: the regime and the
- * point layer's fade. No ratio here — a placed name now carries its own
- * absolute `activeFromScale` (see `labels/placement.ts`), so `paintLabels`
- * reads `vp.scale` directly instead of a fit-relative ratio threaded through
- * the frame.
+ * Per-frame values a precomputed `Scene` does not carry: the regime, the
+ * point layer's fade, and the canvas's CSS size (a name whose box would
+ * cross its edge is skipped, see `paintLabels`). No ratio here — a placed
+ * name carries its own absolute `activeFromScale` (see
+ * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
+ * instead of a fit-relative ratio threaded through the frame.
  */
 export interface Frame {
   regime: Regime;
   pointAlpha: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -32,5 +35,5 @@ export function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewpor
     paintPoints(surface, spec, vp, theme);
     surface.globalAlpha(1);
   }
-  paintLabels(surface, scene, vp, theme);
+  paintLabels(surface, scene, vp, theme, frame);
 }

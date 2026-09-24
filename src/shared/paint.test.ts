@@ -22,6 +22,14 @@ const spec: MapSpec = {
 };
 
 const vp = { scale: 10, tx: 0, ty: 0 };
+/** Large enough that every name the tests below expect lies whole inside it. */
+const BOX = { width: 4000, height: 4000 };
+/**
+ * `vp` shifted in from the canvas's top-left corner: `paintLabels` skips a
+ * name whose box would cross the edge, and at `vp` the names of `spec`
+ * (anchored near world (1, 1), screen (10, 10)) start left of x = 0.
+ */
+const LABEL_VP = { scale: 10, tx: 200, ty: 200 };
 
 function first<T>(items: readonly T[]): T {
   const item = items[0];
@@ -30,18 +38,24 @@ function first<T>(items: readonly T[]): T {
 }
 
 function frameFor(regime: Regime, extra?: Partial<Frame>): Frame {
-  return { regime, pointAlpha: 1, ...extra };
+  return { regime, pointAlpha: 1, width: BOX.width, height: BOX.height, ...extra };
 }
 
-function paintSpec(s: MapSpec, surface: RecordingSurface, regime: Regime, extra?: Partial<Frame>): void {
+function paintSpec(
+  s: MapSpec,
+  surface: RecordingSurface,
+  regime: Regime,
+  extra?: Partial<Frame>,
+  at: typeof vp = vp,
+): void {
   const scene = buildScene(s, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-  paint(surface, scene, s, vp, frameFor(regime, extra), DEFAULT_THEME);
+  paint(surface, scene, s, at, frameFor(regime, extra), DEFAULT_THEME);
 }
 
 describe("paint", () => {
   it("draws territory boundary and name at the far regime, and no points", () => {
     const s = new RecordingSurface();
-    paintSpec(spec, s, "far");
+    paintSpec(spec, s, "far", undefined, LABEL_VP);
     expect(s.polygons).toHaveLength(1);
     expect(s.texts.map((t) => t.text)).toContain("North");
     expect(s.circles).toHaveLength(0);
@@ -171,14 +185,21 @@ describe("paint", () => {
       below,
       scene,
       two,
-      { ...vp, scale: small.activeFromScale / 2 },
-      { regime: "mid", pointAlpha: 1 },
+      { ...LABEL_VP, scale: small.activeFromScale / 2 },
+      { regime: "mid", pointAlpha: 1, ...BOX },
       DEFAULT_THEME,
     );
     expect(below.texts.map((t) => t.text)).not.toContain("Small Territory");
 
     const above = new RecordingSurface();
-    paint(above, scene, two, { ...vp, scale: small.activeFromScale }, { regime: "mid", pointAlpha: 1 }, DEFAULT_THEME);
+    paint(
+      above,
+      scene,
+      two,
+      { ...LABEL_VP, scale: small.activeFromScale },
+      { regime: "mid", pointAlpha: 1, ...BOX },
+      DEFAULT_THEME,
+    );
     expect(above.texts.map((t) => t.text)).toContain("Small Territory");
   });
 });
@@ -204,7 +225,7 @@ describe("paint order", () => {
       ],
     };
     const s = new RecordingSurface();
-    paintSpec(two, s, "mid");
+    paintSpec(two, s, "mid", undefined, LABEL_VP);
     expect(s.calls).toEqual([
       "clear",
       "polygon",
@@ -219,8 +240,43 @@ describe("paint order", () => {
 
   it("paints boundaries then names, and no points, at the far regime", () => {
     const s = new RecordingSurface();
-    paintSpec(spec, s, "far");
+    paintSpec(spec, s, "far", undefined, LABEL_VP);
     expect(s.calls).toEqual(["clear", "polygon", "text"]);
+  });
+});
+
+describe("names at the canvas edge", () => {
+  // Each case puts one canvas edge half a pixel inside or outside the box
+  // of "North" (the only name `spec` places), measured from its anchor.
+  const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const north = scene.labels.find((l) => l.name === "North");
+  if (!north) throw new Error("expected a placed label for North");
+  const halfW = north.width / 2;
+  const halfH = north.height / 2;
+  // Screen position of the anchor under LABEL_VP.
+  const ax = north.anchor[0] * LABEL_VP.scale + LABEL_VP.tx;
+  const ay = north.anchor[1] * LABEL_VP.scale + LABEL_VP.ty;
+  const drawn = (at: typeof vp, width: number, height: number): string[] => {
+    const s = new RecordingSurface();
+    paint(s, scene, spec, at, { regime: "far", pointAlpha: 0, width, height }, DEFAULT_THEME);
+    return s.texts.map((t) => t.text);
+  };
+
+  it("draws a name whose box lies whole inside the canvas", () => {
+    expect(drawn(LABEL_VP, ax + halfW + 0.5, ay + halfH + 0.5)).toEqual(["North"]);
+    // Shift the view so the box's left and top edges sit at x, y = 0.5.
+    const shifted = { ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) + 0.5, ty: LABEL_VP.ty - (ay - halfH) + 0.5 };
+    expect(drawn(shifted, 4000, 4000)).toEqual(["North"]);
+  });
+
+  it("skips a name whose box would cross the right or bottom edge", () => {
+    expect(drawn(LABEL_VP, ax + halfW - 0.5, 4000)).toEqual([]);
+    expect(drawn(LABEL_VP, 4000, ay + halfH - 0.5)).toEqual([]);
+  });
+
+  it("skips a name whose box would cross the left or top edge", () => {
+    expect(drawn({ ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) - 0.5 }, 4000, 4000)).toEqual([]);
+    expect(drawn({ ...LABEL_VP, ty: LABEL_VP.ty - (ay - halfH) - 0.5 }, 4000, 4000)).toEqual([]);
   });
 });
 

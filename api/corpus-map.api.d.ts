@@ -190,8 +190,19 @@ import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-/** Draws every placed name whose `activeFromScale` the viewport's current scale has reached. */
-export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme): void;
+/** The canvas's CSS size, which every drawn name must fit inside. */
+export interface LabelBox {
+    width: number;
+    height: number;
+}
+/**
+ * Draws every placed name whose `activeFromScale` the viewport's current
+ * scale has reached and whose measured box lies whole inside the canvas.
+ * A name that would cross the edge is skipped, not moved: skipping never
+ * creates an overlap, and a name cut by the edge cannot be read anyway (a
+ * long name on a phone-width fitted view appears once the user zooms in).
+ */
+export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme, box: LabelBox): void;
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -420,15 +431,18 @@ import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
 import type { Theme } from "./theme";
 /**
- * Per-frame values a precomputed `Scene` does not carry: the regime and the
- * point layer's fade. No ratio here — a placed name now carries its own
- * absolute `activeFromScale` (see `labels/placement.ts`), so `paintLabels`
- * reads `vp.scale` directly instead of a fit-relative ratio threaded through
- * the frame.
+ * Per-frame values a precomputed `Scene` does not carry: the regime, the
+ * point layer's fade, and the canvas's CSS size (a name whose box would
+ * cross its edge is skipped, see `paintLabels`). No ratio here — a placed
+ * name carries its own absolute `activeFromScale` (see
+ * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
+ * instead of a fit-relative ratio threaded through the frame.
  */
 export interface Frame {
     regime: Regime;
     pointAlpha: number;
+    width: number;
+    height: number;
 }
 /**
  * The single place that decides paint order: boundaries, then points, then
