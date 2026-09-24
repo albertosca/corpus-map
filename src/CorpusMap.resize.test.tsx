@@ -1,8 +1,8 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CorpusMap } from "./CorpusMap";
-import type { MapSpec } from "./shared/spec";
+import { CorpusMap, type CorpusMapView } from "./CorpusMap";
+import type { MapNode, MapSpec } from "./shared/spec";
 import { DEFAULT_TUNING } from "./shared/tuning";
 
 /**
@@ -527,5 +527,61 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
       latestObserver().report(800, 600);
     });
     expect(commits).toBe(0);
+  });
+});
+
+describe("CorpusMap ignores a zero-area box (whole-branch review I3)", () => {
+  it("a zero-height first box is not a fit basis: the first real size fits (explicit props)", () => {
+    const views: CorpusMapView[] = [];
+    const props = {
+      spec: twoNodeSpec,
+      renderCard: (n: MapNode) => <div>{n.label}</div>,
+      cardSize: NO_GROUPING,
+      onViewChange: (v: CorpusMapView) => views.push(v),
+    };
+    const { container, rerender } = render(<CorpusMap {...props} width={1280} height={0} />);
+    expect(container.querySelector("canvas")).toBeNull();
+    expect(views).toEqual([]);
+
+    rerender(<CorpusMap {...props} width={1280} height={800} />);
+    expect(container.querySelector("canvas")).not.toBeNull();
+    expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
+  });
+
+  it("a zero-width first measurement is not a fit basis: the first real measurement fits (measured)", () => {
+    const views: CorpusMapView[] = [];
+    const { container } = render(
+      <CorpusMap
+        spec={twoNodeSpec}
+        renderCard={(n) => <div>{n.label}</div>}
+        cardSize={NO_GROUPING}
+        onViewChange={(v) => views.push(v)}
+      />,
+    );
+    act(() => {
+      latestObserver().report(0, 800);
+    });
+    expect(container.querySelector("canvas")).toBeNull();
+    expect(views).toEqual([]);
+
+    act(() => {
+      latestObserver().report(1280, 800);
+    });
+    expect(container.querySelector("canvas")).not.toBeNull();
+    expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
+  });
+
+  it("a box that collapses to zero height and comes back keeps the view it had", () => {
+    const views: CorpusMapView[] = [];
+    const props = {
+      spec: twoNodeSpec,
+      renderCard: (n: MapNode) => <div>{n.label}</div>,
+      cardSize: NO_GROUPING,
+      onViewChange: (v: CorpusMapView) => views.push(v),
+    };
+    const { rerender } = render(<CorpusMap {...props} width={1280} height={800} />);
+    rerender(<CorpusMap {...props} width={1280} height={0} />);
+    rerender(<CorpusMap {...props} width={1280} height={800} />);
+    expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
   });
 });

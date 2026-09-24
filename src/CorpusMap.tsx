@@ -61,6 +61,9 @@ export interface CorpusMapProps {
    * centre — it does not refit. A new `spec` still refits. A consumer who
    * wants to refit after a box change calls `fit()` on the imperative
    * handle obtained through the `ref` prop above (`CorpusMapHandle`).
+   * A box with zero width or height, from either source, counts as no box
+   * yet: the map paints nothing and the first box with both sides positive
+   * is the one it fits to.
    */
   width?: number | undefined;
   height?: number | undefined;
@@ -174,7 +177,13 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   const explicitBox =
     props.width !== undefined && props.height !== undefined ? { width: props.width, height: props.height } : null;
   const box = explicitBox ?? measured;
-  const ready = box !== null;
+  // A box with zero width or height is not ready: fitting into it would
+  // squeeze the corpus into about a pixel, and since a later box change
+  // keeps the view, that degenerate scale would stick. A `ResizeObserver`
+  // does report such boxes (a parent animating open from height 0, or one
+  // sized by content that loads later), so they must not become the fit
+  // basis; the map renders nothing until both sides are positive.
+  const ready = box !== null && box.width > 0 && box.height > 0;
   const width = box?.width ?? 0;
   const height = box?.height ?? 0;
 

@@ -35,6 +35,9 @@ export interface CorpusMapProps {
      * centre — it does not refit. A new `spec` still refits. A consumer who
      * wants to refit after a box change calls `fit()` on the imperative
      * handle obtained through the `ref` prop above (`CorpusMapHandle`).
+     * A box with zero width or height, from either source, counts as no box
+     * yet: the map paints nothing and the first box with both sides positive
+     * is the one it fits to.
      */
     width?: number | undefined;
     height?: number | undefined;
