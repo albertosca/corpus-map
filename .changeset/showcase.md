@@ -7,3 +7,5 @@
 `resolveTuning` and `resolveThresholds` are now exported from the package's own public door (they were already reachable as internal declarations, but never through `src/index.ts`). Both validate and default their input the same way `CorpusMap` already does internally, throwing a `RangeError` naming the offending field on an invalid value — useful for a consumer that wants to validate a `tuning`/`thresholds` value before handing it to `CorpusMap`, the way the demo's new hidden tuning panel does.
 
 A territory name whose box would cross the edge of the map is no longer drawn cut in half; it is skipped until the view brings it whole inside the box. On a phone-width fitted view, some long names therefore wait for the first zoom in.
+
+A zoom step (wheel, pinch, `zoomIn()`, `zoomOut()`) never moves opposite to its direction: when a keep-view resize has left the scale outside the zoom band (zoomed all the way in, then the box shrinks), zooming in leaves the scale where it is instead of snapping out to the band edge.

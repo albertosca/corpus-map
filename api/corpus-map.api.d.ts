@@ -703,12 +703,21 @@ export declare function zoomAt(v: Viewport, sx: number, sy: number, factor: numb
  */
 export declare function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport;
 /**
- * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. Factored out of
- * the wheel handler so the imperative handle's `zoomIn`/`zoomOut` (showcase
- * Task 3) clamp to exactly the same band through the same code, rather than
- * a second copy of the arithmetic that could drift from it.
+ * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. The wheel
+ * handler and the imperative handle's `zoomIn`/`zoomOut` (showcase Task 3)
+ * both reach it through `zoomStepScale`, so they clamp to exactly the same
+ * band through the same code.
  */
 export declare function clampScale(scale: number, fit: number, maxZoomOut: number, maxZoomIn: number): number;
+/**
+ * The scale after one zoom step by `factor` (> 1 zooms in, < 1 zooms out),
+ * clamped to the band like `clampScale`, but never moving opposite to the
+ * step. A keep-view resize can leave the scale outside the band (zoomed to
+ * the maximum, then the box shrinks); there, clamping alone would turn a
+ * zoom-in into a zoom-out. Outside the band a step only moves toward it,
+ * and a step away from it leaves the scale where it is.
+ */
+export declare function zoomStepScale(scale: number, factor: number, fit: number, maxZoomOut: number, maxZoomIn: number): number;
 /**
  * A box resize (showcase Task 2): keeps `scale` and keeps the world point
  * formerly at the old box's centre at the new box's centre, instead of

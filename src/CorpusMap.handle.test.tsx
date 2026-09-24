@@ -71,6 +71,58 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     expect(lastCall(calls).ratio).toBeCloseTo(64, 9);
   });
 
+  it("above the band after a shrinking resize, zoomIn and a wheel zoom-in never zoom out; zoomOut still zooms out", () => {
+    const ref = createRef<CorpusMapHandle>();
+    const calls: View[] = [];
+    const props = {
+      ref,
+      spec,
+      renderCard: () => null,
+      onViewChange: (v: View) => calls.push(v),
+    };
+    const { container, rerender } = render(<CorpusMap {...props} width={400} height={300} />);
+    act(() => {
+      for (let i = 0; i < 200; i += 1) ref.current?.zoomIn();
+    });
+    expect(lastCall(calls).ratio).toBeCloseTo(64, 9);
+
+    // Keep-view resize: the scale is kept while the fitted scale shrinks.
+    rerender(<CorpusMap {...props} width={200} height={150} />);
+    const above = lastCall(calls).ratio;
+    expect(above).toBeGreaterThan(64);
+
+    act(() => ref.current?.zoomIn());
+    expect(lastCall(calls).ratio).toBeCloseTo(above, 9);
+    fireEvent.wheel(surface(container), { deltaY: -120, clientX: 100, clientY: 75 });
+    expect(lastCall(calls).ratio).toBeCloseTo(above, 9);
+
+    act(() => ref.current?.zoomOut());
+    expect(lastCall(calls).ratio).toBeLessThan(above);
+  });
+
+  it("below the band after a growing resize, zoomOut never zooms in", () => {
+    const ref = createRef<CorpusMapHandle>();
+    const calls: View[] = [];
+    const props = {
+      ref,
+      spec,
+      renderCard: () => null,
+      onViewChange: (v: View) => calls.push(v),
+    };
+    const { rerender } = render(<CorpusMap {...props} width={400} height={300} />);
+    act(() => {
+      for (let i = 0; i < 200; i += 1) ref.current?.zoomOut();
+    });
+    expect(lastCall(calls).ratio).toBeCloseTo(1 / 8, 9);
+
+    rerender(<CorpusMap {...props} width={800} height={600} />);
+    const below = lastCall(calls).ratio;
+    expect(below).toBeLessThan(1 / 8);
+
+    act(() => ref.current?.zoomOut());
+    expect(lastCall(calls).ratio).toBeCloseTo(below, 9);
+  });
+
   it("stops 200 zoomOut calls at fit / 8", () => {
     const ref = createRef<CorpusMapHandle>();
     const calls: View[] = [];

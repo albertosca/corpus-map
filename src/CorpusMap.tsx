@@ -25,7 +25,15 @@ import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { fitSpec, worldBounds } from "./viewport/fit";
 import { useElementSize } from "./viewport/useElementSize";
-import { clampScale, panBy, recenterOnBoxChange, toScreen, toWorld, type Viewport, zoomTo } from "./viewport/viewport";
+import {
+  panBy,
+  recenterOnBoxChange,
+  toScreen,
+  toWorld,
+  type Viewport,
+  zoomStepScale,
+  zoomTo,
+} from "./viewport/viewport";
 import { wheelZoomFactor } from "./viewport/wheel";
 
 /** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
@@ -99,7 +107,9 @@ const FIT_PADDING = 24;
 /**
  * Wheel zoom, and the imperative handle's `zoomIn`/`zoomOut` (showcase
  * Task 3), are clamped to [fit / MAX_ZOOM_OUT, fit * MAX_ZOOM_IN] of the
- * fitted scale, through the shared `clampScale`.
+ * fitted scale, through the shared `zoomStepScale`, which also keeps a
+ * step from moving opposite to its direction when a keep-view resize has
+ * left the scale outside that band.
  */
 const MAX_ZOOM_OUT = 8;
 const MAX_ZOOM_IN = 64;
@@ -448,14 +458,14 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     zoomIn: () => {
       const factor = wheelZoomFactor({ deltaY: -120, deltaMode: 0, ctrlKey: false }, tuning);
       setVp((v) => {
-        const target = clampScale(v.scale * factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
+        const target = zoomStepScale(v.scale, factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
         return zoomTo(v, width / 2, height / 2, target);
       });
     },
     zoomOut: () => {
       const factor = wheelZoomFactor({ deltaY: 120, deltaMode: 0, ctrlKey: false }, tuning);
       setVp((v) => {
-        const target = clampScale(v.scale * factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
+        const target = zoomStepScale(v.scale, factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
         return zoomTo(v, width / 2, height / 2, target);
       });
     },
@@ -488,7 +498,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       );
       setVp((v) => {
         const fit = fitScaleRef.current;
-        const target = clampScale(v.scale * factor, fit, MAX_ZOOM_OUT, MAX_ZOOM_IN);
+        const target = zoomStepScale(v.scale, factor, fit, MAX_ZOOM_OUT, MAX_ZOOM_IN);
         return zoomTo(v, e.clientX - rect.left, e.clientY - rect.top, target);
       });
       // A wheel zoom moves every on-screen point, so a hover name resolved

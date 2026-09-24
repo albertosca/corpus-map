@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { panBy, recenterOnBoxChange, toScreen, toWorld, type Viewport, zoomAt, zoomTo } from "./viewport";
+import {
+  panBy,
+  recenterOnBoxChange,
+  toScreen,
+  toWorld,
+  type Viewport,
+  zoomAt,
+  zoomStepScale,
+  zoomTo,
+} from "./viewport";
 
 const v: Viewport = { scale: 2, tx: 10, ty: -5 };
 
@@ -43,6 +52,26 @@ describe("viewport", () => {
     const after = toWorld(z, 400, 300);
     expect(after[0]).toBeCloseTo(before[0], 9);
     expect(after[1]).toBeCloseTo(before[1], 9);
+  });
+});
+
+describe("zoomStepScale (whole-branch review M11: a step never moves opposite to its direction)", () => {
+  const fit = 1;
+
+  it("inside the band, applies the factor and clamps to the band", () => {
+    expect(zoomStepScale(2, 1.5, fit, 8, 64)).toBe(3);
+    expect(zoomStepScale(60, 1.5, fit, 8, 64)).toBe(64);
+    expect(zoomStepScale(0.2, 0.5, fit, 8, 64)).toBe(0.125);
+  });
+
+  it("above the band (a resize kept the scale), zooming in stays put and zooming out moves out", () => {
+    expect(zoomStepScale(100, 1.5, fit, 8, 64)).toBe(100);
+    expect(zoomStepScale(100, 0.9, fit, 8, 64)).toBe(64);
+  });
+
+  it("below the band, zooming out stays put and zooming in moves in", () => {
+    expect(zoomStepScale(0.05, 0.5, fit, 8, 64)).toBe(0.05);
+    expect(zoomStepScale(0.05, 1.5, fit, 8, 64)).toBe(0.125);
   });
 });
 

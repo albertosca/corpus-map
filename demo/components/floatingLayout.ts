@@ -40,7 +40,11 @@ export const INDICATOR_LEFT = MINIMAP_MARGIN;
  * a fact: the longest plausible string the indicator ever shows is
  * `"near · 64.0× · 10000 items"` (~26 characters) — `far`/`mid`/`near` are
  * its only three regime words, `64.0×` is `MAX_ZOOM_IN`'s own ceiling
- * (`src/CorpusMap.tsx`) formatted to one decimal, and `10000` is the
+ * (`src/CorpusMap.tsx`) formatted to one decimal (a keep-view resize can
+ * leave the ratio above it, e.g. `158.1×` after shrinking the window at
+ * full zoom: one character more, which the rounding below still covers; a
+ * ratio of 1000 or more would need the window shrunk about sixteenfold at
+ * full zoom), and `10000` is the
  * synthetic corpus's own top size (spec 4 §2, `App.tsx`'s tuning panel
  * range). At roughly 7px/character for 13px system-ui text, plus the
  * indicator's own `padding: "4px 10px"` (20px), that is ~202px; rounded up
