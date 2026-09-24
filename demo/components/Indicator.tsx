@@ -1,23 +1,19 @@
 import type { CorpusMapView } from "corpus-map";
 import type { CSSProperties, ReactElement } from "react";
+import { GUTTER, INDICATOR_LEFT, MINIMAP_HEIGHT, MINIMAP_MARGIN } from "./floatingLayout";
 
 interface IndicatorProps {
   view: CorpusMapView | null;
 }
 
-// Mirrors the library's internal Minimap (not exported publicly, spec 4
-// §1): a 160x110 canvas with a 12px corner margin
-// (`src/minimap/Minimap.tsx`). The indicator sits in the same bottom-left
-// corner, stacked above it with a matching gap, rather than asking the
-// library for a size it deliberately keeps private.
-const MINIMAP_HEIGHT = 110;
-const MINIMAP_MARGIN = 12;
-const GAP = 12;
-
+// Sits in the library minimap's bottom-left corner, stacked above it with
+// one gutter between them. The minimap's size and margin come from
+// `floatingLayout.ts`, the demo's one copy of that private geometry, which
+// `ZoomControls` and the collision test read too.
 const style: CSSProperties = {
   position: "fixed",
-  left: MINIMAP_MARGIN,
-  bottom: MINIMAP_MARGIN + MINIMAP_HEIGHT + GAP,
+  left: INDICATOR_LEFT,
+  bottom: MINIMAP_MARGIN + MINIMAP_HEIGHT + GUTTER,
   zIndex: 10,
   maxWidth: "55vw",
   overflow: "hidden",

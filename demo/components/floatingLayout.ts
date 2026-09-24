@@ -1,10 +1,11 @@
 /**
  * Shared geometry constants for the demo's floating controls (showcase
- * Task 6 fix round 2) — used both by `ZoomControls` (to decide when it is
- * safe to shift beside the open drawer, without landing on the library's
- * own minimap or the indicator above it) and by `App.test.tsx`'s pairwise
- * collision check, so the two stay in sync by construction rather than by
- * two hand-kept copies of the same numbers.
+ * Task 6 fix round 2) — used by `Indicator` (its own position above the
+ * minimap), by `ZoomControls` (to decide when it is safe to shift beside
+ * the open drawer, without landing on the library's own minimap or the
+ * indicator above it) and by `App.test.tsx`'s pairwise collision check, so
+ * they stay in sync by construction rather than by hand-kept copies of the
+ * same numbers.
  */
 
 /**
@@ -21,14 +22,12 @@ export const MINIMAP_HEIGHT = 110;
  * corner margin every `MinimapCorner` uses. The demo only ever renders
  * `"bottom-left"` (`App.tsx`'s `<CorpusMap minimap ... />`), so this is
  * also the minimap's distance from the box's left and bottom edges.
- * `Indicator.tsx` already carries its own copy of this same number under
- * the same name, for the same reason (it stacks directly above the
- * minimap) — this file does not replace that copy, only adds a second one
- * for `ZoomControls`/the test to share, rather than a third hand-typed 12.
+ * `Indicator.tsx` reads it from here to stack itself directly above the
+ * minimap.
  */
 export const MINIMAP_MARGIN = 12;
 
-/** Mirrors `Indicator.tsx`'s own `left: MINIMAP_MARGIN`. */
+/** The indicator's `left`, used by `Indicator.tsx` itself. */
 export const INDICATOR_LEFT = MINIMAP_MARGIN;
 
 /**
