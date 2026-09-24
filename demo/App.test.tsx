@@ -125,12 +125,27 @@ function labelFor(el: HTMLElement): string {
  *
  * Every `data-floating-control` element must declare a `width` or
  * `maxWidth` (something `checkNoOverflowAt375` can bound) AND a `left` or
- * `right` (a horizontal anchor — every floating control here is
+ * `right` (a horizontal anchor — every floating control here is meant to be
  * `position: fixed`/`absolute`, anchored to a side, never centred by
- * margin alone). Missing either one fails immediately, naming the
- * element, instead of the previous silent no-op.
+ * margin alone). Missing either one fails immediately, naming the element,
+ * instead of the previous silent no-op.
+ *
+ * Task 7 fix round 2: also requires `position` to be `fixed` or
+ * `absolute`. Fix round 1's re-review caught the gap this closes from the
+ * other side — an in-flow (`static`) element cannot be genuinely floating
+ * UI no matter what `left`/`width` values it carries (a normal-flow block
+ * ignores them), so a `data-floating-control` marker on one would let the
+ * two checks above pass on values that do nothing. This is what makes
+ * `data-load-error` correctly *not* eligible any more (fix round 2 removes
+ * its marker instead of feeding it inert geometry — see `App.tsx`'s
+ * `errorStyle`).
  */
 function assertDeclaresOwnBox(el: HTMLElement, label: string): void {
+  const position = el.style.position;
+  expect(
+    position === "fixed" || position === "absolute",
+    `${label} is position:"${position || "static"}", not fixed/absolute — an in-flow element cannot be genuinely floating UI and must not carry data-floating-control`,
+  ).toBe(true);
   const declaresWidth = (["width", "maxWidth"] as const).some((prop) => {
     const raw = el.style[prop];
     return !!raw && raw !== "auto";
@@ -148,28 +163,54 @@ function assertDeclaresOwnBox(el: HTMLElement, label: string): void {
 }
 
 /**
+ * A descendant `button`/`select` inside a floating container is bounded in
+ * real CSS terms one of two ways: an inline `maxWidth: "100%"` (a
+ * percentage resolves against the containing block, so this genuinely caps
+ * the descendant at its container's width — unlike `flexWrap`, which only
+ * wraps a line of items onto a new row and neither shrinks nor clips a
+ * single item wider than its container), or its own `width`/`maxWidth` as
+ * a `px`/`vw` value, in which case that value itself still has to clear
+ * `checkNoOverflowAt375`'s usual ceiling. A descendant with neither —
+ * nothing at all, or a `px`/`vw` value past the ceiling — fails by name.
+ */
+function assertDescendantIsBounded(el: HTMLElement, label: string): void {
+  if (el.style.maxWidth === "100%") return; // genuinely bounded by its container, nothing further to check
+  const declaresPxOrVwBound = (["width", "maxWidth"] as const).some((prop) => {
+    const raw = el.style[prop];
+    return !!raw && /^[\d.]+(px|vw)$/.test(raw.trim());
+  });
+  expect(
+    declaresPxOrVwBound,
+    `${label} is not bounded: no maxWidth:"100%" and no px/vw width/maxWidth of its own`,
+  ).toBe(true);
+  checkNoOverflowAt375(el, label);
+}
+
+/**
  * Walks every element `App` marks `data-floating-control` (the map's own
- * top bar, zoom controls, indicator, footer, the load-error block, the
- * tuning panel) and, for each one, first requires it to declare enough of
- * its own geometry to be measured at all (`assertDeclaresOwnBox`), then
- * overflow-checks it (`checkNoOverflowAt375`). Fix round 2, Finding 2: the
- * previous version of this test hand-picked which elements to check;
- * discovering them from the DOM instead means a future one can't slip past
- * unnoticed.
+ * top bar, zoom controls, indicator, footer, the tuning panel — the
+ * load-error block no longer qualifies, fix round 2) and, for each one,
+ * first requires it to declare enough of its own geometry to be measured
+ * at all, including genuinely being positioned (`assertDeclaresOwnBox`),
+ * then overflow-checks it (`checkNoOverflowAt375`), then walks every
+ * `button`/`select` descendant and requires each one to be bounded too
+ * (`assertDescendantIsBounded`). Fix round 2, Finding 2: the previous
+ * version of this test hand-picked which elements to check; discovering
+ * them from the DOM instead means a future one can't slip past unnoticed.
  *
- * Task 7 fix round 1: no longer recurses into `button`/`select`
- * descendants. A floating container that declares its own `width`/
- * `maxWidth` already bounds whatever is wrapped inside it (normal block
- * flow, or `flexWrap: "wrap"` where the container uses it) — the
- * container's own footprint is what has to be right, not each button's.
- * Checking descendants individually was also *how* the gear button's gap
- * shipped undetected: a descendant with no geometry of its own (every
- * plain `<button>` in this demo) just skipped every property check
- * silently, the same false-pass `assertDeclaresOwnBox` now forbids at the
- * container level. A real browser layout assertion (whether a nested
- * button's rendered box, not just its inline style, ever exceeds its
- * container) is out of reach here — jsdom has no layout engine — and
- * stays a `BACKLOG.md` item rather than a false sense of coverage.
+ * Task 7 fix round 1 removed the descendant walk on the claim that a
+ * container's own `width`/`maxWidth` already bounds whatever is inside
+ * it — **wrong**, per fix round 1's own re-review: `flexWrap: "wrap"`
+ * wraps a *line* of items onto a new row once their combined width
+ * exceeds the container, it does not shrink or clip a single item that is
+ * itself wider than the container, and nothing here sets
+ * `overflow: hidden` to clip one either. Restored the walk (fix round 2),
+ * now checking each descendant against real CSS containment
+ * (`assertDescendantIsBounded`) rather than skipping it as "covered by the
+ * parent." A real browser layout assertion (whether a descendant's
+ * *rendered* box, not just its inline style, ever exceeds its container)
+ * is still out of reach here — jsdom has no layout engine — and stays a
+ * `BACKLOG.md` item, not simulated.
  */
 function checkAllFloatingControls(container: HTMLElement): void {
   const controls = Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"));
@@ -178,6 +219,9 @@ function checkAllFloatingControls(container: HTMLElement): void {
     const label = labelFor(el);
     assertDeclaresOwnBox(el, label);
     checkNoOverflowAt375(el, label);
+    for (const child of Array.from(el.querySelectorAll<HTMLElement>("button, select"))) {
+      assertDescendantIsBounded(child, `${label} > ${labelFor(child)}`);
+    }
   }
 }
 
@@ -525,10 +569,14 @@ describe("App (showcase Task 5)", () => {
       // The corpus select stays usable even while the map failed to load.
       expect((screen.getByLabelText("Corpus") as HTMLSelectElement).disabled).toBe(false);
 
-      // Fix round 2, Finding 2: the load-error block and its "Try again"
-      // button are floating controls too — checked here, while the error
-      // state is actually on screen, since the general layout-sanity test
-      // never triggers this branch.
+      // Fix round 2, Finding 2 (Task 6): originally added because the
+      // load-error block was itself marked `data-floating-control` and
+      // walked here. Task 7 fix round 2 removed that marker (it's static
+      // in-flow content, not floating UI — see `App.tsx`'s `errorStyle`);
+      // this call is kept because the *other* floating controls (top bar,
+      // zoom controls, indicator, footer) are still on screen while the
+      // error state shows, and the general layout-sanity test never
+      // triggers this branch.
       checkAllFloatingControls(container);
 
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));

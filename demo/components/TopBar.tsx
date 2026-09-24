@@ -59,6 +59,14 @@ const gearButtonStyle: CSSProperties = {
   background: "rgba(255,255,255,0.92)",
   color: "#1a1d23",
   fontSize: 13,
+  // Real containment (Task 7 fix round 2), not the container's own
+  // `maxWidth` alone: `barStyle`'s `flexWrap: "wrap"` only wraps a line of
+  // items onto a new row once their combined width exceeds the container
+  // -- it does not shrink or clip a single item that is itself wider than
+  // the container. A percentage `maxWidth` resolves against the
+  // containing block, so this genuinely caps the button's own width at
+  // the top bar's, unlike the false claim fix round 1 made.
+  maxWidth: "100%",
 };
 
 /**

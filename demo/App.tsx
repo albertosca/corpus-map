@@ -91,6 +91,15 @@ const loadingStyle: CSSProperties = {
   fontSize: 14,
 };
 
+// Static in-flow content, like `loadingStyle` below -- a normal-flow block
+// child of `data-map-shell`, never `position: fixed`/`absolute`. Task 7 fix
+// round 1 added a `left`/`width` pair here solely to satisfy the overflow
+// checker's syntax requirement; fix round 2's re-review called that out as
+// inert (a `static` element ignores `left`, and `width: "100%"` compared
+// against a <=100 ceiling can never fail regardless of real layout) and the
+// wrong fix -- removed here, along with the `data-floating-control` marker
+// (`App.tsx`'s render below), rather than kept to please a check that no
+// longer treats this block as floating UI at all.
 const errorStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -98,14 +107,6 @@ const errorStyle: CSSProperties = {
   justifyContent: "center",
   gap: 12,
   height: "100%",
-  // Explicit `left`/`width` (Task 7 fix round 1): a normal-flow block
-  // child of `data-map-shell` (which fills the viewport) already spans
-  // its parent's full width by default, but `App.test.tsx`'s overflow
-  // check now requires every `data-floating-control` element to declare
-  // its own geometry inline, not rely on default block sizing -- see
-  // `checkAllFloatingControls`'s own doc comment.
-  left: 0,
-  width: "100%",
   color: "#1a1d23",
   fontSize: 14,
 };
@@ -421,7 +422,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             onSelect={handleSelect}
           />
         ) : hasError ? (
-          <div data-load-error data-floating-control role="alert" style={errorStyle}>
+          <div data-load-error role="alert" style={errorStyle}>
             <p style={{ margin: 0 }}>Could not load the corpus.</p>
             <button type="button" data-retry onClick={handleRetry} style={retryButtonStyle}>
               Try again

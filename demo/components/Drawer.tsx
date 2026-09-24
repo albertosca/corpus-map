@@ -77,6 +77,12 @@ const closeButtonStyle: CSSProperties = {
   background: "rgba(255,255,255,0.92)",
   color: "#1a1d23",
   fontSize: 13,
+  // A percentage `maxWidth` resolves against the containing block, so this
+  // genuinely caps the button at the drawer's own width -- real CSS
+  // containment, not a value chosen to please `App.test.tsx`'s overflow
+  // check (Task 7 fix round 2; the panel's `width: "90vw"` alone does not
+  // shrink or clip an over-wide child).
+  maxWidth: "100%",
 };
 
 const metaLineStyle: CSSProperties = {

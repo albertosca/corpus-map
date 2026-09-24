@@ -79,6 +79,12 @@ const iconButtonStyle: CSSProperties = {
   background: BUTTON_BACKGROUND_COLOR,
   color: PANEL_TEXT_COLOR,
   fontSize: 13,
+  // A percentage `maxWidth` resolves against the containing block, so this
+  // genuinely caps every button using this style (Close/Reset/Copy as
+  // JSON) at the panel's own width -- real CSS containment (Task 7 fix
+  // round 2), not a value chosen to please `App.test.tsx`'s overflow
+  // check.
+  maxWidth: "100%",
 };
 
 const actionsRowStyle: CSSProperties = {

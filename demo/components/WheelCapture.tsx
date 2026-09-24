@@ -38,6 +38,12 @@ const copyButtonStyle: CSSProperties = {
   background: "rgba(255,255,255,0.92)",
   color: "#1a1d23",
   fontSize: 12,
+  // This button lives inside `TuningPanel`'s `data-floating-control`
+  // (`WheelCapture` has no floating container of its own), so a
+  // percentage `maxWidth` here genuinely caps it at the panel's width --
+  // real CSS containment (Task 7 fix round 2), not a value chosen to
+  // please the overflow check.
+  maxWidth: "100%",
 };
 
 const statusStyle: CSSProperties = {
