@@ -24,18 +24,24 @@ const ANIMATION_STYLE = `
 }
 `;
 
+/**
+ * The drawer's own rendered width ceiling (real fit at 375px comes from
+ * pairing a viewport-relative `width` — checked against 100 by the demo's
+ * overflow guard — with a `maxWidth` at or under the 343px content ceiling,
+ * 375px minus two 16px gutters; never a bare pixel `width`, which the guard
+ * would reject outright for anything over that ceiling). Exported so
+ * `ZoomControls` can compute how far to shift itself left of the drawer's
+ * edge rather than hard-coding a second copy of this number.
+ */
+export const DRAWER_MAX_WIDTH = 320;
+
 const panelStyle: CSSProperties = {
   position: "fixed",
   top: 0,
   right: 0,
   bottom: 0,
-  // Real fit at 375px comes from the pairing of a viewport-relative `width`
-  // (checked against 100 by the demo's overflow guard) with a `maxWidth` at
-  // or under its 343px content ceiling (375px viewport minus two 16px
-  // gutters) — never a bare pixel `width`, which the guard would reject
-  // outright for any value over that ceiling.
   width: "90vw",
-  maxWidth: 320,
+  maxWidth: DRAWER_MAX_WIDTH,
   zIndex: 20,
   display: "flex",
   flexDirection: "column",
@@ -124,11 +130,22 @@ interface ArxivMeta {
   url?: string;
 }
 
+/** The only prefix an arXiv abstract-page URL is ever allowed to carry — everything else renders no link. */
+const ARXIV_ABS_URL_PREFIX = "https://arxiv.org/abs/";
+
 /** "Published <year>", the territory's full name, and the "Open on arXiv" link — the arXiv-specific layout. */
 function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: string | null }): ReactElement {
   const meta = node.meta as ArxivMeta | undefined;
   const year = typeof meta?.year === "number" ? meta.year : undefined;
-  const url = typeof meta?.url === "string" ? meta.url : undefined;
+  // Type-checked (`typeof === "string"`) is not enough on its own: `meta`
+  // ultimately comes from a `MapSpec`, which `validateSpec` never reads
+  // `meta` from (`src/shared/spec.ts`'s own doc comment says so), so
+  // nothing upstream stops a `javascript:`/`data:`/non-arXiv URL from
+  // reaching here. Today's only data source (the committed arxiv.json,
+  // built by a pipeline whose own test asserts this exact prefix on every
+  // node) makes this unreachable in practice, but the guard belongs here
+  // too, independent of how trustworthy the data layer happens to be.
+  const url = typeof meta?.url === "string" && meta.url.startsWith(ARXIV_ABS_URL_PREFIX) ? meta.url : undefined;
   return (
     <>
       {year !== undefined ? <p style={metaLineStyle}>Published {year}</p> : null}
@@ -155,10 +172,14 @@ function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: 
  * fixed strip on the right (never a full-screen backdrop), so the map
  * underneath stays reachable — wheel zoom, drag-pan, and the accessible
  * tree all keep working while it's open — and focus is never trapped inside
- * it. It sits above the zoom controls in z-order (spec 4 §2 "Visual
- * restraint" plus the showcase's own bottom-right zoom controls): while
- * open it can cover them, which is fine because the drawer always carries
- * its own close (button and Escape) — the coverage is never irreversible.
+ * it.
+ *
+ * It sits above the bottom-right zoom controls in z-order, so on a narrow
+ * viewport (`ZoomControls`' own fallback, below its wide-enough breakpoint)
+ * it covers them as a near-full-width sheet — reversible with one tap on
+ * Close or Escape, never irreversibly. On a wide-enough viewport
+ * `ZoomControls` shifts itself left of the drawer's edge instead, so both
+ * stay visible and clickable at once; see `ZoomControls.tsx`.
  */
 export function Drawer({ node, territoryName, isArxiv, onClose, returnFocusTo }: DrawerProps): ReactElement | null {
   const titleId = useId();

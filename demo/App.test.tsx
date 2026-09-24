@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // component itself dynamically (`await import("./App")`), per-test, so each
 // gets its own fresh module graph for `vi.doMock`/`vi.resetModules`.
 import type { AppProps } from "./App";
+import { DRAWER_MAX_WIDTH } from "./components/Drawer";
 import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
 import { syntheticSpec } from "./corpora/synthetic";
@@ -582,6 +583,56 @@ describe("App (showcase Task 5)", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
       const mapShell = container.querySelector("[data-map-shell]");
       expect(document.activeElement).toBe(mapShell);
+    });
+
+    describe("keeping the zoom controls reachable beside the drawer (fix round 1)", () => {
+      const originalInnerWidth = window.innerWidth;
+
+      /** `window.innerWidth` is read at mount by `ZoomControls`' lazy `useState` initializer — must be set before `renderApp`. */
+      function setViewportWidth(width: number): void {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+      }
+
+      afterEach(() => {
+        setViewportWidth(originalInnerWidth);
+      });
+
+      async function openDrawer(): Promise<void> {
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        zoomToNear();
+        fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+        await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      }
+
+      it("on a wide viewport, shifts the zoom controls' right edge left of the drawer's left edge while the drawer is open", async () => {
+        setViewportWidth(1280);
+        const { container } = await renderApp(SELECT_SPEC);
+        await openDrawer();
+
+        // Parsed the same way `checkNoOverflowAt375` reads inline values —
+        // no layout engine in jsdom. The drawer's `right` is `0` and its
+        // rendered width, at this viewport, is capped at `DRAWER_MAX_WIDTH`
+        // by its own `maxWidth` (its `width: 90vw` would be far larger), so
+        // its left edge sits at `right + DRAWER_MAX_WIDTH` from the
+        // viewport's own right edge. The controls' right edge sits left of
+        // that exactly when their own `right` offset is greater.
+        const drawer = container.querySelector<HTMLElement>("[data-drawer]");
+        const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
+        const drawerRight = Number.parseFloat(drawer?.style.right ?? "");
+        const drawerLeftFromViewportRight = drawerRight + DRAWER_MAX_WIDTH;
+        const zoomRight = Number.parseFloat(zoom?.style.right ?? "");
+        expect(zoomRight).toBeGreaterThan(drawerLeftFromViewportRight);
+      });
+
+      it("at 375px, the drawer fits and the fallback holds — the zoom controls stay at their default offset, covered by the drawer", async () => {
+        setViewportWidth(375);
+        const { container } = await renderApp(SELECT_SPEC);
+        await openDrawer();
+
+        checkAllFloatingControls(container);
+        const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
+        expect(zoom?.style.right).toBe("12px");
+      });
     });
   });
 });

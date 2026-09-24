@@ -278,7 +278,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         )}
       </div>
       <TopBar corpora={gallery} activeId={corpusId} onChange={handleCorpusChange} />
-      <ZoomControls mapRef={mapRef} />
+      <ZoomControls mapRef={mapRef} drawerOpen={selected !== null} />
       <Indicator view={view} />
       <Footer corpusId={corpusId} />
       <Drawer

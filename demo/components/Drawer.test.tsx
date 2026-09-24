@@ -152,4 +152,29 @@ describe("Drawer (showcase Task 6)", () => {
     renderWithReturnTarget(ARXIV_NODE, { isArxiv: true, territoryName: "Artificial Intelligence" });
     expect(screen.getByRole("dialog").getAttribute("aria-modal")).toBe("false");
   });
+
+  describe("guards meta.url before it becomes a live href (review fix round 1)", () => {
+    it("renders no link for a javascript: URL — the rest of the drawer still shows", () => {
+      const node: MapNode = { ...ARXIV_NODE, meta: { year: 2026, url: "javascript:alert(1)" } };
+      renderWithReturnTarget(node, { isArxiv: true, territoryName: "Artificial Intelligence" });
+      expect(screen.queryByRole("link", { name: "Open on arXiv" })).toBeNull();
+      expect(screen.getByRole("dialog", { name: node.label })).not.toBeNull();
+      expect(screen.getByText("Published 2026")).not.toBeNull();
+      expect(screen.getByText("Artificial Intelligence")).not.toBeNull();
+    });
+
+    it("renders no link for an http:// (non-arXiv-abs) URL — the rest of the drawer still shows", () => {
+      const node: MapNode = { ...ARXIV_NODE, meta: { year: 2026, url: "http://evil.example.com/abs/2609.26779" } };
+      renderWithReturnTarget(node, { isArxiv: true, territoryName: "Artificial Intelligence" });
+      expect(screen.queryByRole("link", { name: "Open on arXiv" })).toBeNull();
+      expect(screen.getByRole("dialog", { name: node.label })).not.toBeNull();
+      expect(screen.getByText("Published 2026")).not.toBeNull();
+    });
+
+    it("still renders the link for a genuine https://arxiv.org/abs/ URL", () => {
+      renderWithReturnTarget(ARXIV_NODE, { isArxiv: true, territoryName: "Artificial Intelligence" });
+      const link = screen.getByRole("link", { name: "Open on arXiv" });
+      expect(link.getAttribute("href")).toBe("https://arxiv.org/abs/2609.26779");
+    });
+  });
 });
