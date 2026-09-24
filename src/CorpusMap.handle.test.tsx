@@ -235,4 +235,35 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     expect(renderCount).toBe(4);
     expect(calls).toHaveLength(1);
   });
+
+  it("fires onViewChange after a spec swap even when the refitted view has the same regime, ratio and count", () => {
+    const calls: View[] = [];
+    // Same geometry under new ids: the fitted view reads exactly the same.
+    const twin: MapSpec = { ...spec, nodes: [{ id: "b", label: "B", x: 0, y: 0, territory: null }] };
+    const props = { renderCard: () => null, width: 400, height: 300, onViewChange: (v: View) => calls.push(v) };
+    const { rerender } = render(<CorpusMap {...props} spec={spec} />);
+    expect(calls).toHaveLength(1);
+    rerender(<CorpusMap {...props} spec={twin} />);
+    expect(calls).toHaveLength(2);
+    expect(lastCall(calls)).toEqual(calls[0]);
+  });
+
+  it("fires onViewChange after fit() even when the view is already the fitted one", () => {
+    const ref = createRef<CorpusMapHandle>();
+    const calls: View[] = [];
+    render(
+      <CorpusMap
+        ref={ref}
+        spec={spec}
+        renderCard={() => null}
+        width={400}
+        height={300}
+        onViewChange={(v) => calls.push(v)}
+      />,
+    );
+    expect(calls).toHaveLength(1);
+    act(() => ref.current?.fit());
+    expect(calls).toHaveLength(2);
+    expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
+  });
 });

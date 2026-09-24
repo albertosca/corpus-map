@@ -79,9 +79,10 @@ export interface CorpusMapProps {
   onRegimeChange?: ((regime: Regime) => void) | undefined;
   /**
    * Fired once on mount, then after any committed render whose regime,
-   * ratio or visible-node count changed — at most once per animation frame
-   * during a drag, since drags are already coalesced into one commit per
-   * frame (metric 13).
+   * ratio or visible-node count changed, and after every refit (a new
+   * `spec`, or `fit()`) even when those values match — at most once per
+   * animation frame during a drag, since drags are already coalesced into
+   * one commit per frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
   /**
@@ -226,9 +227,16 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   const [fitBasis, setFitBasis] = useState<{ spec: MapSpec; width: number; height: number } | null>(
     ready ? { spec, width, height } : null,
   );
+  // Counts refits (a spec swap here, `fit()` on the handle) so
+  // `onViewChange` fires after each one even when the refitted view reads
+  // the same as the one before (spec 4 §1 counts a refit as a committed
+  // view change; the demo clears its indicator on a corpus switch and
+  // waits for that call).
+  const [refits, setRefits] = useState(0);
   if (ready) {
     if (fitBasis === null || fitBasis.spec !== spec) {
       setFitBasis({ spec, width, height });
+      if (fitBasis !== null) setRefits((n) => n + 1);
       setVp(fitted);
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     } else if (fitBasis.width !== width || fitBasis.height !== height) {
@@ -412,11 +420,12 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // above: an inline arrow prop (the demo's indicator will pass one) must
   // not re-fire the effect below just because its identity changed. Fires
   // once on mount (`ready` gate, same reasoning as `onRegimeChange`), then
-  // again only when `next`/`ratio`/`visibleCount` actually differ from the
-  // previous commit's — which is also what keeps it to at most once per
-  // animation frame during a drag: the drag's own accumulated pan is
-  // already flushed into a single `setVp` per frame (metric 13), so there
-  // is at most one commit per frame for this effect to react to.
+  // again when `next`/`ratio`/`visibleCount` differ from the previous
+  // commit's, or after a refit (`refits`). Being tied to commits is what
+  // keeps it to at most once per animation frame during a drag: the drag's
+  // own accumulated pan is already flushed into a single `setVp` per frame
+  // (metric 13), so there is at most one commit per frame for this effect
+  // to react to.
   const onViewChangeRef = useRef(onViewChange);
   useEffect(() => {
     onViewChangeRef.current = onViewChange;
@@ -424,7 +433,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   useEffect(() => {
     if (!ready) return;
     onViewChangeRef.current?.({ regime: next, ratio, visibleCount });
-  }, [next, ratio, visibleCount, ready]);
+  }, [next, ratio, visibleCount, ready, refits]);
 
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
   // rebuilt every commit and its closures — `vp`/`fitScale`/`fitted`/
@@ -460,6 +469,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     // instead of a new spec (see this file's `.handle.test.tsx`).
     fit: () => {
       setVp(fitted);
+      setRefits((n) => n + 1);
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     },
   }));

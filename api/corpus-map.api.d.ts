@@ -56,9 +56,10 @@ export interface CorpusMapProps {
     onRegimeChange?: ((regime: Regime) => void) | undefined;
     /**
      * Fired once on mount, then after any committed render whose regime,
-     * ratio or visible-node count changed — at most once per animation frame
-     * during a drag, since drags are already coalesced into one commit per
-     * frame (metric 13).
+     * ratio or visible-node count changed, and after every refit (a new
+     * `spec`, or `fit()`) even when those values match — at most once per
+     * animation frame during a drag, since drags are already coalesced into
+     * one commit per frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
     /**
