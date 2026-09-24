@@ -37,6 +37,42 @@ interface View {
   visibleCount: number;
 }
 
+// jsdom has no canvas 2D implementation; `test/setup.ts` stubs `getContext`
+// to return `null` globally, which `Minimap`'s paint effect already handles
+// (`if (!ctx) return;`) but which also means that effect never actually
+// runs under the default stub — no use counting real paints against it.
+// This fake, installed only for the one test below and restored after,
+// mirrors `CorpusMap.test.tsx`'s own `recordingContext` pattern: enough
+// no-op methods for `paint`/`paintMinimap`'s full call surface (including
+// `useMeasure`'s offscreen canvas, which needs `font`/`measureText`) that
+// every canvas in the tree — the main one included — can actually paint,
+// with `clearRect` on the *minimap's own* canvas specifically counted, so a
+// paint is measured the same way fix round 1's `paintMinimap.test.ts`
+// canary does: by the `clear()` that must start every real paint.
+function fakeCtx(): CanvasRenderingContext2D {
+  const noop = () => {};
+  return {
+    canvas: { width: 0, height: 0 },
+    clearRect: noop,
+    setTransform: noop,
+    beginPath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    closePath: noop,
+    fill: noop,
+    stroke: noop,
+    arc: noop,
+    fillText: noop,
+    measureText: (text: string) => ({ width: text.length * 6 }),
+    fillStyle: "",
+    strokeStyle: "",
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    globalAlpha: 1,
+  } as unknown as CanvasRenderingContext2D;
+}
+
 describe("CorpusMap minimap (showcase Task 4)", () => {
   it("is absent by default", () => {
     const { container } = render(
@@ -80,6 +116,36 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     expect(el?.style.right).toBe("12px");
     expect(el?.style.bottom).toBe("");
     expect(el?.style.left).toBe("");
+  });
+
+  it("does not repaint on an unrelated parent re-render — only when the view (x, y, w, h) actually changed (fix round 1, finding 2)", () => {
+    let minimapPaints = 0;
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+      const ctx = fakeCtx();
+      if (this.hasAttribute("data-minimap")) {
+        (ctx as unknown as { clearRect: () => void }).clearRect = () => {
+          minimapPaints += 1;
+        };
+      }
+      return ctx;
+    } as unknown as typeof original;
+    try {
+      const { rerender } = render(
+        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
+      );
+      expect(minimapPaints).toBe(1);
+
+      // An unrelated parent re-render: the same props by value, but a fresh
+      // element (so `CorpusMap`, not being `memo`-wrapped, re-runs its body)
+      // — `vp`/`width`/`height` never change, so the view is identical.
+      rerender(
+        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
+      );
+      expect(minimapPaints).toBe(1);
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original;
+    }
   });
 
   it("a press at the minimap's centre centres the main view on the world centre, firing onViewChange like any other view change", () => {

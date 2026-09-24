@@ -352,29 +352,39 @@ export {};
 import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
-import type { Bounds } from "../viewport/fit";
+import { type Bounds } from "../viewport/fit";
 import { type Viewport } from "../viewport/viewport";
 /**
- * Fits `world` into `size`, centred, the same way `fitSpec` fits a spec into
- * the main box — but from a `Bounds` directly, since the minimap draws a
- * precomputed `Scene`'s shapes rather than a `MapSpec`. Exported so
- * `Minimap.tsx` can invert it (`toWorld`) to resolve a press/drag's world
- * point, rather than keep a second copy of this arithmetic that could drift
- * from the one `paintMinimap` paints with.
+ * Fits `world` into `size`, centred, through the same shared `fitBounds`
+ * `fitSpec` itself is built on (fix round 1, finding 3 — this used to be a
+ * private copy of that same padded-fit arithmetic). Kept as its own,
+ * `size`-shaped wrapper (rather than inlining `fitBounds` at each call site)
+ * so `Minimap.tsx` still has one name to invert (`toWorld`) for a
+ * press/drag's world point, and so this file's own tests keep asserting
+ * against the transform `paintMinimap` actually paints with, by name.
  */
 export declare function minimapFit(world: Bounds, size: {
     width: number;
     height: number;
 }): Viewport;
 /**
- * Pure paint for the minimap (spec 4 §1): every territory ring — one polygon
- * per ring, summed across territories, not one per territory — fitted to
- * `size` from `world` and left unclipped (a ring padded slightly past the
- * node extent still reads fine a few pixels past the fitted box); then the
- * current view's world rectangle as a stroked polygon, with its corners
- * clamped to `size`'s edges so a view zoomed out past the world bounds still
- * draws entirely inside the minimap's own canvas instead of spilling past
- * it.
+ * Pure paint for the minimap (spec 4 §1): `surface.clear()` first, like
+ * `shared/paint.ts`'s own compositor — this canvas is repainted in place
+ * (`Minimap.tsx`'s DPR guard deliberately skips reassigning `canvas.width`
+ * when the byte size hasn't changed, precisely to avoid the implicit clear
+ * that would trigger, so nothing else erases the bitmap between paints);
+ * then every territory ring — one polygon per ring, summed across
+ * territories, not one per territory — fitted to `size` from `world` and
+ * left unclipped (a ring padded slightly past the node extent still reads
+ * fine a few pixels past the fitted box); then the current view's world
+ * rectangle as a stroked polygon, clamped to `size`'s edges *as a rectangle*
+ * — the screen-space box's two diagonal corners are each clamped once, and
+ * all four drawn corners are built from those two clamped points, rather
+ * than clamping each of the four corners independently (fix round 1,
+ * finding 4) — so a view that overflows on some sides but not others still
+ * comes out a proper axis-aligned box instead of four separately-placed
+ * points that could, for a transform this code doesn't happen to use today
+ * (any shear or rotation), stop agreeing with each other.
  */
 export declare function paintMinimap(surface: Surface, scene: Scene, world: Bounds, view: {
     x: number;
@@ -619,6 +629,18 @@ export interface Bounds {
     maxY: number;
 }
 export declare function worldBounds(spec: MapSpec): Bounds;
+/**
+ * The padded-fit transform: `bounds` centred and scaled (one scale for both
+ * axes) to fill a `width` x `height` box minus `padding` on every side.
+ * Exported so a caller that already has a `Bounds` (the minimap's
+ * `world`, not a `MapSpec` — `minimap/paintMinimap.ts`'s `minimapFit`) can
+ * share this arithmetic instead of keeping a private copy of it (fix round
+ * 1, finding 3). The `Math.max(1e-9, ...)` floor never changes `fitSpec`'s
+ * own results — `worldBounds` already widens a degenerate box to at least 1
+ * unit on each axis — but guards a caller that hands in a raw `Bounds` of
+ * its own, not necessarily produced by `worldBounds`.
+ */
+export declare function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport;
 export declare function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport;
 
 // viewport/useElementSize.d.ts

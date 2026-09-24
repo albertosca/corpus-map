@@ -37,12 +37,28 @@ export function worldBounds(spec: MapSpec): Bounds {
   return { minX, minY, maxX, maxY };
 }
 
-export function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport {
-  const b = worldBounds(spec);
+/**
+ * The padded-fit transform: `bounds` centred and scaled (one scale for both
+ * axes) to fill a `width` x `height` box minus `padding` on every side.
+ * Exported so a caller that already has a `Bounds` (the minimap's
+ * `world`, not a `MapSpec` — `minimap/paintMinimap.ts`'s `minimapFit`) can
+ * share this arithmetic instead of keeping a private copy of it (fix round
+ * 1, finding 3). The `Math.max(1e-9, ...)` floor never changes `fitSpec`'s
+ * own results — `worldBounds` already widens a degenerate box to at least 1
+ * unit on each axis — but guards a caller that hands in a raw `Bounds` of
+ * its own, not necessarily produced by `worldBounds`.
+ */
+export function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport {
   const usableW = Math.max(1, width - padding * 2);
   const usableH = Math.max(1, height - padding * 2);
-  const scale = Math.min(usableW / (b.maxX - b.minX), usableH / (b.maxY - b.minY));
-  const cx = (b.minX + b.maxX) / 2;
-  const cy = (b.minY + b.maxY) / 2;
+  const w = Math.max(1e-9, bounds.maxX - bounds.minX);
+  const h = Math.max(1e-9, bounds.maxY - bounds.minY);
+  const scale = Math.min(usableW / w, usableH / h);
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
   return { scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale };
+}
+
+export function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport {
+  return fitBounds(worldBounds(spec), width, height, padding);
 }

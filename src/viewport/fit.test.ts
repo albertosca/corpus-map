@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapSpec } from "../shared/spec";
-import { fitSpec, worldBounds } from "./fit";
+import { fitBounds, fitSpec, worldBounds } from "./fit";
 import { toScreen } from "./viewport";
 
 const spec = (pts: Array<[number, number]>): MapSpec => ({
@@ -64,5 +64,19 @@ describe("fitSpec", () => {
     const [bx] = toScreen(v, 1, 0);
     const [, by] = toScreen(v, 0, 1);
     expect(Math.abs(bx - ax)).toBeCloseTo(Math.abs(by - ay), 6);
+  });
+
+  it("is built on the exported fitBounds, not a private copy of the same arithmetic (fix round 1, finding 3)", () => {
+    // Not just numeric equivalence (two independent, coincidentally-equal
+    // formulas would pass this too) — the shared-implementation revert-check
+    // in this task's report breaks `fitBounds` itself and shows both this
+    // assertion and `paintMinimap.test.ts`'s `minimapFit`-based ones fail
+    // together, which a merely-equivalent duplicate could not.
+    const s = spec([
+      [-100, -100],
+      [0, 0],
+      [250, 80],
+    ]);
+    expect(fitBounds(worldBounds(s), 800, 600, 20)).toEqual(fitSpec(s, 800, 600, 20));
   });
 });

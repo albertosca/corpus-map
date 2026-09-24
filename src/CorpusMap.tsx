@@ -304,13 +304,24 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     props.minimap === true ? "bottom-left" : props.minimap ? props.minimap.corner : null;
   const world = useMemo(() => worldBounds(spec), [spec]);
   // The main view's own world-space bounding rectangle, in world units —
-  // what the minimap draws its view rectangle from. Cheap (two `toWorld`
-  // calls), so recomputed every render rather than memoized on `vp` (an
-  // object minted fresh by every `setVp`, which would defeat a memo key
-  // anyway).
+  // what the minimap draws its view rectangle from, and a dependency of its
+  // paint effect (`Minimap.tsx`). The two `toWorld` calls are cheap, but the
+  // *object* they build is not something to key an effect on by identity
+  // (fix round 1, finding 2 — the project's own rule: never key an
+  // expensive memo or effect on an object's identity, key on the values
+  // used): `vp` is minted fresh by every `setVp`, including ones an
+  // unrelated commit (a hover update, a freshly-literal `theme`/`tuning`
+  // prop) never touches, so a plain object literal here changed identity —
+  // and re-triggered the minimap's whole repaint — on every commit, not
+  // just ones where the view actually moved. Memoized on the four
+  // primitives themselves, so the minimap only repaints when `x`/`y`/`w`/`h`
+  // actually changed.
   const [viewX0, viewY0] = toWorld(vp, 0, 0);
   const [viewX1, viewY1] = toWorld(vp, width, height);
-  const viewWorld = { x: viewX0, y: viewY0, w: viewX1 - viewX0, h: viewY1 - viewY0 };
+  const viewWorld = useMemo(
+    () => ({ x: viewX0, y: viewY0, w: viewX1 - viewX0, h: viewY1 - viewY0 }),
+    [viewX0, viewY0, viewX1, viewY1],
+  );
 
   // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
   // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
