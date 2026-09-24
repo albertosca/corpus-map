@@ -32,7 +32,7 @@ const style: CSSProperties = {
 };
 
 /**
- * "regime · ratio× · N items", bottom-left above the minimap (spec 4 §2),
+ * "regime · ratio× · N items" ("1 item" for one), bottom-left above the minimap (spec 4 §2),
  * read straight from `CorpusMap`'s own `onViewChange` payload — nothing
  * computed here.
  */
@@ -40,7 +40,7 @@ export function Indicator({ view }: IndicatorProps): ReactElement | null {
   if (!view) return null;
   return (
     <div data-indicator data-floating-control style={style}>
-      {view.regime} · {view.ratio.toFixed(1)}× · {view.visibleCount} items
+      {view.regime} · {view.ratio.toFixed(1)}× · {view.visibleCount} {view.visibleCount === 1 ? "item" : "items"}
     </div>
   );
 }

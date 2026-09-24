@@ -13,6 +13,13 @@ describe("Indicator (showcase Task 5)", () => {
     expect(screen.getByText("mid · 7.3× · 42 items")).not.toBeNull();
   });
 
+  it("says '1 item', not '1 items', for a single visible item (and '0 items' for none)", () => {
+    const { rerender } = render(<Indicator view={{ regime: "near", ratio: 12, visibleCount: 1 }} />);
+    expect(screen.getByText("near · 12.0× · 1 item")).not.toBeNull();
+    rerender(<Indicator view={{ regime: "near", ratio: 12, visibleCount: 0 }} />);
+    expect(screen.getByText("near · 12.0× · 0 items")).not.toBeNull();
+  });
+
   it("rounds the ratio to one decimal even when it lands on a whole number", () => {
     render(<Indicator view={{ regime: "far", ratio: 1, visibleCount: 8000 }} />);
     expect(screen.getByText("far · 1.0× · 8000 items")).not.toBeNull();
