@@ -17,15 +17,10 @@ const barStyle: CSSProperties = {
   top: 0,
   left: 0,
   right: 0,
-  // Explicit alongside `left`/`right` (Task 7 fix round 1): the two
-  // offsets alone already fix this to exactly the viewport's width, but
-  // `App.test.tsx`'s overflow check now requires an explicit
-  // `width`/`maxWidth` it can read, not just an anchor -- see
-  // `checkAllFloatingControls`'s own doc comment. This is also what bounds
-  // the "Tuning" gear button nested inside (`gearButtonStyle` sets no
-  // geometry of its own on purpose; per that same doc comment, a control
-  // wrapped inside a container that declares its own footprint, with
-  // `flexWrap: "wrap"` here, doesn't need to declare one too).
+  // Explicit alongside `left`/`right`: the two offsets already fix this to
+  // the viewport's width, but `App.test.tsx`'s overflow check reads an
+  // explicit `width`/`maxWidth`. It does not bound the controls inside:
+  // each of them carries its own `maxWidth` (see `gearButtonStyle`).
   maxWidth: "100vw",
   zIndex: 10,
   display: "flex",
