@@ -58,6 +58,15 @@ export interface CorpusMapProps {
      * frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
+    /**
+     * A 160 x 110 canvas in a corner of the box (default off), drawing the
+     * territory shapes and the current view; pressing or dragging it centres
+     * the main view on the pressed world point (spec 4 §1). `true` picks the
+     * default corner, `"bottom-left"`.
+     */
+    minimap?: boolean | {
+        corner: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    } | undefined;
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -158,6 +167,7 @@ export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS } from "./lod/lod";
+export type { MinimapCorner } from "./minimap/Minimap";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
@@ -299,6 +309,82 @@ import { type Viewport } from "../viewport/viewport";
  * spec. Above the cap, the canvas alone carries the field.
  */
 export declare function visibleNodes(spec: MapSpec, viewport: Viewport, width: number, height: number, cap: number): MapNode[];
+
+// minimap/Minimap.d.ts
+import { type ReactElement } from "react";
+import type { Scene } from "../shared/scene";
+import type { Theme } from "../shared/theme";
+import type { Bounds } from "../viewport/fit";
+/** The minimap is always this size (spec 4 §1): a 160 x 110 canvas. */
+export declare const MINIMAP_SIZE: {
+    width: number;
+    height: number;
+};
+/** Where the minimap sits inside the map's box; `minimap={true}` picks the default, `"bottom-left"`. */
+export type MinimapCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+interface MinimapProps {
+    scene: Scene;
+    world: Bounds;
+    view: {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+    };
+    corner: MinimapCorner;
+    theme: Theme;
+    /** Called with the world point under a press or drag on the minimap. */
+    onPoint: (worldX: number, worldY: number) => void;
+}
+/**
+ * The minimap's React half: a fixed-size canvas painted by the pure
+ * `paintMinimap`, positioned in one of the box's corners. `aria-hidden`
+ * (spec 4 §1 — the accessible tree already offers territory navigation);
+ * every pointer handler calls `stopPropagation` so a press or drag here
+ * never reaches the map surface underneath — it can neither start a pan nor
+ * resolve a card click there, regardless of where in the box the minimap's
+ * corner happens to sit.
+ */
+export declare function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapProps): ReactElement;
+export {};
+
+// minimap/paintMinimap.d.ts
+import type { Scene } from "../shared/scene";
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import type { Bounds } from "../viewport/fit";
+import { type Viewport } from "../viewport/viewport";
+/**
+ * Fits `world` into `size`, centred, the same way `fitSpec` fits a spec into
+ * the main box — but from a `Bounds` directly, since the minimap draws a
+ * precomputed `Scene`'s shapes rather than a `MapSpec`. Exported so
+ * `Minimap.tsx` can invert it (`toWorld`) to resolve a press/drag's world
+ * point, rather than keep a second copy of this arithmetic that could drift
+ * from the one `paintMinimap` paints with.
+ */
+export declare function minimapFit(world: Bounds, size: {
+    width: number;
+    height: number;
+}): Viewport;
+/**
+ * Pure paint for the minimap (spec 4 §1): every territory ring — one polygon
+ * per ring, summed across territories, not one per territory — fitted to
+ * `size` from `world` and left unclipped (a ring padded slightly past the
+ * node extent still reads fine a few pixels past the fitted box); then the
+ * current view's world rectangle as a stroked polygon, with its corners
+ * clamped to `size`'s edges so a view zoomed out past the world bounds still
+ * draws entirely inside the minimap's own canvas instead of spilling past
+ * it.
+ */
+export declare function paintMinimap(surface: Surface, scene: Scene, world: Bounds, view: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}, size: {
+    width: number;
+    height: number;
+}, theme: Theme): void;
 
 // points/hover.d.ts
 export interface ScreenPoint {

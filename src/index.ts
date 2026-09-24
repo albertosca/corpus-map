@@ -2,6 +2,7 @@ export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS } from "./lod/lod";
+export type { MinimapCorner } from "./minimap/Minimap";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";

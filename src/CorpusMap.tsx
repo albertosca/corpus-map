@@ -15,6 +15,7 @@ import { useMeasure } from "./labels/useMeasure";
 import { type LodThresholds, type Regime, resolveThresholds } from "./lod/lod";
 import { fade, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
+import { Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { paint } from "./shared/paint";
 import { buildScene } from "./shared/scene";
@@ -22,9 +23,9 @@ import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
-import { fitSpec } from "./viewport/fit";
+import { fitSpec, worldBounds } from "./viewport/fit";
 import { useElementSize } from "./viewport/useElementSize";
-import { clampScale, panBy, recenterOnBoxChange, toScreen, type Viewport, zoomTo } from "./viewport/viewport";
+import { clampScale, panBy, recenterOnBoxChange, toScreen, toWorld, type Viewport, zoomTo } from "./viewport/viewport";
 import { wheelZoomFactor } from "./viewport/wheel";
 
 /** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
@@ -80,6 +81,13 @@ export interface CorpusMapProps {
    * frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
+  /**
+   * A 160 x 110 canvas in a corner of the box (default off), drawing the
+   * territory shapes and the current view; pressing or dragging it centres
+   * the main view on the pressed world point (spec 4 §1). `true` picks the
+   * default corner, `"bottom-left"`.
+   */
+  minimap?: boolean | { corner: "top-left" | "top-right" | "bottom-left" | "bottom-right" } | undefined;
 }
 
 const FIT_PADDING = 24;
@@ -230,6 +238,10 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
+  // A world point from a minimap press/drag (showcase Task 4), flushed in
+  // the same rAF-coalesced frame as `pending`'s drag delta, through the same
+  // `setVp` — never its own, separately-scheduled commit.
+  const pendingCentre = useRef<{ wx: number; wy: number } | null>(null);
   const rafId = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   // The pointer's latest surface-relative position while not pressed,
@@ -284,6 +296,21 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
   // same count a maxed-out card cap would otherwise hide (showcase Task 3).
   const visibleCount = ready ? visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).length : 0;
+
+  // `false`/absent (no prop, or `minimap={false}`) are identical: no corner,
+  // no `Minimap`. `true` picks the default corner; `{ corner }` picks that
+  // one (spec 4 §1).
+  const minimapCorner: MinimapCorner | null =
+    props.minimap === true ? "bottom-left" : props.minimap ? props.minimap.corner : null;
+  const world = useMemo(() => worldBounds(spec), [spec]);
+  // The main view's own world-space bounding rectangle, in world units —
+  // what the minimap draws its view rectangle from. Cheap (two `toWorld`
+  // calls), so recomputed every render rather than memoized on `vp` (an
+  // object minted fresh by every `setVp`, which would defeat a memo key
+  // anyway).
+  const [viewX0, viewY0] = toWorld(vp, 0, 0);
+  const [viewX1, viewY1] = toWorld(vp, width, height);
+  const viewWorld = { x: viewX0, y: viewY0, w: viewX1 - viewX0, h: viewY1 - viewY0 };
 
   // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
   // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
@@ -463,6 +490,77 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     if (hover !== null) setHover(null);
   };
 
+  // Schedules the one rAF flush a burst of pointer moves, or a minimap
+  // press/drag, coalesces into (metric 13) — both routes share this single
+  // `rafId`, so a move and a minimap press arriving in the same frame still
+  // cost one commit, through the same `setVp`. A no-op if a flush is
+  // already pending.
+  const scheduleFrame = () => {
+    if (rafId.current !== null) return;
+    rafId.current = window.requestAnimationFrame(() => {
+      rafId.current = null;
+      const acc = pending.current;
+      pending.current = null;
+      if (acc) setVp((v) => panBy(v, acc.dx, acc.dy));
+      // A minimap press/drag (showcase Task 4): centres the main view on
+      // the pressed world point through the very same `setVp` a drag pans
+      // with, just landing on an absolute `tx`/`ty` instead of an
+      // accumulated delta — so `onViewChange` reacts to it exactly as it
+      // would to any other committed view change, with no separate wiring.
+      const centre = pendingCentre.current;
+      pendingCentre.current = null;
+      if (centre) {
+        setVp((v) => ({
+          scale: v.scale,
+          tx: width / 2 - centre.wx * v.scale,
+          ty: height / 2 - centre.wy * v.scale,
+        }));
+      }
+      const hp = hoverPoint.current;
+      // Not the applicable-regime/not-dragging/has-a-point condition's
+      // `else`: a press, a `pointerleave`, or leaving the mid/near
+      // regimes already clears `hover` synchronously at its own call
+      // site (`onPointerDown`, `onPointerLeave`, the render-phase check
+      // above) — including that update's effect, since each of those
+      // runs to completion, effects included, strictly before any
+      // already-scheduled flush like this one can run. So by the time
+      // this condition is false, `hoverRef.current` is already null;
+      // there is nothing left here to clear.
+      if (drag.current === null && hp && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
+        // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
+        // calls: the canvas paints every on-screen point regardless of the
+        // card cap, so hover must be resolvable against all of them, not
+        // just the first `cardCap` in spec order (C1) — otherwise most
+        // on-screen points past the cap are silently unhoverable.
+        const points = visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).map((n) => {
+          const [x, y] = toScreen(vp, n.x, n.y);
+          return { id: n.id, x, y };
+        });
+        const nearest = nearestWithin(points, hp.x, hp.y, tuning.hoverRadius);
+        const prevHover = hoverRef.current;
+        if (nearest) {
+          // Same node, same screen position as the currently shown hover:
+          // skip the call rather than dispatch a freshly-allocated (but
+          // deeply equal) object every frame the pointer holds still —
+          // `Object.is` would never consider two such objects equal, so
+          // React would never bail out and a steady hover would cost a
+          // commit on every frame (see the `hoverRef` comment above).
+          const same =
+            prevHover && prevHover.id === nearest.id && prevHover.x === nearest.x && prevHover.y === nearest.y;
+          if (!same) {
+            // `nearest.id` is always a key of `nodesById`: `points` was
+            // built from `visibleNodes(spec, ...)`, which only ever
+            // returns `spec`'s own nodes.
+            const label = (nodesById.get(nearest.id) as MapNode).label;
+            setHover({ id: nearest.id, label, x: nearest.x, y: nearest.y });
+          }
+        } else if (prevHover !== null) {
+          setHover(null);
+        }
+      }
+    });
+  };
+
   // Pointer moves accumulate a drag delta, or (while not pressed) queue a
   // hover point; both are resolved at most once per animation frame, so a
   // burst of move events costs one React commit per frame, not one per
@@ -481,56 +579,16 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       const rect = rootRef.current?.getBoundingClientRect();
       hoverPoint.current = rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null;
     }
-    if (rafId.current === null) {
-      rafId.current = window.requestAnimationFrame(() => {
-        rafId.current = null;
-        const acc = pending.current;
-        pending.current = null;
-        if (acc) setVp((v) => panBy(v, acc.dx, acc.dy));
-        const hp = hoverPoint.current;
-        // Not the applicable-regime/not-dragging/has-a-point condition's
-        // `else`: a press, a `pointerleave`, or leaving the mid/near
-        // regimes already clears `hover` synchronously at its own call
-        // site (`onPointerDown`, `onPointerLeave`, the render-phase check
-        // above) — including that update's effect, since each of those
-        // runs to completion, effects included, strictly before any
-        // already-scheduled flush like this one can run. So by the time
-        // this condition is false, `hoverRef.current` is already null;
-        // there is nothing left here to clear.
-        if (drag.current === null && hp && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
-          // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
-          // calls: the canvas paints every on-screen point regardless of the
-          // card cap, so hover must be resolvable against all of them, not
-          // just the first `cardCap` in spec order (C1) — otherwise most
-          // on-screen points past the cap are silently unhoverable.
-          const points = visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).map((n) => {
-            const [x, y] = toScreen(vp, n.x, n.y);
-            return { id: n.id, x, y };
-          });
-          const nearest = nearestWithin(points, hp.x, hp.y, tuning.hoverRadius);
-          const prevHover = hoverRef.current;
-          if (nearest) {
-            // Same node, same screen position as the currently shown hover:
-            // skip the call rather than dispatch a freshly-allocated (but
-            // deeply equal) object every frame the pointer holds still —
-            // `Object.is` would never consider two such objects equal, so
-            // React would never bail out and a steady hover would cost a
-            // commit on every frame (see the `hoverRef` comment above).
-            const same =
-              prevHover && prevHover.id === nearest.id && prevHover.x === nearest.x && prevHover.y === nearest.y;
-            if (!same) {
-              // `nearest.id` is always a key of `nodesById`: `points` was
-              // built from `visibleNodes(spec, ...)`, which only ever
-              // returns `spec`'s own nodes.
-              const label = (nodesById.get(nearest.id) as MapNode).label;
-              setHover({ id: nearest.id, label, x: nearest.x, y: nearest.y });
-            }
-          } else if (prevHover !== null) {
-            setHover(null);
-          }
-        }
-      });
-    }
+    scheduleFrame();
+  };
+
+  // The minimap's press/drag callback (showcase Task 4): queues a world
+  // point to centre on and reuses `scheduleFrame`, so it is frame-coalesced
+  // and lands through the same `setVp` the drag above uses — never a
+  // separate, uncoalesced `setVp` call of its own.
+  const onMinimapPoint = (wx: number, wy: number) => {
+    pendingCentre.current = { wx, wy };
+    scheduleFrame();
   };
 
   const onPointerCancel = () => {
@@ -645,6 +703,16 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
             }}
             onSelect={onSelect}
           />
+          {minimapCorner ? (
+            <Minimap
+              scene={scene}
+              world={world}
+              view={viewWorld}
+              corner={minimapCorner}
+              theme={theme}
+              onPoint={onMinimapPoint}
+            />
+          ) : null}
         </>
       ) : null}
     </div>
