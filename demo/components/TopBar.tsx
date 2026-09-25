@@ -10,6 +10,8 @@ interface TopBarProps {
   onToggleTuning: () => void;
   /** React 19 ref-as-prop, so `App` can return focus here when the tuning panel closes (`TuningPanel`'s own `returnFocusTo`). */
   gearButtonRef?: Ref<HTMLButtonElement> | undefined;
+  /** The bar itself, so `App` can measure its height (it wraps on a narrow screen) and start the right-side sheets below it. */
+  barRef?: Ref<HTMLElement> | undefined;
 }
 
 const barStyle: CSSProperties = {
@@ -84,13 +86,14 @@ export function TopBar({
   tuningOpen,
   onToggleTuning,
   gearButtonRef,
+  barRef,
 }: TopBarProps): ReactElement {
   const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     onChange(e.target.value as GalleryEntry["id"]);
   };
 
   return (
-    <header data-topbar data-floating-control style={barStyle}>
+    <header ref={barRef} data-topbar data-floating-control style={barStyle}>
       <strong style={{ fontSize: 15 }}>corpus-map</strong>
       <label htmlFor="corpus-select" style={labelStyle}>
         Corpus

@@ -7,6 +7,7 @@ import { Footer } from "./components/Footer";
 import { Indicator } from "./components/Indicator";
 import { TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
+import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
 import { ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
 
@@ -228,6 +229,10 @@ export function App({ loadArxiv }: AppProps = {}) {
   // Focused when the panel closes -- the gear button in `TopBar`, the same
   // return-focus pattern `mapShellRef`/`Drawer` already use.
   const gearButtonRef = useRef<HTMLButtonElement>(null);
+  // The drawer and the tuning panel start below the top bar, whose height is
+  // measured because it wraps onto more rows on a narrow screen.
+  const topBarRef = useRef<HTMLElement>(null);
+  const topBarHeight = useBorderBoxHeight(topBarRef);
 
   // Regenerated only when the panel's own size/seed controls change --
   // never on an unrelated render -- because a plain object literal would
@@ -448,6 +453,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         tuningOpen={panelOpen}
         onToggleTuning={handleTogglePanel}
         gearButtonRef={gearButtonRef}
+        barRef={topBarRef}
       />
       {/* The panel occupies the same right-side slot as the drawer (mutually
           exclusive, `TuningPanel`'s own doc comment) -- `ZoomControls` shifts
@@ -462,6 +468,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         isArxiv={current?.id === "arxiv"}
         onClose={() => setSelected(null)}
         returnFocusTo={mapShellRef}
+        topInset={topBarHeight}
       />
       <TuningPanel
         open={panelOpen}
@@ -484,6 +491,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         onClose={handleClosePanel}
         returnFocusTo={gearButtonRef}
         mapContainerRef={mapShellRef}
+        topInset={topBarHeight}
       />
     </div>
   );

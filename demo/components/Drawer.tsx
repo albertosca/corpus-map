@@ -12,6 +12,8 @@ export interface DrawerProps {
   onClose: () => void;
   /** Focused when the drawer closes (close button or Escape) — the demo's map surface. */
   returnFocusTo: RefObject<HTMLElement | null>;
+  /** Where the drawer starts from the top: the top bar's measured height, so the corpus picker and Tuning stay usable while it is open. */
+  topInset?: number | undefined;
 }
 
 const ANIMATION_STYLE = `
@@ -187,7 +189,14 @@ function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: 
  * `ZoomControls` shifts itself left of the drawer's edge instead, so both
  * stay visible and clickable at once; see `ZoomControls.tsx`.
  */
-export function Drawer({ node, territoryName, isArxiv, onClose, returnFocusTo }: DrawerProps): ReactElement | null {
+export function Drawer({
+  node,
+  territoryName,
+  isArxiv,
+  onClose,
+  returnFocusTo,
+  topInset = 0,
+}: DrawerProps): ReactElement | null {
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -250,7 +259,7 @@ export function Drawer({ node, territoryName, isArxiv, onClose, returnFocusTo }:
         role="dialog"
         aria-modal="false"
         aria-labelledby={titleId}
-        style={panelStyle}
+        style={{ ...panelStyle, top: topInset }}
       >
         <div style={headerRowStyle}>
           <h2 id={titleId} style={titleStyle}>

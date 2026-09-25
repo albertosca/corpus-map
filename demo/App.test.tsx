@@ -264,8 +264,6 @@ const VIEWPORT_HEIGHT_PX = 800;
  * The zoom controls' and the indicator's live in `floatingLayout.ts`, since
  * `Footer` places itself from them too.
  */
-const TOPBAR_HEIGHT_ESTIMATE = 50; // ~24px content (15px label + a native <select>'s own default height) + 20px padding
-
 /**
  * The footer's height with its text wrapped inside its declared box: the
  * longest disclosure (the arXiv sentence, ~370px at 12px system-ui) takes at
@@ -327,19 +325,27 @@ function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | n
   };
 }
 
-/** `[data-drawer]`'s box, present only while the drawer is open. `top: 0; bottom: 0` spans the full viewport height by construction, so every other box's y-band trivially falls inside it — only x matters for this one, same as fix round 1. */
-function drawerBox(container: HTMLElement, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>("[data-drawer]");
+/**
+ * A right-side sheet's box — the drawer (`[data-drawer]`) or the tuning panel
+ * (`[data-tuning-panel]`), present only while open: `right`/`width`/`maxWidth`
+ * for x, and from its `top` offset down to `bottom: 0` for y.
+ */
+function sheetBox(container: HTMLElement, selector: string, label: string, viewportWidth: number): Box | null {
+  const el = container.querySelector<HTMLElement>(selector);
   if (!el) return null;
   const right = toPx(el.style.right, viewportWidth);
   const width = Math.min(toPx(el.style.width, viewportWidth), toPx(el.style.maxWidth, viewportWidth));
   return {
-    label: "drawer",
+    label,
     x0: viewportWidth - right - width,
     x1: viewportWidth - right,
     yFromBottom0: 0,
-    yFromBottom1: VIEWPORT_HEIGHT_PX,
+    yFromBottom1: VIEWPORT_HEIGHT_PX - toPx(el.style.top, viewportWidth),
   };
+}
+
+function drawerBox(container: HTMLElement, viewportWidth: number): Box | null {
+  return sheetBox(container, "[data-drawer]", "drawer", viewportWidth);
 }
 
 /** `[data-indicator]`'s box: `left`/`bottom` are its own inline values; width is `min(its own maxWidth, INDICATOR_MAX_CONTENT_WIDTH)` — the same model `ZoomControls`' own breakpoint is built from (`floatingLayout.ts`), so the test and the runtime code agree on what "wide enough" means. */
@@ -358,15 +364,15 @@ function indicatorBox(container: HTMLElement, viewportWidth: number): Box | null
   };
 }
 
-/** `[data-topbar]`'s box: `left: 0; right: 0` spans the full width; its height is estimated (see `TOPBAR_HEIGHT_ESTIMATE`) and placed from `VIEWPORT_HEIGHT_PX`, since it is the one top-anchored control among an otherwise bottom-anchored set. */
-function topBarBox(container: HTMLElement): Box | null {
+/** `[data-topbar]`'s box: `left: 0; right: 0` spans the full width; its height is the one `FakeResizeObserver` reports for it at this width (it wraps taller on a narrow screen), placed from `VIEWPORT_HEIGHT_PX`, since it is the one top-anchored control among an otherwise bottom-anchored set. */
+function topBarBox(container: HTMLElement, viewportWidth: number): Box | null {
   const el = container.querySelector<HTMLElement>("[data-topbar]");
   if (!el) return null;
   return {
     label: "topbar",
     x0: 0,
     x1: Number.POSITIVE_INFINITY,
-    yFromBottom0: VIEWPORT_HEIGHT_PX - TOPBAR_HEIGHT_ESTIMATE,
+    yFromBottom0: VIEWPORT_HEIGHT_PX - FakeResizeObserver.topBarHeight(viewportWidth),
     yFromBottom1: VIEWPORT_HEIGHT_PX,
   };
 }
@@ -425,25 +431,38 @@ function boxesIntersect(a: Box, b: Box): boolean {
  * centred footer covered the minimap at 375-600px and Fit at 768px with the
  * drawer open): it declares its own band (`footerBox`), so it is checked
  * against every other box here like the rest.
+ *
+ * The one pair the drawer (and the tuning panel, which takes the same slot)
+ * is checked in: against the top bar. The review found the open sheet
+ * covering the Tuning button and the corpus picker at 1440 and 768, which
+ * is not a reversible-overlay fallback — the picker must stay usable while a
+ * sheet is open — so each sheet has to start below the bar's measured height.
  */
 function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: number): void {
   const boxes = [
     zoomControlsBox(container, viewportWidth),
     indicatorBox(container, viewportWidth),
-    topBarBox(container),
+    topBarBox(container, viewportWidth),
     minimapBox(),
     footerBox(container, viewportWidth),
   ].filter((b): b is Box => b !== null);
-
+  const pairs: Array<[Box, Box]> = [];
   for (let i = 0; i < boxes.length; i += 1) {
-    for (let j = i + 1; j < boxes.length; j += 1) {
-      const a = boxes[i] as Box;
-      const b = boxes[j] as Box;
-      expect(
-        boxesIntersect(a, b),
-        `${a.label} [${a.x0.toFixed(1)},${a.x1.toFixed(1)}]x[${a.yFromBottom0},${a.yFromBottom1}] and ${b.label} [${b.x0.toFixed(1)},${b.x1.toFixed(1)}]x[${b.yFromBottom0},${b.yFromBottom1}] intersect at viewport width ${viewportWidth}`,
-      ).toBe(false);
-    }
+    for (let j = i + 1; j < boxes.length; j += 1) pairs.push([boxes[i] as Box, boxes[j] as Box]);
+  }
+  const topBar = topBarBox(container, viewportWidth);
+  for (const sheet of [
+    drawerBox(container, viewportWidth),
+    sheetBox(container, "[data-tuning-panel]", "tuning-panel", viewportWidth),
+  ]) {
+    if (sheet && topBar) pairs.push([topBar, sheet]);
+  }
+
+  for (const [a, b] of pairs) {
+    expect(
+      boxesIntersect(a, b),
+      `${a.label} [${a.x0.toFixed(1)},${a.x1.toFixed(1)}]x[${a.yFromBottom0},${a.yFromBottom1}] and ${b.label} [${b.x0.toFixed(1)},${b.x1.toFixed(1)}]x[${b.yFromBottom0},${b.yFromBottom1}] intersect at viewport width ${viewportWidth}`,
+    ).toBe(false);
   }
 }
 
@@ -465,19 +484,61 @@ async function renderApp(arxivPayload: unknown = TINY_ARXIV_SPEC) {
  */
 class FakeResizeObserver {
   static readonly size = { width: 1280, height: 800 };
+
+  /**
+   * The top bar's border-box height at a viewport width, standing in for
+   * the browser's layout: one row (~50px) when wide, two rows once its
+   * contents wrap on a narrow screen (the review measured the wrap at 375).
+   * The numbers are this fake's world, not a claim about real pixels — what
+   * the tests check is that the right-side sheets start below whatever the
+   * bar reports.
+   */
+  static topBarHeight(viewportWidth: number): number {
+    return viewportWidth < 600 ? 90 : 50;
+  }
+
+  private static readonly live = new Set<FakeResizeObserver>();
+
+  /** Re-reports every observed element, as a real observer does after a layout change (a window resize). */
+  static fireAll(): void {
+    for (const observer of FakeResizeObserver.live) observer.report();
+  }
+
   private readonly callback: ResizeObserverCallback;
+  private readonly targets = new Set<Element>();
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
   }
 
-  observe(): void {
-    const entry = { contentRect: FakeResizeObserver.size } as ResizeObserverEntry;
-    this.callback([entry], this as unknown as ResizeObserver);
+  observe(target: Element): void {
+    this.targets.add(target);
+    FakeResizeObserver.live.add(this);
+    this.report();
   }
 
-  unobserve(): void {}
-  disconnect(): void {}
+  private report(): void {
+    const entries = [...this.targets].map((target) => {
+      const size = target.hasAttribute("data-topbar")
+        ? { width: window.innerWidth, height: FakeResizeObserver.topBarHeight(window.innerWidth) }
+        : FakeResizeObserver.size;
+      return {
+        target,
+        contentRect: size,
+        borderBoxSize: [{ inlineSize: size.width, blockSize: size.height }],
+      } as unknown as ResizeObserverEntry;
+    });
+    if (entries.length > 0) this.callback(entries, this as unknown as ResizeObserver);
+  }
+
+  unobserve(target: Element): void {
+    this.targets.delete(target);
+  }
+
+  disconnect(): void {
+    this.targets.clear();
+    FakeResizeObserver.live.delete(this);
+  }
 }
 
 describe("App (showcase Task 5)", () => {
@@ -1023,7 +1084,7 @@ describe("App (showcase Task 5)", () => {
        * minimap under that old threshold, then a spread up through a
        * clearly-wide desktop width.
        */
-      const SWEEP_WIDTHS = [375, 440, 480, 588, 600, 768, 1024, 1280];
+      const SWEEP_WIDTHS = [375, 440, 480, 588, 600, 768, 1024, 1280, 1440];
 
       it("no two floating boxes intersect at any swept width, with the drawer open or with it closed", async () => {
         const { container } = await renderApp(SELECT_SPEC);
@@ -1036,6 +1097,8 @@ describe("App (showcase Task 5)", () => {
         for (const width of SWEEP_WIDTHS) {
           setViewportWidth(width);
           fireEvent(window, new Event("resize"));
+          // The top bar re-wraps at the new width; a real observer reports it.
+          act(() => FakeResizeObserver.fireAll());
 
           // Drawer closed — trivially safe (the unshifted `right: 12` never
           // reaches the bottom-left column at these widths), checked anyway
@@ -1049,6 +1112,24 @@ describe("App (showcase Task 5)", () => {
 
           fireEvent.keyDown(document, { key: "Escape" });
           expect(screen.queryByRole("dialog")).toBeNull();
+        }
+      });
+
+      it("the open tuning panel starts below the top bar at every swept width (2026-09-25 review)", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+
+        for (const width of SWEEP_WIDTHS) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+          act(() => FakeResizeObserver.fireAll());
+
+          fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+          await screen.findByRole("dialog", { name: "Tuning" });
+          checkNoFloatingBoxIntersections(container, width);
+
+          fireEvent.keyDown(document, { key: "Escape" });
+          expect(screen.queryByRole("dialog", { name: "Tuning" })).toBeNull();
         }
       });
 

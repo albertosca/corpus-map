@@ -34,6 +34,8 @@ export interface TuningPanelProps {
   returnFocusTo: RefObject<HTMLElement | null>;
   /** The map's own container, handed straight to `WheelCapture`. */
   mapContainerRef: RefObject<HTMLElement | null>;
+  /** Where the panel starts from the top: the top bar's measured height, so the corpus picker and the Tuning button stay usable while it is open. */
+  topInset?: number | undefined;
 }
 
 /** Neutral colours, reused (not reinvented) from the rest of the demo shell — see `visual restraint`, spec 4 §2. */
@@ -289,6 +291,7 @@ export function TuningPanel({
   onClose,
   returnFocusTo,
   mapContainerRef,
+  topInset = 0,
 }: TuningPanelProps): ReactElement | null {
   const titleId = useId();
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -382,7 +385,7 @@ export function TuningPanel({
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
-      style={panelStyle}
+      style={{ ...panelStyle, top: topInset }}
     >
       <div style={headerRowStyle}>
         <h2 id={titleId} style={titleStyle}>
