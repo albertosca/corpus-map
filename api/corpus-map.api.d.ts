@@ -96,6 +96,10 @@ export interface AccessibleTreeProps {
     cap: number;
     onFocusTerritory?: ((territory: Territory) => void) | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
+    /** Reports the id of the territory whose button gains keyboard focus, and `null` when it loses it. */
+    onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
+    /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
+    onNodeFocusChange?: ((id: string | null) => void) | undefined;
 }
 /**
  * The canvas is decorative; this is the content. It mirrors the current
@@ -105,7 +109,21 @@ export interface AccessibleTreeProps {
  * for its cards. A corpus of ten thousand items never produces a tree of
  * ten thousand elements.
  */
-export declare function AccessibleTree({ spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect, }: AccessibleTreeProps): ReactElement;
+export declare function AccessibleTree({ spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect, onTerritoryFocusChange, onNodeFocusChange, }: AccessibleTreeProps): ReactElement;
+
+// a11y/paintFocus.d.ts
+import type { Scene } from "../shared/scene";
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import { type Viewport } from "../viewport/viewport";
+/**
+ * The visible half of keyboard focus: the accessible tree's buttons are
+ * visually hidden (the canvas is decorative, the tree is the content), so the
+ * territory or item whose button has focus is marked on the canvas instead.
+ */
+export declare function paintFocusedTerritory(surface: Surface, scene: Scene, vp: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth">, id: string): void;
+/** A ring around the focused item's point, one outline width clear of the point itself. */
+export declare function paintFocusedNode(surface: Surface, scene: Scene, vp: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth" | "pointRadius">, id: string): void;
 
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";
@@ -443,16 +461,24 @@ import type { Theme } from "./theme";
  * name carries its own absolute `activeFromScale` (see
  * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
  * instead of a fit-relative ratio threaded through the frame.
+ *
+ * `focusedTerritory`/`focusedNode` are the ids (primitives, so they can sit
+ * in an effect's dependency list) of the territory or item whose button in
+ * the accessible tree has keyboard focus; absent or `null` means none.
  */
 export interface Frame {
     regime: Regime;
     pointAlpha: number;
     width: number;
     height: number;
+    focusedTerritory?: string | null | undefined;
+    focusedNode?: string | null | undefined;
 }
 /**
  * The single place that decides paint order: boundaries, then points, then
- * names, so a name is never covered by a mark or by a later territory's fill.
+ * the keyboard-focus outline, then names, so a name is never covered by a
+ * mark, by a later territory's fill or by the focus outline, and the focus
+ * outline is never covered by a boundary or a point.
  */
 export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewport, frame: Frame, theme: Theme): void;
 
@@ -522,6 +548,10 @@ export interface Surface {
     text(text: string, x: number, y: number, color: string, font: string): void;
     /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
     globalAlpha(alpha: number): void;
+    /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
+    outline(points: Array<[number, number]>, color: string, width: number): void;
+    /** Strokes a circle of radius `r` centred on (x, y) (no fill) at `width`, leaving later calls untouched. */
+    ring(x: number, y: number, r: number, color: string, width: number): void;
 }
 export declare class RecordingSurface implements Surface {
     cleared: number;
@@ -545,12 +575,26 @@ export declare class RecordingSurface implements Surface {
         font: string;
     }>;
     alphas: number[];
-    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha">;
+    outlines: Array<{
+        points: Array<[number, number]>;
+        color: string;
+        width: number;
+    }>;
+    rings: Array<{
+        x: number;
+        y: number;
+        r: number;
+        color: string;
+        width: number;
+    }>;
+    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, x: number, y: number, r: number, fill: string): void;
     text(text: string, x: number, y: number, color: string, font: string): void;
     globalAlpha(alpha: number): void;
+    outline(points: Array<[number, number]>, color: string, width: number): void;
+    ring(x: number, y: number, r: number, color: string, width: number): void;
 }
 export declare function canvasSurface(ctx: CanvasRenderingContext2D): Surface;
 
@@ -568,6 +612,17 @@ export interface Theme {
     visited: string;
     unvisited: string;
     pointRadius: number;
+    /**
+     * Colour of the outline drawn on the canvas around the territory (or the
+     * item's point) whose button in the accessible tree has keyboard focus —
+     * the tree itself is visually hidden, so this is the only visible focus.
+     * Opaque, and at least 3:1 against the map's background (WCAG 2.2 SC
+     * 1.4.11); the default is checked against white and #f7f7f8, bare and
+     * under `territoryFill`.
+     */
+    focusOutline: string;
+    /** Line width of that outline, in CSS pixels. */
+    focusOutlineWidth: number;
 }
 export declare const DEFAULT_THEME: Theme;
 

@@ -97,7 +97,7 @@ function renderCard(node: MapNode) {
 
 Cards são decorativos. O overlay em que vivem é `aria-hidden` e `inert`, então nada dentro de um card é focável, entra na ordem de tabulação ou é clicável por conta própria — um clique solto sobre um card dispara `onSelect` com aquele nó, e essa é toda a superfície de interação de um card. Conteúdo interativo pertence à UI do próprio consumidor, guiada por `onSelect`.
 
-`theme` reestiliza o campo de pontos e os contornos de território; tanto o tipo `Theme` quanto o `DEFAULT_THEME` da biblioteca são exportados por `corpus-map`, então um consumidor pode tipar um tema próprio ou partir do padrão e sobrescrever campos individuais.
+`theme` reestiliza o campo de pontos e os contornos de território, e o contorno de foco do teclado (`focusOutline`, `focusOutlineWidth`: a árvore acessível é visualmente oculta, então o território ou item cujo botão tem o foco ganha um contorno no canvas; o azul padrão chega a pelo menos 3:1 contra uma página branca ou cinza-clara, WCAG 2.2 SC 1.4.11); tanto o tipo `Theme` quanto o `DEFAULT_THEME` da biblioteca são exportados por `corpus-map`, então um consumidor pode tipar um tema próprio ou partir do padrão e sobrescrever campos individuais.
 
 `thresholds.midAt` e `thresholds.nearAt` são múltiplos da escala ajustada — o zoom no qual o corpus inteiro cabe na caixa — e não valores de escala absolutos, então `DEFAULT_THRESHOLDS = { midAt: 2, nearAt: 6 }` abre todo corpus no regime distante, qualquer que seja sua própria extensão, e alcançar o regime médio ou próximo a partir daí exige só um zoom de 2x ou 6x.
 
@@ -118,7 +118,7 @@ Em desenvolvimento a demo consome a biblioteca por um alias do Vite para `src/`,
 ## Garantias
 
 - **Baseline em Canvas 2D, sem exigir WebGPU.** O campo de pontos é renderizado em Canvas 2D; nada nesta biblioteca exige WebGPU ou WebGL para funcionar.
-- **Alcançável por teclado e leitor de tela, com uma lacuna conhecida.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, com uma live region anunciando o regime atual. O que é alcançável hoje: nos regimes distante e médio, um botão por território (Enter dá zoom no mapa até ele); no regime próximo, um botão por item na tela, limitado pelo cap, e Enter o seleciona. Zoom-out e pan por teclado ainda não estão implementados, então, uma vez aberto um território, o teclado não consegue sair dele; veja [BACKLOG.md](docs/superpowers/BACKLOG.md).
+- **Alcançável por teclado e leitor de tela, com uma lacuna conhecida.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, com uma live region anunciando o regime atual. O que é alcançável hoje: nos regimes distante e médio, um botão por território (Enter dá zoom no mapa até ele); no regime próximo, um botão por item na tela, limitado pelo cap, e Enter o seleciona. O território ou item com o foco ganha um contorno no canvas. Zoom-out e pan por teclado ainda não estão implementados, então, uma vez aberto um território, o teclado não consegue sair dele; veja [BACKLOG.md](docs/superpowers/BACKLOG.md).
 
 ## Performance
 

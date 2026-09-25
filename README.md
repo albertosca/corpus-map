@@ -97,7 +97,7 @@ function renderCard(node: MapNode) {
 
 Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so nothing inside a card is focusable, in the tab order, or clickable on its own — a press released over a card fires `onSelect` with that node, and that is the whole interaction surface of a card. Interactive content belongs in the consumer's own UI, driven by `onSelect`.
 
-`theme` restyles the point field and territory strokes; both the `Theme` type and the library's `DEFAULT_THEME` are exported from `corpus-map`, so a consumer can type a custom theme or start from the default and override individual fields.
+`theme` restyles the point field and territory strokes, and the keyboard focus outline (`focusOutline`, `focusOutlineWidth`: the accessible tree is visually hidden, so the territory or item whose button has focus is outlined on the canvas; the default blue reaches at least 3:1 against a white or light-grey page, WCAG 2.2 SC 1.4.11); both the `Theme` type and the library's `DEFAULT_THEME` are exported from `corpus-map`, so a consumer can type a custom theme or start from the default and override individual fields.
 
 `thresholds.midAt` and `thresholds.nearAt` are multiples of the fitted scale — the zoom at which the whole corpus fits the box — not absolute scale values, so `DEFAULT_THRESHOLDS = { midAt: 2, nearAt: 6 }` opens every corpus in the far regime regardless of its own extent, and reaching the mid or near regime only ever takes a 2x or 6x zoom-in from there.
 
@@ -118,7 +118,7 @@ During development the demo consumes the library through a Vite alias to `src/`,
 ## Guarantees
 
 - **Canvas 2D baseline, no WebGPU required.** The point field renders on Canvas 2D; nothing in this library ever requires WebGPU or WebGL to run.
-- **Keyboard and screen-reader reachable, with a known gap.** Every zoom level is mirrored by a visually hidden, always-present accessible tree with a live region announcing the current regime. What is reachable today: at the far and mid regimes, one button per territory (Enter zooms the map to it); at the near regime, one button per on-screen item, capped, and Enter selects it. Keyboard zoom-out and pan are not implemented yet, so once a territory is open the keyboard cannot leave it; see [BACKLOG.md](docs/superpowers/BACKLOG.md).
+- **Keyboard and screen-reader reachable, with a known gap.** Every zoom level is mirrored by a visually hidden, always-present accessible tree with a live region announcing the current regime. What is reachable today: at the far and mid regimes, one button per territory (Enter zooms the map to it); at the near regime, one button per on-screen item, capped, and Enter selects it. The focused territory or item is outlined on the canvas. Keyboard zoom-out and pan are not implemented yet, so once a territory is open the keyboard cannot leave it; see [BACKLOG.md](docs/superpowers/BACKLOG.md).
 
 ## Performance
 

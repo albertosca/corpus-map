@@ -102,6 +102,60 @@ describe("canvasSurface", () => {
     surface.globalAlpha(0.5);
     expect(ctx.globalAlpha).toBe(0.5);
   });
+
+  function strokeCtx() {
+    return {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      arc: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 1,
+    };
+  }
+
+  it("strokes an outline ring without filling it, inside save/restore", () => {
+    const ctx = strokeCtx();
+    canvasSurface(ctx as unknown as CanvasRenderingContext2D).outline(
+      [
+        [0, 0],
+        [4, 0],
+        [0, 4],
+      ],
+      "#123456",
+      3,
+    );
+    expect(ctx.moveTo).toHaveBeenCalledWith(0, 0);
+    expect(ctx.lineTo).toHaveBeenCalledTimes(2);
+    expect(ctx.stroke).toHaveBeenCalledOnce();
+    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(ctx.strokeStyle).toBe("#123456");
+    expect(ctx.lineWidth).toBe(3);
+    expect(ctx.save).toHaveBeenCalledOnce();
+    expect(ctx.restore).toHaveBeenCalledOnce();
+  });
+
+  it("draws nothing for an empty outline", () => {
+    const ctx = strokeCtx();
+    canvasSurface(ctx as unknown as CanvasRenderingContext2D).outline([], "#123456", 3);
+    expect(ctx.beginPath).not.toHaveBeenCalled();
+    expect(ctx.stroke).not.toHaveBeenCalled();
+  });
+
+  it("strokes a ring as a full circle without filling it", () => {
+    const ctx = strokeCtx();
+    canvasSurface(ctx as unknown as CanvasRenderingContext2D).ring(10, 20, 6, "#123456", 3);
+    expect(ctx.arc).toHaveBeenCalledWith(10, 20, 6, 0, Math.PI * 2);
+    expect(ctx.stroke).toHaveBeenCalledOnce();
+    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(ctx.lineWidth).toBe(3);
+    expect(ctx.restore).toHaveBeenCalledOnce();
+  });
 });
 
 describe("RecordingSurface", () => {

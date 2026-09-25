@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { useEffect, useRef } from "react";
 import type { Regime } from "../lod/lod";
 import { visibleNodes } from "../lod/visible";
 import type { MapNode, MapSpec, Territory } from "../shared/spec";
@@ -13,6 +14,10 @@ export interface AccessibleTreeProps {
   cap: number;
   onFocusTerritory?: ((territory: Territory) => void) | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
+  /** Reports the id of the territory whose button gains keyboard focus, and `null` when it loses it. */
+  onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
+  /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
+  onNodeFocusChange?: ((id: string | null) => void) | undefined;
 }
 
 const UNASSIGNED = "Unassigned";
@@ -42,11 +47,36 @@ export function AccessibleTree({
   cap,
   onFocusTerritory,
   onSelect,
+  onTerritoryFocusChange,
+  onNodeFocusChange,
 }: AccessibleTreeProps): ReactElement {
   const loose = spec.nodes.filter((n) => n.territory === null);
 
+  // The buttons are visually hidden, so `CorpusMap` draws their focus on the
+  // canvas; it learns which one from focus/blur here. A focused button that
+  // unmounts (the regime changed, or its item left the listed set) fires no
+  // blur, so after every render a reported focus that is no longer inside
+  // this tree is withdrawn too — otherwise a stale highlight would stay drawn.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!reported.current) return;
+    if (rootRef.current?.contains(document.activeElement)) return;
+    reported.current = false;
+    onTerritoryFocusChange?.(null);
+    onNodeFocusChange?.(null);
+  });
+  const territoryFocus = (id: string | null) => {
+    reported.current = id !== null;
+    onTerritoryFocusChange?.(id);
+  };
+  const nodeFocus = (id: string | null) => {
+    reported.current = id !== null;
+    onNodeFocusChange?.(id);
+  };
+
   return (
-    <div style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+    <div ref={rootRef} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
       <div role="status" aria-live="polite">
         {ANNOUNCEMENT[regime]}
       </div>
@@ -54,7 +84,12 @@ export function AccessibleTree({
         <ul>
           {visibleNodes(spec, viewport, width, height, cap).map((n) => (
             <li key={n.id}>
-              <button type="button" onClick={() => onSelect?.(n)}>
+              <button
+                type="button"
+                onClick={() => onSelect?.(n)}
+                onFocus={() => nodeFocus(n.id)}
+                onBlur={() => nodeFocus(null)}
+              >
                 {n.label}
               </button>
             </li>
@@ -64,7 +99,12 @@ export function AccessibleTree({
         <ul>
           {spec.territories.map((t) => (
             <li key={t.id}>
-              <button type="button" onClick={() => onFocusTerritory?.(t)}>
+              <button
+                type="button"
+                onClick={() => onFocusTerritory?.(t)}
+                onFocus={() => territoryFocus(t.id)}
+                onBlur={() => territoryFocus(null)}
+              >
                 {t.name} ({t.members.length})
               </button>
             </li>

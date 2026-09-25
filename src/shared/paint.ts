@@ -1,3 +1,4 @@
+import { paintFocusedNode, paintFocusedTerritory } from "../a11y/paintFocus";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
@@ -15,17 +16,25 @@ import type { Theme } from "./theme";
  * name carries its own absolute `activeFromScale` (see
  * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
  * instead of a fit-relative ratio threaded through the frame.
+ *
+ * `focusedTerritory`/`focusedNode` are the ids (primitives, so they can sit
+ * in an effect's dependency list) of the territory or item whose button in
+ * the accessible tree has keyboard focus; absent or `null` means none.
  */
 export interface Frame {
   regime: Regime;
   pointAlpha: number;
   width: number;
   height: number;
+  focusedTerritory?: string | null | undefined;
+  focusedNode?: string | null | undefined;
 }
 
 /**
  * The single place that decides paint order: boundaries, then points, then
- * names, so a name is never covered by a mark or by a later territory's fill.
+ * the keyboard-focus outline, then names, so a name is never covered by a
+ * mark, by a later territory's fill or by the focus outline, and the focus
+ * outline is never covered by a boundary or a point.
  */
 export function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewport, frame: Frame, theme: Theme): void {
   surface.clear();
@@ -35,5 +44,8 @@ export function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewpor
     paintPoints(surface, spec, vp, theme);
     surface.globalAlpha(1);
   }
+  if (typeof frame.focusedTerritory === "string")
+    paintFocusedTerritory(surface, scene, vp, theme, frame.focusedTerritory);
+  if (typeof frame.focusedNode === "string") paintFocusedNode(surface, scene, vp, theme, frame.focusedNode);
   paintLabels(surface, scene, vp, theme, frame);
 }

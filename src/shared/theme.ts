@@ -12,6 +12,17 @@ export interface Theme {
   visited: string;
   unvisited: string;
   pointRadius: number;
+  /**
+   * Colour of the outline drawn on the canvas around the territory (or the
+   * item's point) whose button in the accessible tree has keyboard focus —
+   * the tree itself is visually hidden, so this is the only visible focus.
+   * Opaque, and at least 3:1 against the map's background (WCAG 2.2 SC
+   * 1.4.11); the default is checked against white and #f7f7f8, bare and
+   * under `territoryFill`.
+   */
+  focusOutline: string;
+  /** Line width of that outline, in CSS pixels. */
+  focusOutlineWidth: number;
 }
 
 export const DEFAULT_THEME: Theme = {
@@ -30,4 +41,6 @@ export const DEFAULT_THEME: Theme = {
   visited: "rgba(220,110,40,0.95)",
   unvisited: "rgba(140,140,150,0.35)",
   pointRadius: 3.5,
+  focusOutline: "#1d4ed8",
+  focusOutlineWidth: 3,
 };

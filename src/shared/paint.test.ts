@@ -328,3 +328,72 @@ describe("metric 14: point overlap", () => {
     expect(share).toBeLessThanOrEqual(MEASURED + 0.02);
   });
 });
+
+describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
+  // Two territories far enough apart that each has its own rings.
+  const two: MapSpec = {
+    version: "1",
+    territories: [
+      { id: "t1", name: "North", members: ["a", "b", "c"], centroid: [1, 1] },
+      { id: "t2", name: "South", members: ["d", "e", "f"], centroid: [1, 101] },
+    ],
+    nodes: [
+      { id: "a", label: "A", x: 0, y: 0, territory: "t1" },
+      { id: "b", label: "B", x: 2, y: 0, territory: "t1" },
+      { id: "c", label: "C", x: 1, y: 2, territory: "t1" },
+      { id: "d", label: "D", x: 0, y: 100, territory: "t2" },
+      { id: "e", label: "E", x: 2, y: 100, territory: "t2" },
+      { id: "f", label: "F", x: 1, y: 102, territory: "t2" },
+    ],
+  };
+  const scene = buildScene(two, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const screenRings = (id: string) =>
+    (scene.shapes.get(id) ?? []).map((ring) =>
+      ring.map(([x, y]) => [x * LABEL_VP.scale + LABEL_VP.tx, y * LABEL_VP.scale + LABEL_VP.ty]),
+    );
+  const paintWith = (regime: Regime, extra: Partial<Frame>): RecordingSurface => {
+    const s = new RecordingSurface();
+    paint(s, scene, two, LABEL_VP, frameFor(regime, extra), DEFAULT_THEME);
+    return s;
+  };
+
+  it("outlines every ring of the focused territory, and only that one, in the theme's focus style", () => {
+    const s = paintWith("far", { focusedTerritory: "t2" });
+    expect(screenRings("t2").length).toBeGreaterThan(0);
+    expect(s.outlines.map((o) => o.points)).toEqual(screenRings("t2"));
+    for (const o of s.outlines) {
+      expect(o.color).toBe(DEFAULT_THEME.focusOutline);
+      expect(o.width).toBe(DEFAULT_THEME.focusOutlineWidth);
+    }
+  });
+
+  it("draws no outline without a focused territory, or for an id the scene does not have", () => {
+    expect(paintWith("far", {}).outlines).toEqual([]);
+    expect(paintWith("far", { focusedTerritory: null }).outlines).toEqual([]);
+    expect(paintWith("far", { focusedTerritory: "nope" }).outlines).toEqual([]);
+  });
+
+  it("draws the outline above boundaries and points, below names", () => {
+    const s = paintWith("mid", { focusedTerritory: "t1" });
+    const firstOutline = s.calls.indexOf("outline");
+    expect(firstOutline).toBeGreaterThan(s.calls.lastIndexOf("polygon"));
+    expect(firstOutline).toBeGreaterThan(s.calls.lastIndexOf("alpha"));
+    expect(firstOutline).toBeLessThan(s.calls.indexOf("text"));
+  });
+
+  it("rings the focused item's point, at full opacity, in the focus style", () => {
+    const s = paintWith("near", { focusedNode: "e", pointAlpha: 0.3 });
+    expect(s.rings).toHaveLength(1);
+    const ring = first(s.rings);
+    expect(ring).toMatchObject({
+      x: 2 * LABEL_VP.scale + LABEL_VP.tx,
+      y: 100 * LABEL_VP.scale + LABEL_VP.ty,
+      color: DEFAULT_THEME.focusOutline,
+      width: DEFAULT_THEME.focusOutlineWidth,
+    });
+    expect(ring.r).toBeGreaterThan(DEFAULT_THEME.pointRadius);
+    // After the faded point pass has reset the alpha to 1.
+    expect(s.calls.indexOf("ring")).toBeGreaterThan(s.calls.lastIndexOf("alpha"));
+    expect(paintWith("near", { focusedNode: "missing" }).rings).toEqual([]);
+  });
+});

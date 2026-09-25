@@ -315,6 +315,16 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // proximity if the ratio zooms back in without a fresh move.
   if (next !== "mid" && next !== "near" && hover !== null) setHover(null);
 
+  // Keyboard focus in the accessible tree, drawn on the canvas (its buttons
+  // are visually hidden). Territory buttons are listed only below the near
+  // regime and item buttons only at it, so each id is painted only in the
+  // regime where its button can exist — a regime change never leaves a stale
+  // highlight for a frame while the tree catches up.
+  const [focusedTerritory, setFocusedTerritory] = useState<string | null>(null);
+  const [focusedNode, setFocusedNode] = useState<string | null>(null);
+  const paintedTerritoryFocus = next === "near" ? null : focusedTerritory;
+  const paintedNodeFocus = next === "near" ? focusedNode : null;
+
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
@@ -407,8 +417,22 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(canvasSurface(ctx), scene, spec, vp, { regime: next, pointAlpha, width, height }, theme);
-  }, [spec, scene, vp, next, pointAlpha, theme, width, height]);
+    paint(
+      canvasSurface(ctx),
+      scene,
+      spec,
+      vp,
+      {
+        regime: next,
+        pointAlpha,
+        width,
+        height,
+        focusedTerritory: paintedTerritoryFocus,
+        focusedNode: paintedNodeFocus,
+      },
+      theme,
+    );
+  }, [spec, scene, vp, next, pointAlpha, theme, width, height, paintedTerritoryFocus, paintedNodeFocus]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns
@@ -742,6 +766,8 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
               setVp({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
             }}
             onSelect={onSelect}
+            onTerritoryFocusChange={setFocusedTerritory}
+            onNodeFocusChange={setFocusedNode}
           />
           {minimapCorner ? (
             <Minimap
