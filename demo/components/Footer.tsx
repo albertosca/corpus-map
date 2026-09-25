@@ -1,8 +1,18 @@
 import type { CSSProperties, ReactElement } from "react";
 import type { CorpusId } from "../corpora";
+import {
+  BOTTOM_LEFT_COLUMN_WIDTH,
+  BOTTOM_ROW_HEIGHT,
+  FOOTER_MAX_WIDTH,
+  FOOTER_MIN_BAND_WIDTH,
+  GUTTER,
+} from "./floatingLayout";
+import { BUTTON_WIDTH, useViewportWidth, zoomControlsRight } from "./ZoomControls";
 
 interface FooterProps {
   corpusId: CorpusId;
+  /** Whether the drawer or the tuning panel is open — it decides where the zoom controls sit, and the footer keeps clear of them. */
+  drawerOpen?: boolean | undefined;
 }
 
 // Exact strings (spec 4 §2, task-5-brief): no arXiv logo, and the corpus is
@@ -13,13 +23,42 @@ const DISCLOSURE: Partial<Record<CorpusId, string>> = {
   synthetic: "Synthetic corpus, generated for scale testing.",
 };
 
+/** The footer's declared band: `left`/`right`/`bottom` offsets in px. */
+export interface FooterPlacement {
+  left: number;
+  right: number;
+  bottom: number;
+  lifted: boolean;
+}
+
+/**
+ * Where the footer sits (2026-09-25 browser review, B9 — the old centred
+ * footer covered the minimap at 375-600px and Fit at 768px with the drawer
+ * open). The rule: in the bottom row, between the bottom-left column
+ * (minimap + indicator) and the zoom controls in whichever position they are
+ * in, when that band is at least `FOOTER_MIN_BAND_WIDTH` wide; otherwise
+ * lifted one gutter above the whole bottom row, from the left gutter to the
+ * zoom controls' right edge. Either way the band clears every other bottom
+ * control by construction, from the same constants they are placed with.
+ */
+export function footerPlacement(viewportWidth: number, drawerOpen: boolean): FooterPlacement {
+  const zoomRight = zoomControlsRight(viewportWidth, drawerOpen);
+  const left = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER;
+  const right = zoomRight + BUTTON_WIDTH + GUTTER;
+  if (viewportWidth - left - right >= FOOTER_MIN_BAND_WIDTH) {
+    return { left, right, bottom: GUTTER, lifted: false };
+  }
+  return { left: GUTTER, right: zoomRight, bottom: BOTTOM_ROW_HEIGHT + GUTTER, lifted: true };
+}
+
 const style: CSSProperties = {
   position: "fixed",
-  left: "50%",
-  bottom: 12,
-  transform: "translateX(-50%)",
   zIndex: 10,
-  maxWidth: "92vw",
+  // With `left` and `right` both set, `maxWidth` caps the chip and the auto
+  // margins centre it inside the band (CSS 2.1 §10.3.7); the text wraps.
+  maxWidth: FOOTER_MAX_WIDTH,
+  marginLeft: "auto",
+  marginRight: "auto",
   textAlign: "center",
   whiteSpace: "normal",
   padding: "4px 14px",
@@ -31,15 +70,22 @@ const style: CSSProperties = {
 };
 
 /**
- * The disclosure line, bottom-centre (spec 4 §2): the arXiv attribution or
- * the synthetic-corpus notice, exactly. Nothing for a corpus that carries
- * neither (elements, constellations).
+ * The disclosure line (spec 4 §2): the arXiv attribution or the
+ * synthetic-corpus notice, exactly. Nothing for a corpus that carries
+ * neither (elements, constellations). Placed by `footerPlacement`.
  */
-export function Footer({ corpusId }: FooterProps): ReactElement | null {
+export function Footer({ corpusId, drawerOpen = false }: FooterProps): ReactElement | null {
+  const viewportWidth = useViewportWidth();
   const text = DISCLOSURE[corpusId];
   if (!text) return null;
+  const { left, right, bottom, lifted } = footerPlacement(viewportWidth, drawerOpen);
   return (
-    <footer data-footer data-floating-control style={style}>
+    <footer
+      data-footer
+      data-floating-control
+      data-footer-lifted={lifted ? "" : undefined}
+      style={{ ...style, left, right, bottom }}
+    >
       {text}
     </footer>
   );

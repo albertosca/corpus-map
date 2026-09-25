@@ -30,6 +30,16 @@ export const BUTTON_WIDTH = 84;
  */
 const WIDE_ENOUGH_TO_SHIFT_PX = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
 
+/**
+ * The controls' `right` offset at a viewport width, with the drawer (or the
+ * tuning panel, which takes the same slot) open or closed — shifted left of
+ * the drawer only when the viewport is wide enough (see above). Exported so
+ * `Footer` places itself against the same position the controls actually use.
+ */
+export function zoomControlsRight(viewportWidth: number, drawerOpen: boolean): number {
+  return drawerOpen && viewportWidth >= WIDE_ENOUGH_TO_SHIFT_PX ? DRAWER_MAX_WIDTH + GUTTER : GUTTER;
+}
+
 const wrapStyle: CSSProperties = {
   position: "fixed",
   bottom: 12,
@@ -57,19 +67,18 @@ const buttonStyle: CSSProperties = {
 };
 
 /**
- * Whether the viewport is wide enough to shift the controls left of the
- * open drawer instead of letting it cover them. Read once at mount (a
- * client-only demo, never server-rendered, so there is no hydration
- * mismatch to guard against) and kept live across a real browser resize.
+ * `window.innerWidth`, read once at mount (a client-only demo, never
+ * server-rendered, so there is no hydration mismatch to guard against) and
+ * kept live across a real browser resize. Shared with `Footer`.
  */
-function useIsWideEnoughToShift(): boolean {
-  const [isWide, setIsWide] = useState(() => window.innerWidth >= WIDE_ENOUGH_TO_SHIFT_PX);
+export function useViewportWidth(): number {
+  const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
-    const onResize = () => setIsWide(window.innerWidth >= WIDE_ENOUGH_TO_SHIFT_PX);
+    const onResize = () => setWidth(window.innerWidth);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  return isWide;
+  return width;
 }
 
 /**
@@ -85,9 +94,8 @@ function useIsWideEnoughToShift(): boolean {
  * acceptable, reversible fallback rather than a bug).
  */
 export function ZoomControls({ mapRef, drawerOpen = false }: ZoomControlsProps): ReactElement {
-  const isWideEnoughToShift = useIsWideEnoughToShift();
-  const shifted = drawerOpen && isWideEnoughToShift;
-  const style: CSSProperties = { ...wrapStyle, right: shifted ? DRAWER_MAX_WIDTH + GUTTER : GUTTER };
+  const viewportWidth = useViewportWidth();
+  const style: CSSProperties = { ...wrapStyle, right: zoomControlsRight(viewportWidth, drawerOpen) };
   return (
     <div data-zoom-controls data-floating-control style={style}>
       <button type="button" style={buttonStyle} onClick={() => mapRef.current?.zoomIn()}>

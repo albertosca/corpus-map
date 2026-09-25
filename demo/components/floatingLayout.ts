@@ -63,3 +63,40 @@ export const BOTTOM_LEFT_COLUMN_WIDTH = Math.max(
   MINIMAP_MARGIN + MINIMAP_WIDTH,
   INDICATOR_LEFT + INDICATOR_MAX_CONTENT_WIDTH,
 );
+
+/**
+ * Height estimates for the bottom row's content-sized boxes (jsdom cannot
+ * measure them, and neither can this module): 3 buttons × (~15.6px line
+ * height + 12px padding + 2px border) + 2 × 6px gaps ≈ 100.8 for the zoom
+ * controls; ~15.6px line height + 8px padding + 2px border for the
+ * indicator. Shared by `Footer` (to lift itself clear of the row) and by
+ * `App.test.tsx`'s collision check.
+ */
+export const ZOOM_CONTROLS_HEIGHT_ESTIMATE = 101;
+export const INDICATOR_HEIGHT_ESTIMATE = 26;
+
+/** The indicator's `bottom`: stacked one gutter above the minimap. */
+export const INDICATOR_BOTTOM = MINIMAP_MARGIN + MINIMAP_HEIGHT + GUTTER;
+
+/**
+ * How far the bottom row (minimap + indicator on the left, zoom controls on
+ * the right, all anchored `bottom: 12`) reaches up from the viewport's bottom
+ * edge — the taller of its two columns.
+ */
+export const BOTTOM_ROW_HEIGHT = Math.max(
+  INDICATOR_BOTTOM + INDICATOR_HEIGHT_ESTIMATE,
+  MINIMAP_MARGIN + ZOOM_CONTROLS_HEIGHT_ESTIMATE,
+);
+
+/**
+ * The footer's placement rule (2026-09-25 browser review, B9): it sits in the
+ * bottom row, between the bottom-left column and the zoom controls, when the
+ * band between them is at least this wide — about 30 characters of 12px
+ * text, so the arXiv sentence wraps to at most three legible lines. Below
+ * that it is lifted one gutter above the whole bottom row instead, spanning
+ * from the left gutter to the zoom controls' right edge.
+ */
+export const FOOTER_MIN_BAND_WIDTH = 200;
+
+/** The footer chip's own width ceiling, centred in its band (at or under the 343px content width of a 375px viewport). */
+export const FOOTER_MAX_WIDTH = 340;

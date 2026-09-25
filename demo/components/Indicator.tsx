@@ -1,6 +1,6 @@
 import type { CorpusMapView } from "corpus-map";
 import type { CSSProperties, ReactElement } from "react";
-import { GUTTER, INDICATOR_LEFT, MINIMAP_HEIGHT, MINIMAP_MARGIN } from "./floatingLayout";
+import { INDICATOR_BOTTOM, INDICATOR_LEFT } from "./floatingLayout";
 
 interface IndicatorProps {
   view: CorpusMapView | null;
@@ -13,7 +13,7 @@ interface IndicatorProps {
 const style: CSSProperties = {
   position: "fixed",
   left: INDICATOR_LEFT,
-  bottom: MINIMAP_MARGIN + MINIMAP_HEIGHT + GUTTER,
+  bottom: INDICATOR_BOTTOM,
   zIndex: 10,
   maxWidth: "55vw",
   overflow: "hidden",

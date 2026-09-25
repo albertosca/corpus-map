@@ -455,7 +455,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           for the drawer alone. */}
       <ZoomControls mapRef={mapRef} drawerOpen={selected !== null || panelOpen} />
       <Indicator view={view} />
-      <Footer corpusId={corpusId} />
+      <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
       <Drawer
         node={selected}
         territoryName={territoryName}

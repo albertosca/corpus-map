@@ -11,11 +11,13 @@ import { DRAWER_MAX_WIDTH } from "./components/Drawer";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
   GUTTER,
+  INDICATOR_HEIGHT_ESTIMATE,
   INDICATOR_LEFT,
   INDICATOR_MAX_CONTENT_WIDTH,
   MINIMAP_HEIGHT,
   MINIMAP_MARGIN,
   MINIMAP_WIDTH,
+  ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 } from "./components/floatingLayout";
 import { BUTTON_WIDTH } from "./components/ZoomControls";
 import { constellationsSpec } from "./corpora/constellations";
@@ -259,10 +261,54 @@ const VIEWPORT_HEIGHT_PX = 800;
  * ingredients (padding, border, font size) `task-6-rereview.md`'s own
  * finding used to verify the zoom controls' overlap by hand, kept here so
  * the pairwise sweep below can place a box on the y-axis too, not just x.
+ * The zoom controls' and the indicator's live in `floatingLayout.ts`, since
+ * `Footer` places itself from them too.
  */
-const ZOOM_CONTROLS_HEIGHT_ESTIMATE = 101; // 3 buttons × (~15.6px line height + 12px padding + 2px border) + 2 × 6px gaps ≈ 100.8
-const INDICATOR_HEIGHT_ESTIMATE = 26; // ~15.6px line height + 8px padding + 2px border
 const TOPBAR_HEIGHT_ESTIMATE = 50; // ~24px content (15px label + a native <select>'s own default height) + 20px padding
+
+/**
+ * The footer's height with its text wrapped inside its declared box: the
+ * longest disclosure (the arXiv sentence, ~370px at 12px system-ui) takes at
+ * most three lines at the narrowest band `Footer` ever sits in between the
+ * bottom-row columns (`FOOTER_MIN_BAND_WIDTH`, 200px, less 28px of padding),
+ * so 3 × ~15px lines + 8px padding + 2px border ≈ 55, rounded up.
+ */
+const FOOTER_HEIGHT_ESTIMATE = 60;
+
+/**
+ * Only for a footer centred by `left: 50%` + `translateX(-50%)` (the style
+ * before the 2026-09-25 browser review, kept measurable so a regression to it
+ * is caught by geometry, not by a missing property): its rendered width is
+ * its text's, capped by its `maxWidth`. ~370px measured for the arXiv
+ * sentence at 12px, plus 28px padding, rounded up.
+ */
+const CENTRED_FOOTER_WIDTH_ESTIMATE = 400;
+
+/**
+ * `[data-footer]`'s box. A footer that declares both `left` and `right` owns
+ * the band between them (its text wraps inside it; the band is a superset of
+ * the visible chip, so the check is conservative); a transform-centred one is
+ * modelled from its text width (see `CENTRED_FOOTER_WIDTH_ESTIMATE`).
+ */
+function footerBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const el = container.querySelector<HTMLElement>("[data-footer]");
+  if (!el) return null;
+  const bottom = toPx(el.style.bottom, viewportWidth);
+  let x0: number;
+  let x1: number;
+  if (el.style.left && el.style.right) {
+    x0 = toPx(el.style.left, viewportWidth);
+    x1 = viewportWidth - toPx(el.style.right, viewportWidth);
+  } else if (el.style.left && el.style.transform === "translateX(-50%)") {
+    const width = Math.min(toPx(el.style.maxWidth, viewportWidth), CENTRED_FOOTER_WIDTH_ESTIMATE);
+    const centre = toPx(el.style.left, viewportWidth);
+    x0 = centre - width / 2;
+    x1 = centre + width / 2;
+  } else {
+    throw new Error("footer declares neither left + right nor a left + translateX(-50%) centring");
+  }
+  return { label: "footer", x0, x1, yFromBottom0: bottom, yFromBottom1: bottom + FOOTER_HEIGHT_ESTIMATE };
+}
 
 /** `[data-zoom-controls]`'s box: `right`/`bottom` are its own inline values; width comes from its first `<button>` child (the wrapper itself sets no `width`, only its buttons do — `flex-direction: column` sizes the wrapper to them). */
 function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | null {
@@ -375,18 +421,10 @@ function boxesIntersect(a: Box, b: Box): boolean {
  * shifted position, even though the drawer's own box plays no part in the
  * assertion below.
  *
- * `[data-footer]` is deliberately left out too: it sets no fixed `width`
- * (only a `maxWidth: "92vw"` ceiling) and allows wrapping
- * (`whiteSpace: "normal"`), so unlike the indicator (`nowrap` + ellipsis,
- * genuinely bounded by its own short, known-format text) there is no
- * defensible width estimate to give it from inline values alone — jsdom
- * cannot measure the wrapped text either. A rough hand check against its
- * two possible disclosure strings suggests it may already sit close to, or
- * over, the zoom controls' unshifted position at some of these widths,
- * independent of the drawer or anything this fix round touches (footer's
- * own styling and the controls' unshifted `right: 12` are both unchanged
- * since showcase Task 5) — flagged in this round's report as an unverified
- * hypothesis for a follow-up, not fixed or asserted here.
+ * `[data-footer]` is included (2026-09-25 browser review, B9: the old
+ * centred footer covered the minimap at 375-600px and Fit at 768px with the
+ * drawer open): it declares its own band (`footerBox`), so it is checked
+ * against every other box here like the rest.
  */
 function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: number): void {
   const boxes = [
@@ -394,6 +432,7 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
     indicatorBox(container, viewportWidth),
     topBarBox(container),
     minimapBox(),
+    footerBox(container, viewportWidth),
   ].filter((b): b is Box => b !== null);
 
   for (let i = 0; i < boxes.length; i += 1) {
@@ -991,6 +1030,8 @@ describe("App (showcase Task 5)", () => {
         await screen.findByText(territoryButtonText(SELECT_SPEC));
         zoomToNear();
         const nodeButton = await screen.findByRole("button", { name: "A Tiny Paper About Testing" });
+        // The arXiv footer is one of the checked boxes; without it the sweep would skip it silently.
+        expect(container.querySelector("[data-footer]")).not.toBeNull();
 
         for (const width of SWEEP_WIDTHS) {
           setViewportWidth(width);
