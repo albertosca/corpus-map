@@ -50,16 +50,16 @@ const TINY_ARXIV_SPEC: MapSpec = {
 
 /** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name> (<memberCount>)"`. */
 function territoryButtonText(spec: MapSpec, index = 0): string {
-  const t = spec.territories[index];
-  if (!t) throw new Error(`spec has no territory at index ${index}`);
-  return `${t.name} (${t.members.length})`;
+  const territory = spec.territories[index];
+  if (!territory) throw new Error(`spec has no territory at index ${index}`);
+  return `${territory.name} (${territory.members.length})`;
 }
 
 const VIEWPORT_WIDTH_PX = 375;
 const GUTTER_PX = 16;
-const MAX_CONTENT_PX = VIEWPORT_WIDTH_PX - 2 * GUTTER_PX; // 343
-const WIDTH_PROPS = ["width", "maxWidth", "minWidth"] as const;
-const OFFSET_PROPS = ["left", "right"] as const;
+const MAXIMUM_CONTENT_PX = VIEWPORT_WIDTH_PX - 2 * GUTTER_PX; // 343
+const WIDTH_PROPERTIES = ["width", "maxWidth", "minWidth"] as const;
+const OFFSET_PROPERTIES = ["left", "right"] as const;
 
 /**
  * Parses one inline CSS length (`vw`/`%`/`px`) from a floating control and
@@ -72,14 +72,14 @@ const OFFSET_PROPS = ["left", "right"] as const;
  * additionally checked for a negative value, which would push the element
  * outside the viewport on that side regardless of its own width.
  */
-function checkNoOverflowAt375(el: HTMLElement, label: string): void {
-  for (const prop of [...WIDTH_PROPS, ...OFFSET_PROPS]) {
-    const raw = el.style[prop];
+function checkNoOverflowAt375(element: HTMLElement, label: string): void {
+  for (const property of [...WIDTH_PROPERTIES, ...OFFSET_PROPERTIES]) {
+    const raw = element.style[property];
     if (!raw || raw === "auto") continue;
     const match = /^(-?[\d.]+)(vw|px|%)$/.exec(raw.trim());
     if (!match) {
       throw new Error(
-        `${label}.${prop} = "${raw}" is not a recognised vw/px/% length — extend checkNoOverflowAt375 before trusting this control`,
+        `${label}.${property} = "${raw}" is not a recognised vw/px/% length — extend checkNoOverflowAt375 before trusting this control`,
       );
     }
     const value = Number(match[1]);
@@ -88,29 +88,29 @@ function checkNoOverflowAt375(el: HTMLElement, label: string): void {
     if (unit === "vw" || unit === "%") {
       expect(
         value,
-        `${label}.${prop} = ${raw} would exceed the 375px viewport (unit is ${unit}, must be <= 100)`,
+        `${label}.${property} = ${raw} would exceed the 375px viewport (unit is ${unit}, must be <= 100)`,
       ).toBeLessThanOrEqual(100);
-    } else if ((WIDTH_PROPS as readonly string[]).includes(prop)) {
+    } else if ((WIDTH_PROPERTIES as readonly string[]).includes(property)) {
       expect(
         value,
-        `${label}.${prop} = ${raw} would exceed the viewport once both 16px gutters are subtracted (max ${MAX_CONTENT_PX}px)`,
-      ).toBeLessThanOrEqual(MAX_CONTENT_PX);
+        `${label}.${property} = ${raw} would exceed the viewport once both 16px gutters are subtracted (max ${MAXIMUM_CONTENT_PX}px)`,
+      ).toBeLessThanOrEqual(MAXIMUM_CONTENT_PX);
     }
-    if ((OFFSET_PROPS as readonly string[]).includes(prop)) {
+    if ((OFFSET_PROPERTIES as readonly string[]).includes(property)) {
       expect(
         value,
-        `${label}.${prop} = ${raw} is negative, which pushes the element outside the viewport on that side`,
+        `${label}.${property} = ${raw} is negative, which pushes the element outside the viewport on that side`,
       ).toBeGreaterThanOrEqual(0);
     }
   }
 }
 
 /** The element's own identifying `data-*` attribute name (besides `data-floating-control`), or its tag name if it has none. */
-function labelFor(el: HTMLElement): string {
-  const dataAttr = Array.from(el.attributes).find(
-    (a) => a.name.startsWith("data-") && a.name !== "data-floating-control",
+function labelFor(element: HTMLElement): string {
+  const dataAttribute = Array.from(element.attributes).find(
+    (attribute) => attribute.name.startsWith("data-") && attribute.name !== "data-floating-control",
   );
-  return dataAttr ? dataAttr.name.slice("data-".length) : el.tagName.toLowerCase();
+  return dataAttribute ? dataAttribute.name.slice("data-".length) : element.tagName.toLowerCase();
 }
 
 /**
@@ -142,21 +142,21 @@ function labelFor(el: HTMLElement): string {
  * its marker instead of feeding it inert geometry — see `App.tsx`'s
  * `errorStyle`).
  */
-function assertDeclaresOwnBox(el: HTMLElement, label: string): void {
-  const position = el.style.position;
+function assertDeclaresOwnBox(element: HTMLElement, label: string): void {
+  const position = element.style.position;
   expect(
     position === "fixed" || position === "absolute",
     `${label} is position:"${position || "static"}", not fixed/absolute — an in-flow element cannot be genuinely floating UI and must not carry data-floating-control`,
   ).toBe(true);
-  const declaresWidth = (["width", "maxWidth"] as const).some((prop) => {
-    const raw = el.style[prop];
+  const declaresWidth = (["width", "maxWidth"] as const).some((property) => {
+    const raw = element.style[property];
     return !!raw && raw !== "auto";
   });
   expect(declaresWidth, `${label} declares no width/maxWidth — the overflow check has nothing to measure it with`).toBe(
     true,
   );
-  const declaresAnchor = (["left", "right"] as const).some((prop) => {
-    const raw = el.style[prop];
+  const declaresAnchor = (["left", "right"] as const).some((property) => {
+    const raw = element.style[property];
     return !!raw && raw !== "auto";
   });
   expect(declaresAnchor, `${label} declares no left/right — the overflow check has nothing to measure it with`).toBe(
@@ -175,17 +175,17 @@ function assertDeclaresOwnBox(el: HTMLElement, label: string): void {
  * `checkNoOverflowAt375`'s usual ceiling. A descendant with neither —
  * nothing at all, or a `px`/`vw` value past the ceiling — fails by name.
  */
-function assertDescendantIsBounded(el: HTMLElement, label: string): void {
-  if (el.style.maxWidth === "100%") return; // genuinely bounded by its container, nothing further to check
-  const declaresPxOrVwBound = (["width", "maxWidth"] as const).some((prop) => {
-    const raw = el.style[prop];
+function assertDescendantIsBounded(element: HTMLElement, label: string): void {
+  if (element.style.maxWidth === "100%") return; // genuinely bounded by its container, nothing further to check
+  const declaresPxOrVwBound = (["width", "maxWidth"] as const).some((property) => {
+    const raw = element.style[property];
     return !!raw && /^[\d.]+(px|vw)$/.test(raw.trim());
   });
   expect(
     declaresPxOrVwBound,
     `${label} is not bounded: no maxWidth:"100%" and no px/vw width/maxWidth of its own`,
   ).toBe(true);
-  checkNoOverflowAt375(el, label);
+  checkNoOverflowAt375(element, label);
 }
 
 /**
@@ -217,11 +217,11 @@ function assertDescendantIsBounded(el: HTMLElement, label: string): void {
 function checkAllFloatingControls(container: HTMLElement): void {
   const controls = Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"));
   expect(controls.length, "expected at least one [data-floating-control] element to check").toBeGreaterThan(0);
-  for (const el of controls) {
-    const label = labelFor(el);
-    assertDeclaresOwnBox(el, label);
-    checkNoOverflowAt375(el, label);
-    for (const child of Array.from(el.querySelectorAll<HTMLElement>("button, select"))) {
+  for (const element of controls) {
+    const label = labelFor(element);
+    assertDeclaresOwnBox(element, label);
+    checkNoOverflowAt375(element, label);
+    for (const child of Array.from(element.querySelectorAll<HTMLElement>("button, select"))) {
       assertDescendantIsBounded(child, `${label} > ${labelFor(child)}`);
     }
   }
@@ -289,32 +289,38 @@ const CENTRED_FOOTER_WIDTH_ESTIMATE = 400;
  * modelled from its text width (see `CENTRED_FOOTER_WIDTH_ESTIMATE`).
  */
 function footerBox(container: HTMLElement, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>("[data-footer]");
-  if (!el) return null;
-  const bottom = toPx(el.style.bottom, viewportWidth);
-  let x0: number;
-  let x1: number;
-  if (el.style.left && el.style.right) {
-    x0 = toPx(el.style.left, viewportWidth);
-    x1 = viewportWidth - toPx(el.style.right, viewportWidth);
-  } else if (el.style.left && el.style.transform === "translateX(-50%)") {
-    const width = Math.min(toPx(el.style.maxWidth, viewportWidth), CENTRED_FOOTER_WIDTH_ESTIMATE);
-    const centre = toPx(el.style.left, viewportWidth);
-    x0 = centre - width / 2;
-    x1 = centre + width / 2;
+  const element = container.querySelector<HTMLElement>("[data-footer]");
+  if (!element) return null;
+  const bottom = toPx(element.style.bottom, viewportWidth);
+  let leftEdge: number;
+  let rightEdge: number;
+  if (element.style.left && element.style.right) {
+    leftEdge = toPx(element.style.left, viewportWidth);
+    rightEdge = viewportWidth - toPx(element.style.right, viewportWidth);
+  } else if (element.style.left && element.style.transform === "translateX(-50%)") {
+    const width = Math.min(toPx(element.style.maxWidth, viewportWidth), CENTRED_FOOTER_WIDTH_ESTIMATE);
+    const centre = toPx(element.style.left, viewportWidth);
+    leftEdge = centre - width / 2;
+    rightEdge = centre + width / 2;
   } else {
     throw new Error("footer declares neither left + right nor a left + translateX(-50%) centring");
   }
-  return { label: "footer", x0, x1, yFromBottom0: bottom, yFromBottom1: bottom + FOOTER_HEIGHT_ESTIMATE };
+  return {
+    label: "footer",
+    x0: leftEdge,
+    x1: rightEdge,
+    yFromBottom0: bottom,
+    yFromBottom1: bottom + FOOTER_HEIGHT_ESTIMATE,
+  };
 }
 
 /** `[data-zoom-controls]`'s box: `right`/`bottom` are its own inline values; width comes from its first `<button>` child (the wrapper itself sets no `width`, only its buttons do — `flex-direction: column` sizes the wrapper to them). */
 function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>("[data-zoom-controls]");
-  const button = el?.querySelector<HTMLElement>("button");
-  if (!el || !button) return null;
-  const right = toPx(el.style.right, viewportWidth);
-  const bottom = toPx(el.style.bottom, viewportWidth);
+  const element = container.querySelector<HTMLElement>("[data-zoom-controls]");
+  const button = element?.querySelector<HTMLElement>("button");
+  if (!element || !button) return null;
+  const right = toPx(element.style.right, viewportWidth);
+  const bottom = toPx(element.style.bottom, viewportWidth);
   const width = toPx(button.style.width, viewportWidth);
   return {
     label: "zoom-controls",
@@ -331,16 +337,16 @@ function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | n
  * for x, and from its `top` offset down to `bottom: 0` for y.
  */
 function sheetBox(container: HTMLElement, selector: string, label: string, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>(selector);
-  if (!el) return null;
-  const right = toPx(el.style.right, viewportWidth);
-  const width = Math.min(toPx(el.style.width, viewportWidth), toPx(el.style.maxWidth, viewportWidth));
+  const element = container.querySelector<HTMLElement>(selector);
+  if (!element) return null;
+  const right = toPx(element.style.right, viewportWidth);
+  const width = Math.min(toPx(element.style.width, viewportWidth), toPx(element.style.maxWidth, viewportWidth));
   return {
     label,
     x0: viewportWidth - right - width,
     x1: viewportWidth - right,
     yFromBottom0: 0,
-    yFromBottom1: VIEWPORT_HEIGHT_PX - toPx(el.style.top, viewportWidth),
+    yFromBottom1: VIEWPORT_HEIGHT_PX - toPx(element.style.top, viewportWidth),
   };
 }
 
@@ -350,11 +356,11 @@ function drawerBox(container: HTMLElement, viewportWidth: number): Box | null {
 
 /** `[data-indicator]`'s box: `left`/`bottom` are its own inline values; width is `min(its own maxWidth, INDICATOR_MAX_CONTENT_WIDTH)` — the same model `ZoomControls`' own breakpoint is built from (`floatingLayout.ts`), so the test and the runtime code agree on what "wide enough" means. */
 function indicatorBox(container: HTMLElement, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>("[data-indicator]");
-  if (!el) return null;
-  const left = toPx(el.style.left, viewportWidth);
-  const bottom = toPx(el.style.bottom, viewportWidth);
-  const width = Math.min(toPx(el.style.maxWidth, viewportWidth), INDICATOR_MAX_CONTENT_WIDTH);
+  const element = container.querySelector<HTMLElement>("[data-indicator]");
+  if (!element) return null;
+  const left = toPx(element.style.left, viewportWidth);
+  const bottom = toPx(element.style.bottom, viewportWidth);
+  const width = Math.min(toPx(element.style.maxWidth, viewportWidth), INDICATOR_MAX_CONTENT_WIDTH);
   return {
     label: "indicator",
     x0: left,
@@ -366,8 +372,8 @@ function indicatorBox(container: HTMLElement, viewportWidth: number): Box | null
 
 /** `[data-topbar]`'s box: `left: 0; right: 0` spans the full width; its height is the one `FakeResizeObserver` reports for it at this width (it wraps taller on a narrow screen), placed from `VIEWPORT_HEIGHT_PX`, since it is the one top-anchored control among an otherwise bottom-anchored set. */
 function topBarBox(container: HTMLElement, viewportWidth: number): Box | null {
-  const el = container.querySelector<HTMLElement>("[data-topbar]");
-  if (!el) return null;
+  const element = container.querySelector<HTMLElement>("[data-topbar]");
+  if (!element) return null;
   return {
     label: "topbar",
     x0: 0,
@@ -397,10 +403,10 @@ function minimapBox(): Box {
   };
 }
 
-function boxesIntersect(a: Box, b: Box): boolean {
-  const xOverlap = a.x0 < b.x1 && b.x0 < a.x1;
-  const yOverlap = a.yFromBottom0 < b.yFromBottom1 && b.yFromBottom0 < a.yFromBottom1;
-  return xOverlap && yOverlap;
+function boxesIntersect(first: Box, second: Box): boolean {
+  const horizontalOverlap = first.x0 < second.x1 && second.x0 < first.x1;
+  const verticalOverlap = first.yFromBottom0 < second.yFromBottom1 && second.yFromBottom0 < first.yFromBottom1;
+  return horizontalOverlap && verticalOverlap;
 }
 
 /**
@@ -445,10 +451,11 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
     topBarBox(container, viewportWidth),
     minimapBox(),
     footerBox(container, viewportWidth),
-  ].filter((b): b is Box => b !== null);
+  ].filter((box): box is Box => box !== null);
   const pairs: Array<[Box, Box]> = [];
-  for (let i = 0; i < boxes.length; i += 1) {
-    for (let j = i + 1; j < boxes.length; j += 1) pairs.push([boxes[i] as Box, boxes[j] as Box]);
+  for (let index = 0; index < boxes.length; index += 1) {
+    for (let otherIndex = index + 1; otherIndex < boxes.length; otherIndex += 1)
+      pairs.push([boxes[index] as Box, boxes[otherIndex] as Box]);
   }
   const topBar = topBarBox(container, viewportWidth);
   for (const sheet of [
@@ -458,17 +465,25 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
     if (sheet && topBar) pairs.push([topBar, sheet]);
   }
 
-  for (const [a, b] of pairs) {
+  for (const [first, second] of pairs) {
     expect(
-      boxesIntersect(a, b),
-      `${a.label} [${a.x0.toFixed(1)},${a.x1.toFixed(1)}]x[${a.yFromBottom0},${a.yFromBottom1}] and ${b.label} [${b.x0.toFixed(1)},${b.x1.toFixed(1)}]x[${b.yFromBottom0},${b.yFromBottom1}] intersect at viewport width ${viewportWidth}`,
+      boxesIntersect(first, second),
+      `${first.label} [${first.x0.toFixed(1)},${first.x1.toFixed(1)}]x[${first.yFromBottom0},${first.yFromBottom1}] and ${second.label} [${second.x0.toFixed(1)},${second.x1.toFixed(1)}]x[${second.yFromBottom0},${second.yFromBottom1}] intersect at viewport width ${viewportWidth}`,
     ).toBe(false);
   }
 }
 
-/** Mocks the arXiv dynamic import with an already-resolved payload, then imports and renders a fresh `App`. */
+/** A successful response for the arXiv asset request, carrying `payload` as its JSON body. */
+function arxivResponse(payload: unknown): Response {
+  return new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+/** Stubs the arXiv asset `fetch` with an already-resolved payload, then imports and renders a fresh `App`. */
 async function renderApp(arxivPayload: unknown = TINY_ARXIV_SPEC) {
-  vi.doMock("./corpora/arxiv.json", () => ({ default: arxivPayload }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => arxivResponse(arxivPayload)),
+  );
   const { App } = await import("./App");
   return render(createElement(App));
 }
@@ -553,21 +568,20 @@ describe("App (showcase Task 5)", () => {
 
   afterEach(() => {
     cleanup();
-    vi.doUnmock("./corpora/arxiv.json");
+    vi.unstubAllGlobals();
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserver | undefined }).ResizeObserver =
       originalResizeObserver;
   });
 
-  it("shows a loading state, then the map, for the default arXiv corpus (mocked dynamic import)", async () => {
-    // The deferred promise is created up front, outside the mock factory,
-    // so `resolveImport` is bound synchronously here rather than depending
-    // on exactly when Vitest's module runner gets around to invoking the
-    // factory for a dynamic `import()` buried inside an effect.
-    let resolveImport!: (value: { default: unknown }) => void;
-    const pending = new Promise<{ default: unknown }>((resolve) => {
-      resolveImport = resolve;
+  it("shows a loading state, then the map, for the default arXiv corpus (stubbed fetch)", async () => {
+    let resolveFetch!: (value: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
     });
-    vi.doMock("./corpora/arxiv.json", () => pending);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => pending),
+    );
     const { App } = await import("./App");
     render(createElement(App));
 
@@ -575,7 +589,7 @@ describe("App (showcase Task 5)", () => {
     expect(screen.queryByText(territoryButtonText(TINY_ARXIV_SPEC))).toBeNull();
 
     await act(async () => {
-      resolveImport({ default: TINY_ARXIV_SPEC });
+      resolveFetch(arxivResponse(TINY_ARXIV_SPEC));
     });
 
     // Mounting the map itself (the `ResizeObserver`'s first report, the
@@ -757,9 +771,9 @@ describe("App (showcase Task 5)", () => {
     /** A `loadArxiv` mock whose Nth call's controls (resolve/reject) are pushed to `controls` in call order. */
     function controllableLoader(): {
       loadArxiv: () => Promise<MapSpec>;
-      controls: Array<{ resolve: (spec: MapSpec) => void; reject: (err: Error) => void }>;
+      controls: Array<{ resolve: (spec: MapSpec) => void; reject: (error: Error) => void }>;
     } {
-      const controls: Array<{ resolve: (spec: MapSpec) => void; reject: (err: Error) => void }> = [];
+      const controls: Array<{ resolve: (spec: MapSpec) => void; reject: (error: Error) => void }> = [];
       const loadArxiv = vi.fn<() => Promise<MapSpec>>(
         () =>
           new Promise<MapSpec>((resolve, reject) => {
@@ -818,11 +832,11 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
 
       // Pinned, not asserted as "the only correct choice": every switch
-      // back into arXiv re-imports rather than reusing a cached spec. The
-      // real dynamic import this stands in for is itself cheap to call
-      // again — the browser's own module cache serves a second
-      // `import()` of the same specifier without a network re-fetch — so
-      // there is no caching layer here that could quietly go stale.
+      // back into arXiv calls the loader again rather than reusing a spec
+      // held by `App`. The real loader this stands in for is itself cheap
+      // to call again — it keeps a successful load in memory and only goes
+      // back to the network after a failure — so `App` needs no caching
+      // layer of its own that could quietly go stale.
       expect(loadArxiv).toHaveBeenCalledTimes(2);
     });
 
@@ -908,7 +922,7 @@ describe("App (showcase Task 5)", () => {
      * under the `MAX_ZOOM_IN` clamp of 64x.
      */
     function zoomToNear(): void {
-      for (let i = 0; i < 10; i += 1) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
         fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
       }
     }
@@ -1147,8 +1161,8 @@ describe("App (showcase Task 5)", () => {
         const minimap = minimapBox();
         expect(zoom).not.toBeNull();
         expect(drawer).not.toBeNull();
-        const z = zoom as NonNullable<typeof zoom>;
-        const d = drawer as NonNullable<typeof drawer>;
+        const zoomBox = zoom as NonNullable<typeof zoom>;
+        const openDrawerBox = drawer as NonNullable<typeof drawer>;
 
         // The breakpoint's own formula has one GUTTER for the column
         // clearance and, separately, one GUTTER on each side of the
@@ -1159,10 +1173,10 @@ describe("App (showcase Task 5)", () => {
         // zero (a real, positive margin), parsed from inline values, no
         // layout engine.
         const columnRight = Math.max(minimap.x1, INDICATOR_LEFT + INDICATOR_MAX_CONTENT_WIDTH);
-        expect(z.x0 - columnRight).toBe(2 * GUTTER);
+        expect(zoomBox.x0 - columnRight).toBe(2 * GUTTER);
         // And, unchanged from fix round 1, still clears the drawer's own
         // left edge by exactly one GUTTER.
-        expect(d.x0 - z.x1).toBe(GUTTER);
+        expect(openDrawerBox.x0 - zoomBox.x1).toBe(GUTTER);
       });
     });
   });
@@ -1189,15 +1203,15 @@ describe("App (showcase Task 5)", () => {
     };
 
     function zoomToNear(): void {
-      for (let i = 0; i < 10; i += 1) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
         fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
       }
     }
 
     function mapSurface(container: HTMLElement): HTMLElement {
-      const el = container.querySelector<HTMLElement>("[data-map-surface]");
-      if (!el) throw new Error("expected the map surface to be mounted");
-      return el;
+      const element = container.querySelector<HTMLElement>("[data-map-surface]");
+      if (!element) throw new Error("expected the map surface to be mounted");
+      return element;
     }
 
     it("the gear button toggles the tuning panel", async () => {
@@ -1421,7 +1435,7 @@ describe("App (showcase Task 5)", () => {
       expect(rows.length).toBeGreaterThanOrEqual(2);
       const firstDataRow = rows[1] as HTMLElement;
       const cells = within(firstDataRow).getAllByRole("cell");
-      expect(cells.map((c) => c.textContent)).toEqual(["-33.00", "0", "yes", "-"]);
+      expect(cells.map((cell) => cell.textContent)).toEqual(["-33.00", "0", "yes", "-"]);
     });
 
     it("the panel's own Close button and Escape both close it and return focus to the gear button", async () => {

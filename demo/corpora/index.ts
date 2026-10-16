@@ -16,14 +16,26 @@ export type GalleryEntry =
   | { id: Exclude<CorpusId, "arxiv">; label: string; spec: MapSpec };
 
 /**
- * `import("./arxiv.json")`'s default export is typed off the ~1.8 MB literal
- * (8,000 nodes) unless widened immediately — the same reason
- * `arxiv.test.ts` types its static import as `unknown` before handing it to
- * `validateSpec`.
+ * Vite emits the JSON as an asset for this URL pattern, in dev and in the build.
+ */
+const arxivUrl = new URL("./arxiv.json", import.meta.url).href;
+
+let loadedArxiv: MapSpec | undefined;
+
+/**
+ * `fetch`, not `import()`: a browser caches a failed dynamic import for the
+ * life of the document, so after one network failure every retry rejected
+ * without touching the network (B11). Only a success is kept in memory, as
+ * the module cache used to keep it, so switching back to arXiv does not
+ * download it again while a failure is always retried over the network.
  */
 async function loadArxiv(): Promise<MapSpec> {
-  const module: unknown = await import("./arxiv.json");
-  return validateSpec((module as { default: unknown }).default);
+  if (loadedArxiv !== undefined) return loadedArxiv;
+  const response = await fetch(arxivUrl);
+  if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
+  const body: unknown = await response.json();
+  loadedArxiv = validateSpec(body);
+  return loadedArxiv;
 }
 
 /** The synthetic corpus's picker label, e.g. "Synthetic (5,000 items)"; the demo passes the tuning panel's current size. */

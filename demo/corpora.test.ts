@@ -1,20 +1,79 @@
 import { render } from "@testing-library/react";
 import { createElement } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "../src/CorpusMap";
 import type { MapNode, MapSpec } from "../src/shared/spec";
 import { validateSpec } from "../src/shared/spec";
 import { type GalleryEntry, gallery } from "./corpora";
+import arxivJson from "./corpora/arxiv.json";
 
-/** Every gallery entry's spec — arXiv's dynamic import resolved, everything else already synchronous. */
-async function resolveSpec(entry: GalleryEntry): Promise<MapSpec> {
-  return "spec" in entry ? entry.spec : entry.load();
+const arxivBody = JSON.stringify(arxivJson);
+
+/** A `fetch` stand-in that answers the asset request the way the dev server and the build would. */
+async function fetchArxivAsset(_url: string | URL | Request): Promise<Response> {
+  return new Response(arxivBody, { status: 200, headers: { "Content-Type": "application/json" } });
 }
+
+/** Every gallery entry's spec — arXiv through a stubbed `fetch`, everything else already synchronous. */
+async function resolveSpec(entry: GalleryEntry): Promise<MapSpec> {
+  if ("spec" in entry) return entry.spec;
+  vi.stubGlobal("fetch", vi.fn(fetchArxivAsset));
+  return entry.load();
+}
+
+/** The arXiv entry from a fresh module instance, so no earlier test's loaded spec is held in memory. */
+async function arxivEntry(): Promise<Extract<GalleryEntry, { id: "arxiv" }>> {
+  vi.resetModules();
+  const { gallery: freshGallery } = await import("./corpora");
+  const entry = freshGallery.find((candidate) => candidate.id === "arxiv");
+  if (entry === undefined || !("load" in entry)) throw new Error("the gallery lost its arXiv entry");
+  return entry;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("arXiv loader", () => {
+  it("goes back to the network after a failed load, so the demo's Try again can succeed (B11)", async () => {
+    const fetchStub = vi.fn(fetchArxivAsset).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchStub);
+    const load = (await arxivEntry()).load;
+
+    await expect(load()).rejects.toThrow();
+    const spec = await load();
+
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    expect(String(fetchStub.mock.calls[1]?.[0])).toMatch(/\/demo\/corpora\/arxiv\.json$/);
+    expect(spec.territories.length).toBeGreaterThan(1);
+  });
+
+  it("serves a load after a success from memory, without another 1.8 MB request", async () => {
+    const fetchStub = vi.fn(fetchArxivAsset);
+    vi.stubGlobal("fetch", fetchStub);
+    const load = (await arxivEntry()).load;
+
+    const first = await load();
+    const second = await load();
+
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(second).toBe(first);
+  });
+
+  it("rejects on an HTTP error status instead of parsing the error page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("Service Unavailable", { status: 503 })),
+    );
+
+    await expect((await arxivEntry()).load()).rejects.toThrow(/503/);
+  });
+});
 
 describe("gallery corpora", () => {
   it("ships at least two, from the one list the demo picker reads", () => {
     expect(gallery.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(gallery.map((g) => g.id)).size).toBe(gallery.length);
+    expect(new Set(gallery.map((entry) => entry.id)).size).toBe(gallery.length);
   });
 
   it("are all valid specs", async () => {

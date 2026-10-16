@@ -163,16 +163,13 @@ type AsyncResult =
 
 export interface AppProps {
   /**
-   * Overrides the arXiv corpus's loader — the real dynamic import
-   * (`gallery`'s own `load`) by default. Exists so a test can drive two
-   * independently-controllable, concurrently pending loads of the same
-   * corpus id: Vitest/Vite's dynamic-import mocking cannot dedupe two
-   * concurrent `import()` calls of the same specifier the way a real
-   * browser does (task-5-review.md, Fix round 1, Finding 3), which makes
-   * the switch-away-and-back race untestable through module mocking alone.
-   * Injecting the loader sidesteps that limitation; the shipped demo never
-   * passes this prop, so `build:demo` still resolves the real
-   * `import("./arxiv.json")` and emits it as its own chunk.
+   * Overrides the arXiv corpus's loader — the real `fetch` of the JSON
+   * asset (`gallery`'s own `load`) by default. Exists so a test can drive
+   * two independently-controllable, concurrently pending loads of the same
+   * corpus id (task-5-review.md, Fix round 1, Finding 3), which makes the
+   * switch-away-and-back race testable without stubbing the network. The
+   * shipped demo never passes this prop, so `build:demo` still emits
+   * `arxiv.json` as its own asset and the demo fetches it.
    */
   loadArxiv?: (() => Promise<MapSpec>) | undefined;
 }
@@ -199,13 +196,13 @@ export function App({ loadArxiv }: AppProps = {}) {
   // `onSelect` fires; a corpus switch clears it in `handleCorpusChange`
   // below so a stale selection from the corpus just left can never show.
   const [selected, setSelected] = useState<MapNode | null>(null);
-  const mapRef = useRef<CorpusMapHandle>(null);
+  const mapReference = useRef<CorpusMapHandle>(null);
   // Not part of the library's own DOM (it wraps `CorpusMap`, whose own
   // `[data-map-surface]` root carries no tabIndex/role of its own) — made
   // programmatically focusable here (`tabIndex={-1}`: never in the Tab
   // order, only reachable via `.focus()`) so the drawer has somewhere to
   // return focus to when it closes.
-  const mapShellRef = useRef<HTMLDivElement>(null);
+  const mapShellReference = useRef<HTMLDivElement>(null);
 
   // The hidden tuning panel (showcase Task 7). `tuningDraft`/`thresholdsDraft`
   // mirror every control in the panel, including combinations the library
@@ -227,12 +224,12 @@ export function App({ loadArxiv }: AppProps = {}) {
   const [syntheticSize, setSyntheticSize] = useState(DEFAULT_SYNTHETIC_SIZE);
   const [syntheticSeed, setSyntheticSeed] = useState(DEFAULT_SYNTHETIC_SEED);
   // Focused when the panel closes -- the gear button in `TopBar`, the same
-  // return-focus pattern `mapShellRef`/`Drawer` already use.
-  const gearButtonRef = useRef<HTMLButtonElement>(null);
+  // return-focus pattern `mapShellReference`/`Drawer` already use.
+  const gearButtonReference = useRef<HTMLButtonElement>(null);
   // The drawer and the tuning panel start below the top bar, whose height is
   // measured because it wraps onto more rows on a narrow screen.
-  const topBarRef = useRef<HTMLElement>(null);
-  const topBarHeight = useBorderBoxHeight(topBarRef);
+  const topBarReference = useRef<HTMLElement>(null);
+  const topBarHeight = useBorderBoxHeight(topBarReference);
 
   // Regenerated only when the panel's own size/seed controls change --
   // never on an unrelated render -- because a plain object literal would
@@ -285,7 +282,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   const hasError = currentAsync?.status === "error";
 
   useEffect(() => {
-    const entry = gallery.find((g) => g.id === corpusId);
+    const entry = gallery.find((candidate) => candidate.id === corpusId);
     if (!entry || "spec" in entry) return;
     const load = loadArxiv ?? entry.load;
     let cancelled = false;
@@ -310,10 +307,10 @@ export function App({ loadArxiv }: AppProps = {}) {
   // and `setSelected` are `useState` setters (stable identity), so this
   // effect never needs to re-subscribe when other state changes.
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "t" && e.key !== "T") return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const target = e.target;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "t" && event.key !== "T") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
       if (target instanceof HTMLElement) {
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || target.isContentEditable) return;
@@ -344,7 +341,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   };
 
   const handleRetry = () => {
-    setRetryToken((t) => t + 1);
+    setRetryToken((token) => token + 1);
   };
 
   // Selecting a node opens the drawer and closes the panel -- the mutual
@@ -380,8 +377,8 @@ export function App({ loadArxiv }: AppProps = {}) {
     try {
       setAppliedTuning(resolveTuning(next));
       setTuningError(null);
-    } catch (err) {
-      setTuningError(err instanceof RangeError ? err.message : String(err));
+    } catch (error) {
+      setTuningError(error instanceof RangeError ? error.message : String(error));
     }
   };
 
@@ -394,8 +391,8 @@ export function App({ loadArxiv }: AppProps = {}) {
     try {
       setAppliedThresholds(resolveThresholds(next));
       setThresholdsError(null);
-    } catch (err) {
-      setThresholdsError(err instanceof RangeError ? err.message : String(err));
+    } catch (error) {
+      setThresholdsError(error instanceof RangeError ? error.message : String(error));
     }
   };
 
@@ -416,14 +413,16 @@ export function App({ loadArxiv }: AppProps = {}) {
   // from whichever spec is actually on screen, so `Drawer` itself never
   // needs to know how a `MapSpec` is shaped.
   const territoryName =
-    selected && current ? (current.spec.territories.find((t) => t.id === selected.territory)?.name ?? null) : null;
+    selected && current
+      ? (current.spec.territories.find((territory) => territory.id === selected.territory)?.name ?? null)
+      : null;
 
   return (
     <div data-app-shell style={shellStyle}>
-      <div ref={mapShellRef} tabIndex={-1} data-map-shell style={mapShellStyle}>
+      <div ref={mapShellReference} tabIndex={-1} data-map-shell style={mapShellStyle}>
         {current ? (
           <CorpusMap
-            ref={mapRef}
+            ref={mapReference}
             spec={current.spec}
             renderCard={CARDS[current.id]}
             minimap
@@ -452,14 +451,14 @@ export function App({ loadArxiv }: AppProps = {}) {
         onChange={handleCorpusChange}
         tuningOpen={panelOpen}
         onToggleTuning={handleTogglePanel}
-        gearButtonRef={gearButtonRef}
-        barRef={topBarRef}
+        gearButtonRef={gearButtonReference}
+        barRef={topBarReference}
       />
       {/* The panel occupies the same right-side slot as the drawer (mutually
           exclusive, `TuningPanel`'s own doc comment) -- `ZoomControls` shifts
           clear of whichever of the two is open, exactly as it already does
           for the drawer alone. */}
-      <ZoomControls mapRef={mapRef} drawerOpen={selected !== null || panelOpen} />
+      <ZoomControls mapRef={mapReference} drawerOpen={selected !== null || panelOpen} />
       <Indicator view={view} />
       <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
       <Drawer
@@ -467,7 +466,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         territoryName={territoryName}
         isArxiv={current?.id === "arxiv"}
         onClose={() => setSelected(null)}
-        returnFocusTo={mapShellRef}
+        returnFocusTo={mapShellReference}
         topInset={topBarHeight}
       />
       <TuningPanel
@@ -489,8 +488,8 @@ export function App({ loadArxiv }: AppProps = {}) {
         onSyntheticSeedChange={setSyntheticSeed}
         onReset={handleReset}
         onClose={handleClosePanel}
-        returnFocusTo={gearButtonRef}
-        mapContainerRef={mapShellRef}
+        returnFocusTo={gearButtonReference}
+        mapContainerRef={mapShellReference}
         topInset={topBarHeight}
       />
     </div>
