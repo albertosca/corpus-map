@@ -60,6 +60,20 @@ describe("arXiv loader", () => {
     expect(second).toBe(first);
   });
 
+  it("keeps nothing from a 200 whose body is not a valid spec, so the next load asks the network again", async () => {
+    const fetchStub = vi
+      .fn(fetchArxivAsset)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ version: "1", nodes: "not a list" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchStub);
+    const load = (await arxivEntry()).load;
+
+    await expect(load()).rejects.toThrow();
+    const spec = await load();
+
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    expect(spec.territories.length).toBeGreaterThan(1);
+  });
+
   it("rejects on an HTTP error status instead of parsing the error page", async () => {
     vi.stubGlobal(
       "fetch",
