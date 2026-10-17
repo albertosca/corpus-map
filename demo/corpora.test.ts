@@ -74,6 +74,47 @@ describe("arXiv loader", () => {
     expect(spec.territories.length).toBeGreaterThan(1);
   });
 
+  it("shares one request between loads that overlap, as StrictMode's doubled effect does in dev", async () => {
+    let resolveFetch: (response: Response) => void = () => {};
+    const fetchStub = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const load = (await arxivEntry()).load;
+
+    const first = load();
+    const second = load();
+    resolveFetch(await fetchArxivAsset(""));
+
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(await second).toBe(await first);
+  });
+
+  it("drops a shared load that failed, so the retry after overlapping loads still asks the network", async () => {
+    let rejectFetch: (error: Error) => void = () => {};
+    const fetchStub = vi.fn(fetchArxivAsset).mockImplementationOnce(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const load = (await arxivEntry()).load;
+
+    const first = load();
+    const second = load();
+    rejectFetch(new TypeError("Failed to fetch"));
+    await expect(first).rejects.toThrow();
+    await expect(second).rejects.toThrow();
+    const spec = await load();
+
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    expect(spec.territories.length).toBeGreaterThan(1);
+  });
+
   it("rejects on an HTTP error status instead of parsing the error page", async () => {
     vi.stubGlobal(
       "fetch",

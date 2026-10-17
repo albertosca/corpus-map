@@ -20,22 +20,32 @@ export type GalleryEntry =
  */
 const arxivUrl = new URL("./arxiv.json", import.meta.url).href;
 
-let loadedArxiv: MapSpec | undefined;
+let pendingArxiv: Promise<MapSpec> | undefined;
+
+async function fetchArxiv(): Promise<MapSpec> {
+  const response = await fetch(arxivUrl);
+  if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
+  const body: unknown = await response.json();
+  return validateSpec(body);
+}
 
 /**
  * `fetch`, not `import()`: a browser caches a failed dynamic import for the
  * life of the document, so after one network failure every retry rejected
- * without touching the network (B11). Only a success is kept in memory, as
- * the module cache used to keep it, so switching back to arXiv does not
- * download it again while a failure is always retried over the network.
+ * without touching the network (B11). The load is kept as one promise, as the
+ * module cache used to keep it: overlapping calls (StrictMode runs the demo's
+ * effect twice in dev) share a single request, and switching back to arXiv
+ * does not download it again. A failed load is dropped, so the next call goes
+ * back to the network.
  */
-async function loadArxiv(): Promise<MapSpec> {
-  if (loadedArxiv !== undefined) return loadedArxiv;
-  const response = await fetch(arxivUrl);
-  if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
-  const body: unknown = await response.json();
-  loadedArxiv = validateSpec(body);
-  return loadedArxiv;
+function loadArxiv(): Promise<MapSpec> {
+  if (pendingArxiv === undefined) {
+    pendingArxiv = fetchArxiv();
+    pendingArxiv.catch(() => {
+      pendingArxiv = undefined;
+    });
+  }
+  return pendingArxiv;
 }
 
 /** The synthetic corpus's picker label, e.g. "Synthetic (5,000 items)"; the demo passes the tuning panel's current size. */
