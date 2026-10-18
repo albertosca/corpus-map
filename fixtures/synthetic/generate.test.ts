@@ -84,6 +84,16 @@ function medianNearestNeighbour(points: Point[]): number {
   return median;
 }
 
+/** The corpus shape spec 2 relies on: about 2% loose items and a heavy tail of territory sizes. */
+function corpusShape(spec: MapSpec): { looseShare: number; largestOverMedian: number } {
+  const loose = spec.nodes.filter((node) => node.territory === null).length;
+  const sizes = spec.territories.map((territory) => territory.members.length).sort((first, second) => first - second);
+  const median = sizes[Math.floor(sizes.length / 2)];
+  const largest = sizes[sizes.length - 1];
+  if (median === undefined || largest === undefined) throw new Error("no territories");
+  return { looseShare: loose / spec.nodes.length, largestOverMedian: largest / median };
+}
+
 describe("generateCorpus", () => {
   it("is deterministic for a seed and differs across seeds", () => {
     expect(generateCorpus({ seed: 7, size: 500 })).toEqual(generateCorpus({ seed: 7, size: 500 }));
@@ -152,6 +162,39 @@ describe("generateCorpus", () => {
       const lengths = spec.territories.map((territory) => territory.name.length);
       expect(Math.min(...lengths)).toBeLessThanOrEqual(3);
       expect(Math.max(...lengths)).toBeGreaterThanOrEqual(40);
+    });
+  });
+  describe("corpus shape", () => {
+    for (const size of [MIN_SIZE, 5000]) {
+      it(`keeps about 2% of ${size} items loose`, () => {
+        const { looseShare } = corpusShape(generateCorpus({ seed: 1, size }));
+        expect(looseShare).toBeGreaterThanOrEqual(0.015);
+        expect(looseShare).toBeLessThanOrEqual(0.025);
+      });
+    }
+
+    it("gives the largest territory at least 5 times the median's members at 5,000 items", () => {
+      expect(corpusShape(generateCorpus({ seed: 1, size: 5000 })).largestOverMedian).toBeGreaterThanOrEqual(5);
+    });
+
+    it("tells a flat corpus with no loose items apart (the assertions' canary)", () => {
+      const flat: MapSpec = {
+        version: "1",
+        territories: [0, 1, 2].map((index) => ({
+          id: `t${index}`,
+          name: `T${index}`,
+          members: [`n${index}`],
+          centroid: [index, 0],
+        })),
+        nodes: [0, 1, 2].map((index) => ({
+          id: `n${index}`,
+          label: `N${index}`,
+          x: index,
+          y: 0,
+          territory: `t${index}`,
+        })),
+      };
+      expect(corpusShape(flat)).toEqual({ looseShare: 0, largestOverMedian: 1 });
     });
   });
 });
