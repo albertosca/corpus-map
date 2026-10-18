@@ -20,17 +20,17 @@ const spec: MapSpec = {
 const width = 400;
 const height = 300;
 
-/** Two territories, one at the origin and one at (ex, ey). */
-function twoTerritories(ex: number, ey: number): MapSpec {
+/** Two territories, one at the origin and one at (horizontal, vertical). */
+function twoTerritories(horizontal: number, vertical: number): MapSpec {
   return {
     version: "1",
     territories: [
       { id: "t1", name: "North", members: ["a"], centroid: [0, 0] },
-      { id: "t2", name: "South", members: ["b"], centroid: [ex, ey] },
+      { id: "t2", name: "South", members: ["b"], centroid: [horizontal, vertical] },
     ],
     nodes: [
       { id: "a", label: "Alpha", x: 0, y: 0, territory: "t1" },
-      { id: "b", label: "Beta", x: ex, y: ey, territory: "t2" },
+      { id: "b", label: "Beta", x: horizontal, y: vertical, territory: "t2" },
     ],
   };
 }
@@ -116,7 +116,7 @@ describe("CorpusMap", () => {
       ],
     };
     const { container } = render(
-      <CorpusMap spec={wide} renderCard={(n) => <div>{n.label}</div>} width={960} height={640} />,
+      <CorpusMap spec={wide} renderCard={(node) => <div>{node.label}</div>} width={960} height={640} />,
     );
     expect(container.querySelectorAll("[data-card]")).toHaveLength(0);
   });
@@ -134,7 +134,7 @@ describe("CorpusMap", () => {
     render(
       <CorpusMap
         spec={twoTerritories(1000, 1000)}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={thresholds}
@@ -170,7 +170,7 @@ describe("CorpusMap", () => {
     render(
       <CorpusMap
         spec={twoTerritories(1000, 1000)}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={thresholds}
@@ -198,7 +198,7 @@ describe("CorpusMap", () => {
     // swept here) regardless of extent — what varies with the extent is
     // only the magnitude of `fitScale`, and therefore the float ulp the
     // round trip can lose. Both `nearAt` ratios are swept.
-    const ks = [
+    const multipliers = [
       1, 7, 20, 50, 86, 95, 113, 130, 162, 168, 175, 195, 200, 208, 238, 260, 300, 323, 331, 348, 362, 377, 389, 398,
     ];
     const failures: string[] = [];
@@ -207,21 +207,22 @@ describe("CorpusMap", () => {
     // zoom clamp makes anything above it unreachable), swapped in for the
     // pre-I4 sweep's 100.
     for (const nearAt of [64, 12.5]) {
-      for (const k of ks) {
-        const ex = k * 1.37 + 0.11;
-        const ey = ex * 0.73;
+      for (const multiplier of multipliers) {
+        const horizontal = multiplier * 1.37 + 0.11;
+        const vertical = horizontal * 0.73;
         swept += 1;
         const { unmount } = render(
           <CorpusMap
-            spec={twoTerritories(ex, ey)}
-            renderCard={(n) => <div>{n.label}</div>}
+            spec={twoTerritories(horizontal, vertical)}
+            renderCard={(node) => <div>{node.label}</div>}
             width={width}
             height={height}
             thresholds={{ midAt: nearAt / 2, nearAt }}
           />,
         );
         await user.click(screen.getByRole("button", { name: /South/ }));
-        if (document.querySelector('[data-card="b"]') === null) failures.push(`nearAt=${nearAt} k=${k} ex=${ex}`);
+        if (document.querySelector('[data-card="b"]') === null)
+          failures.push(`nearAt=${nearAt} multiplier=${multiplier} horizontal=${horizontal}`);
         unmount();
       }
     }
@@ -230,12 +231,12 @@ describe("CorpusMap", () => {
   }, 20_000);
 
   it("resets the hysteresis regime, not just the viewport, when the spec changes under a wide hysteresis band (I2)", () => {
-    const specA: MapSpec = {
+    const firstSpec: MapSpec = {
       version: "1",
       territories: [],
       nodes: [{ id: "p1", label: "P1", x: 0, y: 0, territory: null }],
     };
-    const specB: MapSpec = {
+    const secondSpec: MapSpec = {
       version: "1",
       territories: [],
       nodes: [{ id: "p2", label: "P2", x: 0, y: 0, territory: null }],
@@ -243,8 +244,8 @@ describe("CorpusMap", () => {
     const onRegimeChange = vi.fn();
     const { container, rerender } = render(
       <CorpusMap
-        spec={specA}
-        renderCard={(n) => <div>{n.label}</div>}
+        spec={firstSpec}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0.5, nearAt: 1.02 }}
@@ -269,8 +270,8 @@ describe("CorpusMap", () => {
     // corpus it never actually zoomed into.
     rerender(
       <CorpusMap
-        spec={specB}
-        renderCard={(n) => <div>{n.label}</div>}
+        spec={secondSpec}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0.5, nearAt: 1.02 }}
@@ -292,7 +293,7 @@ describe("CorpusMap", () => {
     const { container, rerender } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -303,7 +304,7 @@ describe("CorpusMap", () => {
     rerender(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={800}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -326,7 +327,7 @@ describe("CorpusMap", () => {
     const { container, rerender } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -337,7 +338,7 @@ describe("CorpusMap", () => {
     rerender(
       <CorpusMap
         spec={farAway}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -353,7 +354,7 @@ describe("CorpusMap", () => {
     const { container: defaultContainer } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -366,7 +367,7 @@ describe("CorpusMap", () => {
     const { container } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
@@ -442,7 +443,7 @@ describe("CorpusMap", () => {
             theme={{ ...DEFAULT_THEME }}
           />,
         );
-      for (let i = 0; i < 5; i += 1) rerenderAt(2.5);
+      for (let index = 0; index < 5; index += 1) rerenderAt(2.5);
       expect(spy).toHaveBeenCalledTimes(1);
 
       rerenderAt(9);
@@ -463,8 +464,8 @@ describe("CorpusMap", () => {
       const tallHeight = 2000;
       const { rerender } = render(<CorpusMap spec={spec} renderCard={() => null} width={400} height={tallHeight} />);
       expect(spy).toHaveBeenCalledTimes(1);
-      for (const w of [500, 600, 700]) {
-        rerender(<CorpusMap spec={spec} renderCard={() => null} width={w} height={tallHeight} />);
+      for (const boxWidth of [500, 600, 700]) {
+        rerender(<CorpusMap spec={spec} renderCard={() => null} width={boxWidth} height={tallHeight} />);
       }
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -475,7 +476,7 @@ describe("CorpusMap", () => {
 
 function recordingContext(texts: Array<{ text: string; x: number; y: number }>): CanvasRenderingContext2D {
   const noop = () => {};
-  const ctx = {
+  const context = {
     canvas: { width: 0, height: 0 },
     clearRect: noop,
     setTransform: noop,
@@ -486,7 +487,7 @@ function recordingContext(texts: Array<{ text: string; x: number; y: number }>):
     fill: noop,
     stroke: noop,
     arc: noop,
-    fillText: (text: string, x: number, y: number) => texts.push({ text, x, y }),
+    fillText: (text: string, left: number, top: number) => texts.push({ text, x: left, y: top }),
     // `useMeasure` creates its own offscreen canvas; this override replaces
     // `HTMLCanvasElement.prototype.getContext` globally for the test, so
     // that canvas gets this fake context too and needs a `measureText`.
@@ -495,7 +496,7 @@ function recordingContext(texts: Array<{ text: string; x: number; y: number }>):
     strokeStyle: "",
     font: "",
   };
-  return ctx as unknown as CanvasRenderingContext2D;
+  return context as unknown as CanvasRenderingContext2D;
 }
 
 describe("spec swap", () => {
@@ -523,10 +524,10 @@ describe("spec swap", () => {
         ],
       };
       const { rerender } = render(
-        <CorpusMap spec={small} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />,
+        <CorpusMap spec={small} renderCard={(node) => <div>{node.label}</div>} width={400} height={300} />,
       );
       texts.length = 0;
-      rerender(<CorpusMap spec={large} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />);
+      rerender(<CorpusMap spec={large} renderCard={(node) => <div>{node.label}</div>} width={400} height={300} />);
       // The anchor is the pole of inaccessibility of the territory's shape
       // (Task 5/6), not its raw centroid, so the expectation is computed the
       // same way CorpusMap does: build the scene against the NEW spec, then
@@ -534,14 +535,14 @@ describe("spec swap", () => {
       // from before the swap.
       const largeVp = fitSpec(large, 400, 300, 24);
       const largeScene = buildScene(large, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-      const label = largeScene.labels.find((l) => l.id === "u");
+      const label = largeScene.labels.find((placed) => placed.id === "u");
       if (!label) throw new Error("expected a placed label for territory 'u'");
-      const [ex, ey] = toScreen(largeVp, label.anchor[0], label.anchor[1]);
-      const largeTexts = texts.filter((t) => t.text === "Large");
+      const [expectedLeft, expectedTop] = toScreen(largeVp, label.anchor[0], label.anchor[1]);
+      const largeTexts = texts.filter((drawn) => drawn.text === "Large");
       expect(largeTexts.length).toBeGreaterThan(0);
-      for (const t of largeTexts) {
-        expect(t.x).toBeCloseTo(ex, 6);
-        expect(t.y).toBeCloseTo(ey, 6);
+      for (const drawn of largeTexts) {
+        expect(drawn.x).toBeCloseTo(expectedLeft, 6);
+        expect(drawn.y).toBeCloseTo(expectedTop, 6);
       }
     } finally {
       HTMLCanvasElement.prototype.getContext = original;

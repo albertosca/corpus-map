@@ -106,18 +106,18 @@ const FIT_PADDING = 24;
 
 /**
  * Wheel zoom, and the imperative handle's `zoomIn`/`zoomOut` (showcase
- * Task 3), are clamped to [fit / MAX_ZOOM_OUT, fit * MAX_ZOOM_IN] of the
+ * Task 3), are clamped to [fit / MAXIMUM_ZOOM_OUT, fit * MAXIMUM_ZOOM_IN] of the
  * fitted scale, through the shared `zoomStepScale`, which also keeps a
  * step from moving opposite to its direction when a keep-view resize has
  * left the scale outside that band.
  */
-const MAX_ZOOM_OUT = 8;
-const MAX_ZOOM_IN = 64;
+const MAXIMUM_ZOOM_OUT = 8;
+const MAXIMUM_ZOOM_IN = 64;
 
 /** A press released within this many pixels of where it started is a click, not a drag. */
 const CLICK_SLOP = 4;
 
-function cardIdAt(root: HTMLElement | null, clientX: number, clientY: number): string | null {
+function cardIdAt(root: HTMLElement | null, horizontal: number, vertical: number): string | null {
   if (!root) return null;
   // Reverse the DOM order rather than index from the end: `noUncheckedIndexedAccess`
   // makes an out-of-bounds index type `HTMLElement | undefined`, and this list can
@@ -126,8 +126,13 @@ function cardIdAt(root: HTMLElement | null, clientX: number, clientY: number): s
   // still wins.
   const cards = [...root.querySelectorAll<HTMLElement>("[data-card]")].reverse();
   for (const card of cards) {
-    const r = card.getBoundingClientRect();
-    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+    const bounds = card.getBoundingClientRect();
+    if (
+      horizontal >= bounds.left &&
+      horizontal <= bounds.right &&
+      vertical >= bounds.top &&
+      vertical <= bounds.bottom
+    ) {
       return card.getAttribute("data-card");
     }
   }
@@ -163,30 +168,32 @@ interface HoverState {
  * matter which source it came from; a new `spec` refits. To refit after a
  * box change, pass a `ref` (typed `CorpusMapHandle`) and call its `fit()`.
  */
-export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
-  const { spec: raw, renderCard, onSelect, onRegimeChange, onViewChange } = props;
-  const thresholds = useMemo(() => resolveThresholds(props.thresholds), [props.thresholds]);
-  const tuning = useMemo(() => resolveTuning(props.tuning), [props.tuning]);
-  const cardCap = props.cardCap ?? 200;
+export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProps): ReactElement {
+  const { spec: raw, renderCard, onSelect, onRegimeChange, onViewChange } = properties;
+  const thresholds = useMemo(() => resolveThresholds(properties.thresholds), [properties.thresholds]);
+  const tuning = useMemo(() => resolveTuning(properties.tuning), [properties.tuning]);
+  const cardCap = properties.cardCap ?? 200;
   // Not memoized: `layoutCards` is cheap and already recomputed every render
   // inside `CardOverlay`, so keying a memo on this object's identity would
   // only add a stale-dependency risk (Task 7's lesson) for no benefit.
-  const cardSize = props.cardSize ?? DEFAULT_CARD_SIZE;
-  const theme = props.theme ?? DEFAULT_THEME;
+  const cardSize = properties.cardSize ?? DEFAULT_CARD_SIZE;
+  const theme = properties.theme ?? DEFAULT_THEME;
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
-  const nodesById = useMemo(() => new Map(spec.nodes.map((n) => [n.id, n])), [spec]);
+  const nodesById = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node])), [spec]);
 
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootReference = useRef<HTMLDivElement>(null);
   // Always called (rules of hooks): a consumer that never removes/adds
   // `width`/`height` across an instance's lifetime never sees it matter, and
   // one that does gets a `measured` value that has been tracking the parent
   // the whole time, ready the moment the explicit props are dropped.
-  const measured = useElementSize(rootRef);
+  const measured = useElementSize(rootReference);
   // "When both are given they win" (spec 4 §1): a lone `width` or `height`
   // does not count as explicit, and falls through to the measured box.
   const explicitBox =
-    props.width !== undefined && props.height !== undefined ? { width: props.width, height: props.height } : null;
+    properties.width !== undefined && properties.height !== undefined
+      ? { width: properties.width, height: properties.height }
+      : null;
   const box = explicitBox ?? measured;
   // A box with zero width or height is not ready: fitting into it would
   // squeeze the corpus into about a pixel, and since a later box change
@@ -198,12 +205,12 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   const width = box?.width ?? 0;
   const height = box?.height ?? 0;
 
-  const [vp, setVp] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
+  const [viewport, setViewport] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
   const fitted = useMemo(() => fitSpec(spec, width, height, FIT_PADDING), [spec, width, height]);
   const fitScale = fitted.scale;
   // Hysteresis regime; declared before the refit below (rather than nearer
   // where `ratio`/`next` are computed) so a spec/box swap can reset it in
-  // the same render-phase adjustment that resets `vp`, not just `vp` alone.
+  // the same render-phase adjustment that resets `viewport`, not just `viewport` alone.
   const [regime, setRegime] = useState<Regime>(() => regimeAt(1, thresholds, "far", tuning.hysteresis));
   // Refit during render, not an effect, so no frame is ever painted with the
   // new spec (or the first known box) at a stale viewport. `fitBasis` stays
@@ -221,7 +228,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // regime).
   //
   // A box-only change (showcase Task 2; unified across both box sources in
-  // fix round 1, per the controller's binding ruling) keeps `vp.scale` and
+  // fix round 1, per the controller's binding ruling) keeps `viewport.scale` and
   // keeps the world point that was at the old box's centre at the new box's
   // centre (`recenterOnBoxChange`), and does not reset the regime — the
   // view, hysteresis included, is kept — whether the box came from explicit
@@ -246,28 +253,28 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   if (ready) {
     if (fitBasis === null || fitBasis.spec !== spec) {
       setFitBasis({ spec, width, height });
-      if (fitBasis !== null) setRefits((n) => n + 1);
-      setVp(fitted);
+      if (fitBasis !== null) setRefits((count) => count + 1);
+      setViewport(fitted);
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     } else if (fitBasis.width !== width || fitBasis.height !== height) {
       setFitBasis({ spec, width, height });
-      setVp(recenterOnBoxChange(vp, fitBasis.width, fitBasis.height, width, height));
+      setViewport(recenterOnBoxChange(viewport, fitBasis.width, fitBasis.height, width, height));
     }
   }
-  const fitScaleRef = useRef(fitScale);
+  const fitScaleReference = useRef(fitScale);
   useEffect(() => {
-    fitScaleRef.current = fitScale;
+    fitScaleReference.current = fitScale;
   }, [fitScale]);
-  const tuningRef = useRef(tuning);
+  const tuningReference = useRef(tuning);
   useEffect(() => {
-    tuningRef.current = tuning;
+    tuningReference.current = tuning;
   }, [tuning]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasReference = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
   // A world point from a minimap press/drag (showcase Task 4), flushed in
   // the same rAF-coalesced frame as `pending`'s drag delta, through the same
-  // `setVp` — never its own, separately-scheduled commit.
+  // `setViewport` — never its own, separately-scheduled commit.
   const pendingCentre = useRef<{ wx: number; wy: number } | null>(null);
   const rafId = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
@@ -288,9 +295,9 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // entirely when they match, is what keeps a steady hover — the pointer
   // staying within radius of the same point across several frames — at
   // zero commits.
-  const hoverRef = useRef<HoverState | null>(null);
+  const hoverReference = useRef<HoverState | null>(null);
   useEffect(() => {
-    hoverRef.current = hover;
+    hoverReference.current = hover;
   }, [hover]);
 
   useEffect(() => {
@@ -299,7 +306,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     };
   }, []);
 
-  const ratio = vp.scale / fitScale;
+  const ratio = viewport.scale / fitScale;
   // Hysteresis regime, adjusted during render (the same pattern as the
   // refit above): a finer regime is entered at its threshold and left only
   // once the ratio falls a fraction `hysteresis` below it, so an oscillating
@@ -332,13 +339,13 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // hit-test's own `visibleNodes(..., Infinity)` call above, not the
   // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
   // same count a maxed-out card cap would otherwise hide (showcase Task 3).
-  const visibleCount = ready ? visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).length : 0;
+  const visibleCount = ready ? visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY).length : 0;
 
   // `false`/absent (no prop, or `minimap={false}`) are identical: no corner,
   // no `Minimap`. `true` picks the default corner; `{ corner }` picks that
   // one (spec 4 §1).
   const minimapCorner: MinimapCorner | null =
-    props.minimap === true ? "bottom-left" : props.minimap ? props.minimap.corner : null;
+    properties.minimap === true ? "bottom-left" : properties.minimap ? properties.minimap.corner : null;
   const world = useMemo(() => worldBounds(spec), [spec]);
   // The main view's own world-space bounding rectangle, in world units —
   // what the minimap draws its view rectangle from, and a dependency of its
@@ -346,15 +353,15 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // *object* they build is not something to key an effect on by identity
   // (fix round 1, finding 2 — the project's own rule: never key an
   // expensive memo or effect on an object's identity, key on the values
-  // used): `vp` is minted fresh by every `setVp`, including ones an
+  // used): `viewport` is minted fresh by every `setViewport`, including ones an
   // unrelated commit (a hover update, a freshly-literal `theme`/`tuning`
   // prop) never touches, so a plain object literal here changed identity —
   // and re-triggered the minimap's whole repaint — on every commit, not
   // just ones where the view actually moved. Memoized on the four
   // primitives themselves, so the minimap only repaints when `x`/`y`/`w`/`h`
   // actually changed.
-  const [viewX0, viewY0] = toWorld(vp, 0, 0);
-  const [viewX1, viewY1] = toWorld(vp, width, height);
+  const [viewX0, viewY0] = toWorld(viewport, 0, 0);
+  const [viewX1, viewY1] = toWorld(viewport, width, height);
   const viewWorld = useMemo(
     () => ({ x: viewX0, y: viewY0, w: viewX1 - viewX0, h: viewY1 - viewY0 }),
     [viewX0, viewY0, viewX1, viewY1],
@@ -366,7 +373,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // and a resize (which only changes `fitScale`) costs no scene rebuild.
   // Keyed on the primitive values `buildScene` actually reads — not on the
   // `tuning`/`theme` objects themselves, which `resolveTuning` and
-  // `props.theme ?? DEFAULT_THEME` both mint fresh on every render for an
+  // `properties.theme ?? DEFAULT_THEME` both mint fresh on every render for an
   // inline literal prop (spec 4's tuning panel does exactly that), which
   // would rebuild the scene (70-135ms on 10k items) on every render. The
   // literals below and the dependency list must both name every field
@@ -405,23 +412,23 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   );
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasReference.current;
     if (!canvas) return;
     // Backing store in device pixels; the CSS box stays `width` x `height`.
     // Assigning `width` resets the bitmap, so only touch it when it changes.
     const dpr = window.devicePixelRatio ?? 1;
-    const bw = Math.round(width * dpr);
-    const bh = Math.round(height * dpr);
-    if (canvas.width !== bw) canvas.width = bw;
-    if (canvas.height !== bh) canvas.height = bh;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const backingWidth = Math.round(width * dpr);
+    const backingHeight = Math.round(height * dpr);
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     paint(
-      canvasSurface(ctx),
+      canvasSurface(context),
       scene,
       spec,
-      vp,
+      viewport,
       {
         regime: next,
         pointAlpha,
@@ -432,7 +439,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       },
       theme,
     );
-  }, [spec, scene, vp, next, pointAlpha, theme, width, height, paintedTerritoryFocus, paintedNodeFocus]);
+  }, [spec, scene, viewport, next, pointAlpha, theme, width, height, paintedTerritoryFocus, paintedNodeFocus]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns
@@ -441,56 +448,56 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // yet (`next` is computed from the box's 0-fallback), and firing then
   // would hand a measured-mode consumer a bogus value before the map has
   // ever painted anything.
-  const onRegimeChangeRef = useRef(onRegimeChange);
+  const onRegimeChangeReference = useRef(onRegimeChange);
   useEffect(() => {
-    onRegimeChangeRef.current = onRegimeChange;
+    onRegimeChangeReference.current = onRegimeChange;
   });
   useEffect(() => {
     if (!ready) return;
-    onRegimeChangeRef.current?.(next);
+    onRegimeChangeReference.current?.(next);
   }, [next, ready]);
 
-  // Latest callback in a ref, same pattern as `onRegimeChangeRef` just
+  // Latest callback in a ref, same pattern as `onRegimeChangeReference` just
   // above: an inline arrow prop (the demo's indicator will pass one) must
   // not re-fire the effect below just because its identity changed. Fires
   // once on mount (`ready` gate, same reasoning as `onRegimeChange`), then
   // again when `next`/`ratio`/`visibleCount` differ from the previous
   // commit's, or after a refit (`refits`). Being tied to commits is what
   // keeps it to at most once per animation frame during a drag: the drag's
-  // own accumulated pan is already flushed into a single `setVp` per frame
+  // own accumulated pan is already flushed into a single `setViewport` per frame
   // (metric 13), so there is at most one commit per frame for this effect
   // to react to.
-  const onViewChangeRef = useRef(onViewChange);
+  const onViewChangeReference = useRef(onViewChange);
   useEffect(() => {
-    onViewChangeRef.current = onViewChange;
+    onViewChangeReference.current = onViewChange;
   });
   useEffect(() => {
     if (!ready) return;
-    onViewChangeRef.current?.({ regime: next, ratio, visibleCount });
+    onViewChangeReference.current?.({ regime: next, ratio, visibleCount });
   }, [next, ratio, visibleCount, ready, refits]);
 
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
-  // rebuilt every commit and its closures — `vp`/`fitScale`/`fitted`/
+  // rebuilt every commit and its closures — `viewport`/`fitScale`/`fitted`/
   // `tuning`/`width`/`height`/`thresholds` — are always the ones from the
   // render that just committed, never a stale render from before a spec or
-  // box change. `zoomIn`/`zoomOut` use `setVp`'s functional-update form
-  // (not the closed-over `vp` directly) so a burst of calls made between
+  // box change. `zoomIn`/`zoomOut` use `setViewport`'s functional-update form
+  // (not the closed-over `viewport` directly) so a burst of calls made between
   // renders — the showcase's zoom button held down, or this file's own
   // 200-calls test — each sees the previous call's result, not the same
-  // pre-burst `vp` 200 times over.
-  useImperativeHandle(ref, () => ({
+  // pre-burst `viewport` 200 times over.
+  useImperativeHandle(handleReference, () => ({
     zoomIn: () => {
       const factor = wheelZoomFactor({ deltaY: -120, deltaMode: 0, ctrlKey: false }, tuning);
-      setVp((v) => {
-        const target = zoomStepScale(v.scale, factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
-        return zoomTo(v, width / 2, height / 2, target);
+      setViewport((previous) => {
+        const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
+        return zoomTo(previous, width / 2, height / 2, target);
       });
     },
     zoomOut: () => {
       const factor = wheelZoomFactor({ deltaY: 120, deltaMode: 0, ctrlKey: false }, tuning);
-      setVp((v) => {
-        const target = zoomStepScale(v.scale, factor, fitScale, MAX_ZOOM_OUT, MAX_ZOOM_IN);
-        return zoomTo(v, width / 2, height / 2, target);
+      setViewport((previous) => {
+        const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
+        return zoomTo(previous, width / 2, height / 2, target);
       });
     },
     // Resets the regime hysteresis the same way a `spec` change does (the
@@ -502,8 +509,8 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
     // documents for a corpus swap, reproduced here by an explicit fit
     // instead of a new spec (see this file's `.handle.test.tsx`).
     fit: () => {
-      setVp(fitted);
-      setRefits((n) => n + 1);
+      setViewport(fitted);
+      setRefits((count) => count + 1);
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     },
   }));
@@ -511,19 +518,19 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // Native, non-passive listener: React's `onWheel` is registered passive, so
   // `preventDefault` there cannot stop the page from scrolling under the map.
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const onWheel = (e: globalThis.WheelEvent) => {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
+    const element = rootReference.current;
+    if (!element) return;
+    const onWheel = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
       const factor = wheelZoomFactor(
-        { deltaY: e.deltaY, deltaMode: e.deltaMode, ctrlKey: e.ctrlKey },
-        tuningRef.current,
+        { deltaY: event.deltaY, deltaMode: event.deltaMode, ctrlKey: event.ctrlKey },
+        tuningReference.current,
       );
-      setVp((v) => {
-        const fit = fitScaleRef.current;
-        const target = zoomStepScale(v.scale, factor, fit, MAX_ZOOM_OUT, MAX_ZOOM_IN);
-        return zoomTo(v, e.clientX - rect.left, e.clientY - rect.top, target);
+      setViewport((previous) => {
+        const fit = fitScaleReference.current;
+        const target = zoomStepScale(previous.scale, factor, fit, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
+        return zoomTo(previous, event.clientX - rect.left, event.clientY - rect.top, target);
       });
       // A wheel zoom moves every on-screen point, so a hover name resolved
       // against the pre-zoom viewport is now anchored to the wrong screen
@@ -532,16 +539,16 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       // waiting for one, means the next move — or the render-phase regime
       // check above — is what decides whether a hover reappears, never a
       // stale one left over from before the zoom.
-      if (hoverRef.current !== null) setHover(null);
+      if (hoverReference.current !== null) setHover(null);
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
   }, []);
 
-  const onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0 || !e.isPrimary) return;
-    drag.current = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    drag.current = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
+    (event.target as Element).setPointerCapture?.(event.pointerId);
     // Pressing clears the hover name: a scheduled frame from just before the
     // press could still be in flight, so this also drops the queued point,
     // not just the rendered state. Guarded on the current value, not just
@@ -557,30 +564,30 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // Schedules the one rAF flush a burst of pointer moves, or a minimap
   // press/drag, coalesces into (metric 13) — both routes share this single
   // `rafId`, so a move and a minimap press arriving in the same frame still
-  // cost one commit, through the same `setVp`. A no-op if a flush is
+  // cost one commit, through the same `setViewport`. A no-op if a flush is
   // already pending.
   const scheduleFrame = () => {
     if (rafId.current !== null) return;
     rafId.current = window.requestAnimationFrame(() => {
       rafId.current = null;
-      const acc = pending.current;
+      const accumulated = pending.current;
       pending.current = null;
-      if (acc) setVp((v) => panBy(v, acc.dx, acc.dy));
+      if (accumulated) setViewport((previous) => panBy(previous, accumulated.dx, accumulated.dy));
       // A minimap press/drag (showcase Task 4): centres the main view on
-      // the pressed world point through the very same `setVp` a drag pans
+      // the pressed world point through the very same `setViewport` a drag pans
       // with, just landing on an absolute `tx`/`ty` instead of an
       // accumulated delta — so `onViewChange` reacts to it exactly as it
       // would to any other committed view change, with no separate wiring.
       const centre = pendingCentre.current;
       pendingCentre.current = null;
       if (centre) {
-        setVp((v) => ({
-          scale: v.scale,
-          tx: width / 2 - centre.wx * v.scale,
-          ty: height / 2 - centre.wy * v.scale,
+        setViewport((previous) => ({
+          scale: previous.scale,
+          tx: width / 2 - centre.wx * previous.scale,
+          ty: height / 2 - centre.wy * previous.scale,
         }));
       }
-      const hp = hoverPoint.current;
+      const hoverPosition = hoverPoint.current;
       // Not the applicable-regime/not-dragging/has-a-point condition's
       // `else`: a press, a `pointerleave`, or leaving the mid/near
       // regimes already clears `hover` synchronously at its own call
@@ -588,29 +595,32 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       // above) — including that update's effect, since each of those
       // runs to completion, effects included, strictly before any
       // already-scheduled flush like this one can run. So by the time
-      // this condition is false, `hoverRef.current` is already null;
+      // this condition is false, `hoverReference.current` is already null;
       // there is nothing left here to clear.
-      if (drag.current === null && hp && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
+      if (drag.current === null && hoverPosition && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
         // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
         // calls: the canvas paints every on-screen point regardless of the
         // card cap, so hover must be resolvable against all of them, not
         // just the first `cardCap` in spec order (C1) — otherwise most
         // on-screen points past the cap are silently unhoverable.
-        const points = visibleNodes(spec, vp, width, height, Number.POSITIVE_INFINITY).map((n) => {
-          const [x, y] = toScreen(vp, n.x, n.y);
-          return { id: n.id, x, y };
+        const points = visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
+          const [left, top] = toScreen(viewport, node.x, node.y);
+          return { id: node.id, x: left, y: top };
         });
-        const nearest = nearestWithin(points, hp.x, hp.y, tuning.hoverRadius);
-        const prevHover = hoverRef.current;
+        const nearest = nearestWithin(points, hoverPosition.x, hoverPosition.y, tuning.hoverRadius);
+        const previousHover = hoverReference.current;
         if (nearest) {
           // Same node, same screen position as the currently shown hover:
           // skip the call rather than dispatch a freshly-allocated (but
           // deeply equal) object every frame the pointer holds still —
           // `Object.is` would never consider two such objects equal, so
           // React would never bail out and a steady hover would cost a
-          // commit on every frame (see the `hoverRef` comment above).
+          // commit on every frame (see the `hoverReference` comment above).
           const same =
-            prevHover && prevHover.id === nearest.id && prevHover.x === nearest.x && prevHover.y === nearest.y;
+            previousHover &&
+            previousHover.id === nearest.id &&
+            previousHover.x === nearest.x &&
+            previousHover.y === nearest.y;
           if (!same) {
             // `nearest.id` is always a key of `nodesById`: `points` was
             // built from `visibleNodes(spec, ...)`, which only ever
@@ -618,7 +628,7 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
             const label = (nodesById.get(nearest.id) as MapNode).label;
             setHover({ id: nearest.id, label, x: nearest.x, y: nearest.y });
           }
-        } else if (prevHover !== null) {
+        } else if (previousHover !== null) {
           setHover(null);
         }
       }
@@ -631,27 +641,29 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // event (metric 13) — hover included, which is why it is resolved inside
   // the same scheduled callback below rather than with its own `setHover`
   // here in the handler.
-  const onPointerMove = (e: PointerEvent) => {
-    const d = drag.current;
-    if (d) {
-      const dx = e.clientX - d.x;
-      const dy = e.clientY - d.y;
-      drag.current = { ...d, x: e.clientX, y: e.clientY };
-      const p = pending.current;
-      pending.current = p ? { dx: p.dx + dx, dy: p.dy + dy } : { dx, dy };
+  const onPointerMove = (event: PointerEvent) => {
+    const press = drag.current;
+    if (press) {
+      const horizontalDelta = event.clientX - press.x;
+      const verticalDelta = event.clientY - press.y;
+      drag.current = { ...press, x: event.clientX, y: event.clientY };
+      const queued = pending.current;
+      pending.current = queued
+        ? { dx: queued.dx + horizontalDelta, dy: queued.dy + verticalDelta }
+        : { dx: horizontalDelta, dy: verticalDelta };
     } else {
-      const rect = rootRef.current?.getBoundingClientRect();
-      hoverPoint.current = rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null;
+      const rect = rootReference.current?.getBoundingClientRect();
+      hoverPoint.current = rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;
     }
     scheduleFrame();
   };
 
   // The minimap's press/drag callback (showcase Task 4): queues a world
   // point to centre on and reuses `scheduleFrame`, so it is frame-coalesced
-  // and lands through the same `setVp` the drag above uses — never a
-  // separate, uncoalesced `setVp` call of its own.
-  const onMinimapPoint = (wx: number, wy: number) => {
-    pendingCentre.current = { wx, wy };
+  // and lands through the same `setViewport` the drag above uses — never a
+  // separate, uncoalesced `setViewport` call of its own.
+  const onMinimapPoint = (worldHorizontal: number, worldVertical: number) => {
+    pendingCentre.current = { wx: worldHorizontal, wy: worldVertical };
     scheduleFrame();
   };
 
@@ -667,24 +679,25 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
   // The card overlay is inert, so it cannot receive the click itself: a
   // press released within CLICK_SLOP of where it started is resolved here
   // against the visible cards' boxes. Topmost (last in DOM order) wins.
-  const onPointerUp = (e: PointerEvent) => {
-    if (e.button !== 0 || !e.isPrimary) return;
-    const d = drag.current;
+  const onPointerUp = (event: PointerEvent) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const press = drag.current;
     drag.current = null;
-    if (!d || !onSelect || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > CLICK_SLOP) return;
+    if (!press || !onSelect || Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > CLICK_SLOP)
+      return;
     // Below opacity 0.1 a card is invisible but still mounted (the
     // hysteresis fade band keeps it in the DOM at opacity 0 rather than
     // unmounting it) — hit-testing it there would let a click on what the
     // user sees as empty map select an item they never saw (C2).
     if (cardOpacity < 0.1) return;
-    const id = cardIdAt(rootRef.current, e.clientX, e.clientY);
+    const id = cardIdAt(rootReference.current, event.clientX, event.clientY);
     const node = id === null ? undefined : nodesById.get(id);
     if (node) onSelect(node);
   };
 
   return (
     <div
-      ref={rootRef}
+      ref={rootReference}
       data-map-surface=""
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -706,10 +719,10 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
       {ready ? (
         <>
           {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
-          <canvas ref={canvasRef} aria-hidden="true" style={{ width, height, display: "block" }} />
+          <canvas ref={canvasReference} aria-hidden="true" style={{ width, height, display: "block" }} />
           <CardOverlay
             spec={spec}
-            viewport={vp}
+            viewport={viewport}
             regime={next}
             cap={cardCap}
             width={width}
@@ -743,11 +756,11 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
           <AccessibleTree
             spec={spec}
             regime={next}
-            viewport={vp}
+            viewport={viewport}
             width={width}
             height={height}
             cap={cardCap}
-            onFocusTerritory={(t) => {
+            onFocusTerritory={(territory) => {
               // Built from the target scale directly rather than via a zoom
               // factor: `fitScale * (nearAt / (scale / fitScale))`-style paths
               // can land a float ulp below `fitScale * nearAt`, on the wrong
@@ -760,10 +773,10 @@ export function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement {
               // as any other zoom past the top of the band; clamped to the same
               // wheel band a manual zoom is clamped to, so this can never land
               // outside what the user could otherwise reach.
-              const [cx, cy] = t.centroid;
+              const [centreHorizontal, centreVertical] = territory.centroid;
               const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
-              const scale = Math.min(fitScale * MAX_ZOOM_IN, Math.max(fitScale / MAX_ZOOM_OUT, target));
-              setVp({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
+              const scale = Math.min(fitScale * MAXIMUM_ZOOM_IN, Math.max(fitScale / MAXIMUM_ZOOM_OUT, target));
+              setViewport({ scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale });
             }}
             onSelect={onSelect}
             onTerritoryFocusChange={setFocusedTerritory}

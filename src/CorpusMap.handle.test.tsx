@@ -22,164 +22,164 @@ function surface(container: HTMLElement): HTMLElement {
 }
 
 function lastCall(calls: View[]): View {
-  const v = calls[calls.length - 1];
-  if (!v) throw new Error("expected at least one onViewChange call");
-  return v;
+  const last = calls[calls.length - 1];
+  if (!last) throw new Error("expected at least one onViewChange call");
+  return last;
 }
 
 describe("CorpusMap imperative handle (showcase Task 3)", () => {
   it("returns to the fitted scale after zoomIn then zoomOut (within 1e-9)", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
     expect(calls[0]).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
 
-    act(() => ref.current?.zoomIn());
+    act(() => handle.current?.zoomIn());
     expect(lastCall(calls).ratio).toBeGreaterThan(1);
 
-    act(() => ref.current?.zoomOut());
+    act(() => handle.current?.zoomOut());
     expect(lastCall(calls).ratio).toBeCloseTo(1, 9);
   });
 
   it("stops 200 zoomIn calls at fit x 64", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
 
     act(() => {
-      for (let i = 0; i < 200; i += 1) ref.current?.zoomIn();
+      for (let index = 0; index < 200; index += 1) handle.current?.zoomIn();
     });
 
     expect(lastCall(calls).ratio).toBeCloseTo(64, 9);
   });
 
   it("above the band after a shrinking resize, zoomIn and a wheel zoom-in never zoom out; zoomOut still zooms out", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
-    const props = {
-      ref,
+    const properties = {
+      ref: handle,
       spec,
       renderCard: () => null,
-      onViewChange: (v: View) => calls.push(v),
+      onViewChange: (view: View) => calls.push(view),
     };
-    const { container, rerender } = render(<CorpusMap {...props} width={400} height={300} />);
+    const { container, rerender } = render(<CorpusMap {...properties} width={400} height={300} />);
     act(() => {
-      for (let i = 0; i < 200; i += 1) ref.current?.zoomIn();
+      for (let index = 0; index < 200; index += 1) handle.current?.zoomIn();
     });
     expect(lastCall(calls).ratio).toBeCloseTo(64, 9);
 
     // Keep-view resize: the scale is kept while the fitted scale shrinks.
-    rerender(<CorpusMap {...props} width={200} height={150} />);
+    rerender(<CorpusMap {...properties} width={200} height={150} />);
     const above = lastCall(calls).ratio;
     expect(above).toBeGreaterThan(64);
 
-    act(() => ref.current?.zoomIn());
+    act(() => handle.current?.zoomIn());
     expect(lastCall(calls).ratio).toBeCloseTo(above, 9);
     fireEvent.wheel(surface(container), { deltaY: -120, clientX: 100, clientY: 75 });
     expect(lastCall(calls).ratio).toBeCloseTo(above, 9);
 
-    act(() => ref.current?.zoomOut());
+    act(() => handle.current?.zoomOut());
     expect(lastCall(calls).ratio).toBeLessThan(above);
   });
 
   it("below the band after a growing resize, zoomOut never zooms in", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
-    const props = {
-      ref,
+    const properties = {
+      ref: handle,
       spec,
       renderCard: () => null,
-      onViewChange: (v: View) => calls.push(v),
+      onViewChange: (view: View) => calls.push(view),
     };
-    const { rerender } = render(<CorpusMap {...props} width={400} height={300} />);
+    const { rerender } = render(<CorpusMap {...properties} width={400} height={300} />);
     act(() => {
-      for (let i = 0; i < 200; i += 1) ref.current?.zoomOut();
+      for (let index = 0; index < 200; index += 1) handle.current?.zoomOut();
     });
     expect(lastCall(calls).ratio).toBeCloseTo(1 / 8, 9);
 
-    rerender(<CorpusMap {...props} width={800} height={600} />);
+    rerender(<CorpusMap {...properties} width={800} height={600} />);
     const below = lastCall(calls).ratio;
     expect(below).toBeLessThan(1 / 8);
 
-    act(() => ref.current?.zoomOut());
+    act(() => handle.current?.zoomOut());
     expect(lastCall(calls).ratio).toBeCloseTo(below, 9);
   });
 
   it("stops 200 zoomOut calls at fit / 8", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
 
     act(() => {
-      for (let i = 0; i < 200; i += 1) ref.current?.zoomOut();
+      for (let index = 0; index < 200; index += 1) handle.current?.zoomOut();
     });
 
     expect(lastCall(calls).ratio).toBeCloseTo(1 / 8, 9);
   });
 
   it("restores the fitted viewport with fit() after zooming", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
 
     act(() => {
-      for (let i = 0; i < 10; i += 1) ref.current?.zoomIn();
+      for (let index = 0; index < 10; index += 1) handle.current?.zoomIn();
     });
     expect(lastCall(calls).ratio).toBeGreaterThan(1);
 
-    act(() => ref.current?.fit());
+    act(() => handle.current?.fit());
     expect(lastCall(calls).ratio).toBe(1);
   });
 
   it("fit() resets the regime hysteresis the same way a spec swap does, instead of carrying it over", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     const { container } = render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
         thresholds={{ midAt: 0.5, nearAt: 1.02 }}
         tuning={{ hysteresis: 0.3 }}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
 
@@ -192,7 +192,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     // hysteresis band on nearAt 1.02, the exit bound is 1.02 * 0.7 = 0.714,
     // and fit()'s ratio of 1 is still above that bound. If fit() reset the
     // regime the way a spec swap does, this lands back on "mid" instead.
-    act(() => ref.current?.fit());
+    act(() => handle.current?.fit());
     expect(lastCall(calls)).toEqual({ regime: "mid", ratio: 1, visibleCount: 1 });
   });
 
@@ -201,7 +201,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
         onViewChange={onViewChange}
@@ -222,8 +222,8 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     const width = 150;
     const height = 300;
     const callbacks: FrameRequestCallback[] = [];
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     try {
@@ -231,26 +231,26 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={width}
           height={height}
-          onViewChange={(v) => calls.push(v)}
+          onViewChange={(view) => calls.push(view)}
         />,
       );
       expect(calls).toHaveLength(1);
       expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
 
-      const el = surface(container);
-      fireEvent.pointerDown(el, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
-      for (let i = 1; i <= 100; i += 1) {
-        fireEvent.pointerMove(el, { clientX: i, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
+      const element = surface(container);
+      fireEvent.pointerDown(element, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
+      for (let offset = 1; offset <= 100; offset += 1) {
+        fireEvent.pointerMove(element, { clientX: offset, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
       }
       // Nothing has flushed yet: no extra calls from the 100 raw events.
       expect(calls).toHaveLength(1);
       expect(callbacks).toHaveLength(1);
 
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
 
       // Exactly one more call for the whole coalesced frame, reporting the
@@ -272,10 +272,10 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
       return (
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={400}
           height={300}
-          onViewChange={(v) => calls.push(v)}
+          onViewChange={(view) => calls.push(view)}
         />
       );
     }
@@ -292,29 +292,34 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     const calls: View[] = [];
     // Same geometry under new ids: the fitted view reads exactly the same.
     const twin: MapSpec = { ...spec, nodes: [{ id: "b", label: "B", x: 0, y: 0, territory: null }] };
-    const props = { renderCard: () => null, width: 400, height: 300, onViewChange: (v: View) => calls.push(v) };
-    const { rerender } = render(<CorpusMap {...props} spec={spec} />);
+    const properties = {
+      renderCard: () => null,
+      width: 400,
+      height: 300,
+      onViewChange: (view: View) => calls.push(view),
+    };
+    const { rerender } = render(<CorpusMap {...properties} spec={spec} />);
     expect(calls).toHaveLength(1);
-    rerender(<CorpusMap {...props} spec={twin} />);
+    rerender(<CorpusMap {...properties} spec={twin} />);
     expect(calls).toHaveLength(2);
     expect(lastCall(calls)).toEqual(calls[0]);
   });
 
   it("fires onViewChange after fit() even when the view is already the fitted one", () => {
-    const ref = createRef<CorpusMapHandle>();
+    const handle = createRef<CorpusMapHandle>();
     const calls: View[] = [];
     render(
       <CorpusMap
-        ref={ref}
+        ref={handle}
         spec={spec}
         renderCard={() => null}
         width={400}
         height={300}
-        onViewChange={(v) => calls.push(v)}
+        onViewChange={(view) => calls.push(view)}
       />,
     );
     expect(calls).toHaveLength(1);
-    act(() => ref.current?.fit());
+    act(() => handle.current?.fit());
     expect(calls).toHaveLength(2);
     expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
   });
