@@ -13,6 +13,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
+    // The default 5 s is a hang detector, not a performance gate (the bench
+    // is). The painted arXiv sweep takes ~1 s alone and failed 5 s when the
+    // whole suite shared a loaded machine (2026-10-17); 15 s keeps hangs
+    // detectable without failing on contention.
+    testTimeout: 15_000,
     // Vitest does not honour .gitignore, so a worktree checked out under
     // .claude/worktrees/ would have its whole suite run a second time from
     // here - and fail, since it resolves against this checkout's config.
