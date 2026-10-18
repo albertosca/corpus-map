@@ -4,8 +4,8 @@ import { generateCorpus, MIN_SIZE, TERRITORY_COUNT } from "./generate";
 
 type Point = [number, number];
 
-function cross(o: Point, a: Point, b: Point): number {
-  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+function cross(origin: Point, first: Point, second: Point): number {
+  return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (second[0] - origin[0]);
 }
 
 /**
@@ -15,24 +15,24 @@ function cross(o: Point, a: Point, b: Point): number {
  * checking that t2 sits inside t1's convex hull below).
  */
 function convexHull(points: Point[]): Point[] {
-  if (points.length < 3) return points.map((p) => [p[0], p[1]] as Point);
-  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (points.length < 3) return points.map((point) => [point[0], point[1]] as Point);
+  const sorted = [...points].sort((first, second) => first[0] - second[0] || first[1] - second[1]);
   const deduped: Point[] = [];
-  for (const p of sorted) {
+  for (const point of sorted) {
     const last = deduped[deduped.length - 1];
-    if (!last || last[0] !== p[0] || last[1] !== p[1]) deduped.push(p);
+    if (!last || last[0] !== point[0] || last[1] !== point[1]) deduped.push(point);
   }
   if (deduped.length < 3) return deduped;
-  const build = (pts: Point[]): Point[] => {
+  const build = (chainPoints: Point[]): Point[] => {
     const chain: Point[] = [];
-    for (const p of pts) {
+    for (const point of chainPoints) {
       for (;;) {
-        const a = chain[chain.length - 2];
-        const b = chain[chain.length - 1];
-        if (a === undefined || b === undefined || cross(a, b, p) > 0) break;
+        const first = chain[chain.length - 2];
+        const second = chain[chain.length - 1];
+        if (first === undefined || second === undefined || cross(first, second, point) > 0) break;
         chain.pop();
       }
-      chain.push(p);
+      chain.push(point);
     }
     chain.pop();
     return chain;
@@ -40,44 +40,48 @@ function convexHull(points: Point[]): Point[] {
   return [...build(deduped), ...build([...deduped].reverse())];
 }
 
-function territory(spec: MapSpec, id: string) {
-  const t = spec.territories.find((x) => x.id === id);
-  if (!t) throw new Error(`no territory ${id}`);
-  return t;
+function findTerritory(spec: MapSpec, id: string) {
+  const territory = spec.territories.find((candidate) => candidate.id === id);
+  if (!territory) throw new Error(`no territory ${id}`);
+  return territory;
 }
 
 function memberPoints(spec: MapSpec, id: string): Point[] {
-  const byId = new Map(spec.nodes.map((n) => [n.id, n]));
-  return territory(spec, id).members.map((m) => {
-    const n = byId.get(m);
-    if (!n) throw new Error(`dangling member ${m}`);
-    return [n.x, n.y] as Point;
+  const byId = new Map(spec.nodes.map((node) => [node.id, node]));
+  return findTerritory(spec, id).members.map((memberId) => {
+    const node = byId.get(memberId);
+    if (!node) throw new Error(`dangling member ${memberId}`);
+    return [node.x, node.y] as Point;
   });
 }
 
-function insidePolygon([x, y]: Point, ring: Point[]): boolean {
+function insidePolygon([horizontal, vertical]: Point, ring: Point[]): boolean {
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const a = ring[i];
-    const b = ring[j];
-    if (!a || !b) continue;
-    if (a[1] > y !== b[1] > y && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  for (let index = 0, previousIndex = ring.length - 1; index < ring.length; previousIndex = index, index += 1) {
+    const current = ring[index];
+    const previous = ring[previousIndex];
+    if (!current || !previous) continue;
+    if (
+      current[1] > vertical !== previous[1] > vertical &&
+      horizontal < ((previous[0] - current[0]) * (vertical - current[1])) / (previous[1] - current[1]) + current[0]
+    )
+      inside = !inside;
   }
   return inside;
 }
 
 function medianNearestNeighbour(points: Point[]): number {
-  const nn = points.map((p, i) => {
+  const nearestDistances = points.map((point, index) => {
     let best = Number.POSITIVE_INFINITY;
-    points.forEach((q, j) => {
-      if (i !== j) best = Math.min(best, Math.hypot(p[0] - q[0], p[1] - q[1]));
+    points.forEach((other, otherIndex) => {
+      if (index !== otherIndex) best = Math.min(best, Math.hypot(point[0] - other[0], point[1] - other[1]));
     });
     return best;
   });
-  nn.sort((a, b) => a - b);
-  const mid = nn[Math.floor(nn.length / 2)];
-  if (mid === undefined) throw new Error("no points");
-  return mid;
+  nearestDistances.sort((first, second) => first - second);
+  const median = nearestDistances[Math.floor(nearestDistances.length / 2)];
+  if (median === undefined) throw new Error("no points");
+  return median;
 }
 
 describe("generateCorpus", () => {
@@ -90,7 +94,7 @@ describe("generateCorpus", () => {
     const spec = generateCorpus({ seed: 1, size });
     expect(validateSpec(spec).nodes).toHaveLength(size);
     expect(spec.territories).toHaveLength(TERRITORY_COUNT);
-    expect(spec.nodes.some((n) => n.territory === null)).toBe(true);
+    expect(spec.nodes.some((node) => node.territory === null)).toBe(true);
   });
 
   it("rejects a size it cannot honour", () => {
@@ -101,39 +105,51 @@ describe("generateCorpus", () => {
     const spec = generateCorpus({ seed: 1, size: 5000 });
 
     it("t0 is U-shaped: its centroid is far from every member", () => {
-      const pts = memberPoints(spec, "t0");
-      const [cx, cy] = territory(spec, "t0").centroid;
-      const nearest = Math.min(...pts.map(([x, y]) => Math.hypot(x - cx, y - cy)));
-      expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(pts));
+      const points = memberPoints(spec, "t0");
+      const [centreHorizontal, centreVertical] = findTerritory(spec, "t0").centroid;
+      const nearest = Math.min(
+        ...points.map(([horizontal, vertical]) => Math.hypot(horizontal - centreHorizontal, vertical - centreVertical)),
+      );
+      expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(points));
     });
 
     it("t1 is L-shaped around t2: t2 sits inside t1's convex hull, where t1 has no members", () => {
-      expect(insidePolygon(territory(spec, "t2").centroid, convexHull(memberPoints(spec, "t1")))).toBe(true);
-      const l = memberPoints(spec, "t1");
-      const [tx, ty] = territory(spec, "t2").centroid;
-      const nearest = Math.min(...l.map(([x, y]) => Math.hypot(x - tx, y - ty)));
-      expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(l));
+      expect(insidePolygon(findTerritory(spec, "t2").centroid, convexHull(memberPoints(spec, "t1")))).toBe(true);
+      const cornerMembers = memberPoints(spec, "t1");
+      const [innerHorizontal, innerVertical] = findTerritory(spec, "t2").centroid;
+      const nearest = Math.min(
+        ...cornerMembers.map(([horizontal, vertical]) =>
+          Math.hypot(horizontal - innerHorizontal, vertical - innerVertical),
+        ),
+      );
+      expect(nearest).toBeGreaterThan(5 * medianNearestNeighbour(cornerMembers));
     });
 
     it("t3 and t4 are adjacent and carry long names", () => {
-      const a = territory(spec, "t3");
-      const b = territory(spec, "t4");
-      expect(Math.hypot(a.centroid[0] - b.centroid[0], a.centroid[1] - b.centroid[1])).toBeLessThan(30);
-      expect(a.name.length).toBeGreaterThanOrEqual(38);
-      expect(b.name.length).toBeGreaterThanOrEqual(38);
+      const first = findTerritory(spec, "t3");
+      const second = findTerritory(spec, "t4");
+      expect(Math.hypot(first.centroid[0] - second.centroid[0], first.centroid[1] - second.centroid[1])).toBeLessThan(
+        30,
+      );
+      expect(first.name.length).toBeGreaterThanOrEqual(38);
+      expect(second.name.length).toBeGreaterThanOrEqual(38);
     });
 
     it("t5 packs at least 300 items within radius 2.5 of its centroid", () => {
       // Drawn in a disk of radius 2; the centroid is the members' mean, which
       // sits slightly off the disk's centre, hence the half-unit margin.
-      const pts = memberPoints(spec, "t5");
-      const [cx, cy] = territory(spec, "t5").centroid;
-      expect(pts.length).toBeGreaterThanOrEqual(300);
-      expect(pts.every(([x, y]) => Math.hypot(x - cx, y - cy) <= 2.5)).toBe(true);
+      const points = memberPoints(spec, "t5");
+      const [centreHorizontal, centreVertical] = findTerritory(spec, "t5").centroid;
+      expect(points.length).toBeGreaterThanOrEqual(300);
+      expect(
+        points.every(
+          ([horizontal, vertical]) => Math.hypot(horizontal - centreHorizontal, vertical - centreVertical) <= 2.5,
+        ),
+      ).toBe(true);
     });
 
     it("territory names span 3 to 40 characters", () => {
-      const lengths = spec.territories.map((t) => t.name.length);
+      const lengths = spec.territories.map((territory) => territory.name.length);
       expect(Math.min(...lengths)).toBeLessThanOrEqual(3);
       expect(Math.max(...lengths)).toBeGreaterThanOrEqual(40);
     });
