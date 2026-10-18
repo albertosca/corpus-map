@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import { estimateText } from "./labels/placement";
@@ -471,6 +472,74 @@ describe("CorpusMap", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("map events under StrictMode, remount and a collapsing box", () => {
+  it("fires onRegimeChange once on mount under StrictMode, whose effects run twice in dev", () => {
+    const onRegimeChange = vi.fn();
+    render(
+      <StrictMode>
+        <CorpusMap spec={spec} renderCard={() => null} width={width} height={height} onRegimeChange={onRegimeChange} />
+      </StrictMode>,
+    );
+    expect(onRegimeChange.mock.calls).toEqual([["far"]]);
+  });
+
+  it("fires onViewChange once on mount under StrictMode", () => {
+    const onViewChange = vi.fn();
+    render(
+      <StrictMode>
+        <CorpusMap spec={spec} renderCard={() => null} width={width} height={height} onViewChange={onViewChange} />
+      </StrictMode>,
+    );
+    expect(onViewChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires the initial regime again after a remount by key", () => {
+    const onRegimeChange = vi.fn();
+    const { rerender } = render(
+      <CorpusMap
+        key="first"
+        spec={spec}
+        renderCard={() => null}
+        width={width}
+        height={height}
+        onRegimeChange={onRegimeChange}
+      />,
+    );
+    rerender(
+      <CorpusMap
+        key="second"
+        spec={spec}
+        renderCard={() => null}
+        width={width}
+        height={height}
+        onRegimeChange={onRegimeChange}
+      />,
+    );
+    expect(onRegimeChange.mock.calls).toEqual([["far"], ["far"]]);
+  });
+
+  it("hands a regime change to the callback passed in the same render, not the previous one", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const properties = { spec, renderCard: () => null, width, height };
+    const { rerender } = render(
+      <CorpusMap {...properties} thresholds={{ midAt: 2, nearAt: 6 }} onRegimeChange={first} />,
+    );
+    rerender(<CorpusMap {...properties} thresholds={{ midAt: 0.5, nearAt: 6 }} onRegimeChange={second} />);
+    expect(first.mock.calls).toEqual([["far"]]);
+    expect(second.mock.calls).toEqual([["mid"]]);
+  });
+
+  it("does not fire onRegimeChange again when the box collapses and returns with the same regime", () => {
+    const onRegimeChange = vi.fn();
+    const properties = { spec, renderCard: () => null, onRegimeChange };
+    const { rerender } = render(<CorpusMap {...properties} width={width} height={height} />);
+    rerender(<CorpusMap {...properties} width={0} height={0} />);
+    rerender(<CorpusMap {...properties} width={width} height={height} />);
+    expect(onRegimeChange.mock.calls).toEqual([["far"]]);
   });
 });
 

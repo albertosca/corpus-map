@@ -54,6 +54,12 @@ export interface CorpusMapView {
 }
 
 export interface CorpusMapProps {
+  /**
+   * The corpus to draw. Keep it referentially stable (state, a memo, or a
+   * module constant): a new object refits the view, so an inline
+   * `spec={{ ... }}` literal resets the user's zoom and pan on every parent
+   * render.
+   */
   spec: MapSpec;
   renderCard: (node: MapNode) => ReactNode;
   /** React 19 ref-as-prop; see `CorpusMapHandle`. */
@@ -452,8 +458,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useEffect(() => {
     onRegimeChangeReference.current = onRegimeChange;
   });
+  // The last regime handed to the consumer: StrictMode runs every effect
+  // twice on mount in dev, and a box that collapses to zero and comes back
+  // flips `ready` off and on again, and neither is a regime crossing. A
+  // remount by `key` is a fresh instance with a fresh ref, so it still fires.
+  const firedRegime = useRef<Regime | null>(null);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || firedRegime.current === next) return;
+    firedRegime.current = next;
     onRegimeChangeReference.current?.(next);
   }, [next, ready]);
 
@@ -471,8 +483,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useEffect(() => {
     onViewChangeReference.current = onViewChange;
   });
+  // Same dedupe as `firedRegime`, keyed on every dependency that can fire
+  // it: `refits` is in the key, so a refit that lands on an identical view
+  // still fires once, and a StrictMode re-run of the same commit does not.
+  const firedView = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
+    const key = `${next}|${ratio}|${visibleCount}|${refits}`;
+    if (firedView.current === key) return;
+    firedView.current = key;
     onViewChangeReference.current?.({ regime: next, ratio, visibleCount });
   }, [next, ratio, visibleCount, ready, refits]);
 
