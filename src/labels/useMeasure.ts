@@ -8,7 +8,7 @@ export function useMeasure(): Measure {
     if (!context) return estimateText;
     return (text, font) => {
       context.font = font;
-      const pixels = Number.parseFloat(/(\d+(?:\.\d+)?)pixels/.exec(font)?.[1] ?? "12");
+      const pixels = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "12");
       return { width: context.measureText(text).width, height: pixels };
     };
   }, []);
