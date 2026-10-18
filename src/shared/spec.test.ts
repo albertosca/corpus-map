@@ -45,6 +45,15 @@ describe("validateSpec", () => {
     expect(() => validateSpec(spec)).toThrow(/nodes\[0\].territory.*gone/);
   });
 
+  it("rejects a node listed twice in one territory's members, naming the second occurrence", () => {
+    const spec = {
+      version: "1",
+      territories: [{ id: "t1", name: "North", members: ["n1", "n1"], centroid: [0, 0] }],
+      nodes: [{ id: "n1", label: "One", x: 0, y: 0, territory: "t1" }],
+    };
+    expect(() => validateSpec(spec)).toThrow(new SpecError("territories[0].members[1]: node n1 is listed twice"));
+  });
+
   it("rejects duplicate node ids", () => {
     const spec = {
       version: "1",

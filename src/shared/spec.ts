@@ -111,6 +111,7 @@ export function validateSpec(input: unknown): MapSpec {
       if (!claimed.has(id)) fail(path, `unknown node ${id}`);
       const claims = claimed.get(id);
       if (claims !== territory.id) fail(path, `node ${id} claims territory ${claims === null ? "null" : claims}`);
+      if (listed.has(id)) fail(path, `node ${id} is listed twice`);
       listed.add(id);
     }
   }
