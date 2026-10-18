@@ -157,8 +157,12 @@ describe("validateSpec", () => {
   });
 
   it("rejects a non-string territory reference and a non-string member id", () => {
-    const badRef = { version: "1", territories: [], nodes: [{ id: "n1", label: "One", x: 0, y: 0, territory: 3 }] };
-    expect(() => validateSpec(badRef)).toThrow(/nodes\[0\]\.territory: expected a string/);
+    const badReference = {
+      version: "1",
+      territories: [],
+      nodes: [{ id: "n1", label: "One", x: 0, y: 0, territory: 3 }],
+    };
+    expect(() => validateSpec(badReference)).toThrow(/nodes\[0\]\.territory: expected a string/);
     const badMember = { ...minimal, territories: [{ ...minimal.territories[0], members: [1] }] };
     expect(() => validateSpec(badMember)).toThrow(/territories\[0\]\.members\[0\]: expected a string/);
   });
