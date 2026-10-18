@@ -14,7 +14,7 @@ import type { Theme } from "./theme";
  * point layer's fade, and the canvas's CSS size (a name larger than the
  * canvas is skipped, see `paintLabels`). No ratio here — a placed
  * name carries its own absolute `activeFromScale` (see
- * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
+ * `labels/placement.ts`), so `paintLabels` reads `viewport.scale` directly
  * instead of a fit-relative ratio threaded through the frame.
  *
  * `focusedTerritory`/`focusedNode` are the ids (primitives, so they can sit
@@ -36,16 +36,23 @@ export interface Frame {
  * mark, by a later territory's fill or by the focus outline, and the focus
  * outline is never covered by a boundary or a point.
  */
-export function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewport, frame: Frame, theme: Theme): void {
+export function paint(
+  surface: Surface,
+  scene: Scene,
+  spec: MapSpec,
+  viewport: Viewport,
+  frame: Frame,
+  theme: Theme,
+): void {
   surface.clear();
-  paintTerritories(surface, scene, vp, theme);
+  paintTerritories(surface, scene, viewport, theme);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
-    paintPoints(surface, spec, vp, theme);
+    paintPoints(surface, spec, viewport, theme);
     surface.globalAlpha(1);
   }
   if (typeof frame.focusedTerritory === "string")
-    paintFocusedTerritory(surface, scene, vp, theme, frame.focusedTerritory);
-  if (typeof frame.focusedNode === "string") paintFocusedNode(surface, scene, vp, theme, frame.focusedNode);
-  paintLabels(surface, scene, vp, theme, frame);
+    paintFocusedTerritory(surface, scene, viewport, theme, frame.focusedTerritory);
+  if (typeof frame.focusedNode === "string") paintFocusedNode(surface, scene, viewport, theme, frame.focusedNode);
+  paintLabels(surface, scene, viewport, theme, frame);
 }

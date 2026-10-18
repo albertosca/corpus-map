@@ -17,11 +17,11 @@ export interface WheelInput {
  * large line- or page-mode notch cannot jump.
  */
 export function wheelZoomFactor(
-  e: WheelInput,
-  t: Pick<Tuning, "wheelSensitivity" | "pinchGain" | "maxZoomPerEvent">,
+  input: WheelInput,
+  tuning: Pick<Tuning, "wheelSensitivity" | "pinchGain" | "maxZoomPerEvent">,
 ): number {
-  const perUnit = PIXELS_PER_MODE[e.deltaMode as 0 | 1 | 2] ?? 1;
-  const delta = e.deltaY * perUnit * (e.ctrlKey ? t.pinchGain : 1);
-  const factor = Math.exp(-delta * t.wheelSensitivity);
-  return Math.min(t.maxZoomPerEvent, Math.max(1 / t.maxZoomPerEvent, factor));
+  const perUnit = PIXELS_PER_MODE[input.deltaMode as 0 | 1 | 2] ?? 1;
+  const delta = input.deltaY * perUnit * (input.ctrlKey ? tuning.pinchGain : 1);
+  const factor = Math.exp(-delta * tuning.wheelSensitivity);
+  return Math.min(tuning.maxZoomPerEvent, Math.max(1 / tuning.maxZoomPerEvent, factor));
 }

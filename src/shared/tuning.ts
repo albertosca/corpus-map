@@ -33,37 +33,45 @@ export const DEFAULT_TUNING: Tuning = {
   hoverRadius: 12,
 };
 
-function validateTuning(t: Tuning): void {
-  if (!Number.isFinite(t.wheelSensitivity) || t.wheelSensitivity <= 0) {
-    throw new RangeError(`tuning.wheelSensitivity must be a finite number > 0, got ${t.wheelSensitivity}`);
+function validateTuning(tuning: Tuning): void {
+  if (!Number.isFinite(tuning.wheelSensitivity) || tuning.wheelSensitivity <= 0) {
+    throw new RangeError(`tuning.wheelSensitivity must be a finite number > 0, got ${tuning.wheelSensitivity}`);
   }
-  if (!Number.isFinite(t.pinchGain) || t.pinchGain <= 0) {
-    throw new RangeError(`tuning.pinchGain must be a finite number > 0, got ${t.pinchGain}`);
+  if (!Number.isFinite(tuning.pinchGain) || tuning.pinchGain <= 0) {
+    throw new RangeError(`tuning.pinchGain must be a finite number > 0, got ${tuning.pinchGain}`);
   }
-  if (!Number.isFinite(t.maxZoomPerEvent) || t.maxZoomPerEvent <= 1) {
-    throw new RangeError(`tuning.maxZoomPerEvent must be a finite number > 1, got ${t.maxZoomPerEvent}`);
+  if (!Number.isFinite(tuning.maxZoomPerEvent) || tuning.maxZoomPerEvent <= 1) {
+    throw new RangeError(`tuning.maxZoomPerEvent must be a finite number > 1, got ${tuning.maxZoomPerEvent}`);
   }
-  if (!Number.isFinite(t.hysteresis) || t.hysteresis < 0 || t.hysteresis >= 0.5) {
-    throw new RangeError(`tuning.hysteresis must be a finite number >= 0 and < 0.5, got ${t.hysteresis}`);
+  if (!Number.isFinite(tuning.hysteresis) || tuning.hysteresis < 0 || tuning.hysteresis >= 0.5) {
+    throw new RangeError(`tuning.hysteresis must be a finite number >= 0 and < 0.5, got ${tuning.hysteresis}`);
   }
-  if (!Number.isFinite(t.fadeBand) || t.fadeBand < 0) {
-    throw new RangeError(`tuning.fadeBand must be a finite number >= 0, got ${t.fadeBand}`);
+  if (!Number.isFinite(tuning.fadeBand) || tuning.fadeBand < 0) {
+    throw new RangeError(`tuning.fadeBand must be a finite number >= 0, got ${tuning.fadeBand}`);
   }
-  if (!Number.isFinite(t.hullPadding) || t.hullPadding <= 0) {
-    throw new RangeError(`tuning.hullPadding must be a finite number > 0, got ${t.hullPadding}`);
+  if (!Number.isFinite(tuning.hullPadding) || tuning.hullPadding <= 0) {
+    throw new RangeError(`tuning.hullPadding must be a finite number > 0, got ${tuning.hullPadding}`);
   }
-  if (!Number.isFinite(t.hoverRadius) || t.hoverRadius < 0) {
-    throw new RangeError(`tuning.hoverRadius must be a finite number >= 0, got ${t.hoverRadius}`);
+  if (!Number.isFinite(tuning.hoverRadius) || tuning.hoverRadius < 0) {
+    throw new RangeError(`tuning.hoverRadius must be a finite number >= 0, got ${tuning.hoverRadius}`);
   }
-  if (!Number.isFinite(t.labelClasses.large) || t.labelClasses.large < 0 || t.labelClasses.large > 1) {
-    throw new RangeError(`tuning.labelClasses.large must be a finite number in [0, 1], got ${t.labelClasses.large}`);
-  }
-  if (!Number.isFinite(t.labelClasses.medium) || t.labelClasses.medium < 0 || t.labelClasses.medium > 1) {
-    throw new RangeError(`tuning.labelClasses.medium must be a finite number in [0, 1], got ${t.labelClasses.medium}`);
-  }
-  if (t.labelClasses.medium > t.labelClasses.large) {
+  if (!Number.isFinite(tuning.labelClasses.large) || tuning.labelClasses.large < 0 || tuning.labelClasses.large > 1) {
     throw new RangeError(
-      `tuning.labelClasses.medium (${t.labelClasses.medium}) must be <= large (${t.labelClasses.large})`,
+      `tuning.labelClasses.large must be a finite number in [0, 1], got ${tuning.labelClasses.large}`,
+    );
+  }
+  if (
+    !Number.isFinite(tuning.labelClasses.medium) ||
+    tuning.labelClasses.medium < 0 ||
+    tuning.labelClasses.medium > 1
+  ) {
+    throw new RangeError(
+      `tuning.labelClasses.medium must be a finite number in [0, 1], got ${tuning.labelClasses.medium}`,
+    );
+  }
+  if (tuning.labelClasses.medium > tuning.labelClasses.large) {
+    throw new RangeError(
+      `tuning.labelClasses.medium (${tuning.labelClasses.medium}) must be <= large (${tuning.labelClasses.large})`,
     );
   }
 }

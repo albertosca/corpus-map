@@ -4,41 +4,49 @@ export interface Viewport {
   ty: number;
 }
 
-export function toScreen(v: Viewport, wx: number, wy: number): [number, number] {
-  return [wx * v.scale + v.tx, wy * v.scale + v.ty];
+export function toScreen(viewport: Viewport, worldHorizontal: number, worldVertical: number): [number, number] {
+  return [worldHorizontal * viewport.scale + viewport.tx, worldVertical * viewport.scale + viewport.ty];
 }
 
-export function toWorld(v: Viewport, sx: number, sy: number): [number, number] {
-  return [(sx - v.tx) / v.scale, (sy - v.ty) / v.scale];
+export function toWorld(viewport: Viewport, screenHorizontal: number, screenVertical: number): [number, number] {
+  return [(screenHorizontal - viewport.tx) / viewport.scale, (screenVertical - viewport.ty) / viewport.scale];
 }
 
-export function panBy(v: Viewport, dx: number, dy: number): Viewport {
-  return { scale: v.scale, tx: v.tx + dx, ty: v.ty + dy };
+export function panBy(viewport: Viewport, horizontalDelta: number, verticalDelta: number): Viewport {
+  return { scale: viewport.scale, tx: viewport.tx + horizontalDelta, ty: viewport.ty + verticalDelta };
 }
 
-export function zoomAt(v: Viewport, sx: number, sy: number, factor: number): Viewport {
-  const scale = v.scale * factor;
-  return { scale, tx: sx - (sx - v.tx) * factor, ty: sy - (sy - v.ty) * factor };
+export function zoomAt(viewport: Viewport, screenHorizontal: number, screenVertical: number, factor: number): Viewport {
+  const scale = viewport.scale * factor;
+  return {
+    scale,
+    tx: screenHorizontal - (screenHorizontal - viewport.tx) * factor,
+    ty: screenVertical - (screenVertical - viewport.ty) * factor,
+  };
 }
 
 /**
  * Like `zoomAt`, but lands on `scale` exactly instead of on
- * `v.scale * (scale / v.scale)`, which can miss the target by a float ulp —
+ * `viewport.scale * (scale / viewport.scale)`, which can miss the target by a float ulp —
  * enough to fall on the wrong side of a regime threshold.
  */
-export function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport {
-  const factor = scale / v.scale;
-  return { scale, tx: sx - (sx - v.tx) * factor, ty: sy - (sy - v.ty) * factor };
+export function zoomTo(viewport: Viewport, screenHorizontal: number, screenVertical: number, scale: number): Viewport {
+  const factor = scale / viewport.scale;
+  return {
+    scale,
+    tx: screenHorizontal - (screenHorizontal - viewport.tx) * factor,
+    ty: screenVertical - (screenVertical - viewport.ty) * factor,
+  };
 }
 
 /**
- * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. The wheel
+ * Clamps `scale` to `[fit / maximumZoomOut, fit * maximumZoomIn]`. The wheel
  * handler and the imperative handle's `zoomIn`/`zoomOut` (showcase Task 3)
  * both reach it through `zoomStepScale`, so they clamp to exactly the same
  * band through the same code.
  */
-export function clampScale(scale: number, fit: number, maxZoomOut: number, maxZoomIn: number): number {
-  return Math.min(fit * maxZoomIn, Math.max(fit / maxZoomOut, scale));
+export function clampScale(scale: number, fit: number, maximumZoomOut: number, maximumZoomIn: number): number {
+  return Math.min(fit * maximumZoomIn, Math.max(fit / maximumZoomOut, scale));
 }
 
 /**
@@ -53,10 +61,10 @@ export function zoomStepScale(
   scale: number,
   factor: number,
   fit: number,
-  maxZoomOut: number,
-  maxZoomIn: number,
+  maximumZoomOut: number,
+  maximumZoomIn: number,
 ): number {
-  const target = clampScale(scale * factor, fit, maxZoomOut, maxZoomIn);
+  const target = clampScale(scale * factor, fit, maximumZoomOut, maximumZoomIn);
   return factor >= 1 ? Math.max(scale, target) : Math.min(scale, target);
 }
 
@@ -67,12 +75,16 @@ export function zoomStepScale(
  * not.
  */
 export function recenterOnBoxChange(
-  v: Viewport,
+  viewport: Viewport,
   oldWidth: number,
   oldHeight: number,
   newWidth: number,
   newHeight: number,
 ): Viewport {
-  const [wx, wy] = toWorld(v, oldWidth / 2, oldHeight / 2);
-  return { scale: v.scale, tx: newWidth / 2 - wx * v.scale, ty: newHeight / 2 - wy * v.scale };
+  const [worldHorizontal, worldVertical] = toWorld(viewport, oldWidth / 2, oldHeight / 2);
+  return {
+    scale: viewport.scale,
+    tx: newWidth / 2 - worldHorizontal * viewport.scale,
+    ty: newHeight / 2 - worldVertical * viewport.scale,
+  };
 }

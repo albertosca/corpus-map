@@ -18,7 +18,7 @@ export interface PlacedLabel {
   height: number;
   /**
    * Absolute scale units (`s_ij`, the same units as `Viewport.scale`, never
-   * divided by `fitScale`): the label is drawn when `vp.scale >=
+   * divided by `fitScale`): the label is drawn when `viewport.scale >=
    * activeFromScale`. Keeping it absolute is what lets a resize — which only
    * changes `fitScale` — skip a scene rebuild.
    */
@@ -34,21 +34,23 @@ export function labelClasses(
   inputs: readonly LabelInput[],
   cut: { large: number; medium: number },
 ): Map<string, LabelClass> {
-  const counts = inputs.map((l) => l.members).sort((a, b) => a - b);
-  const out = new Map<string, LabelClass>();
-  const n = Math.max(1, counts.length - 1);
-  for (const l of inputs) {
-    const rank = counts.indexOf(l.members) / n;
-    out.set(l.id, rank >= cut.large ? "large" : rank >= cut.medium ? "medium" : "small");
+  const counts = inputs.map((input) => input.members).sort((first, second) => first - second);
+  const classes = new Map<string, LabelClass>();
+  const denominator = Math.max(1, counts.length - 1);
+  for (const input of inputs) {
+    const rank = counts.indexOf(input.members) / denominator;
+    classes.set(input.id, rank >= cut.large ? "large" : rank >= cut.medium ? "medium" : "small");
   }
-  return out;
+  return classes;
 }
 
-/** Scale at which two label boxes, anchored `dx`,`dy` apart in world units, stop overlapping. */
-export function separationScale(dx: number, dy: number, w: number, h: number): number {
-  const sx = dx === 0 ? Number.POSITIVE_INFINITY : (w + LABEL_PADDING) / Math.abs(dx);
-  const sy = dy === 0 ? Number.POSITIVE_INFINITY : (h + LABEL_PADDING) / Math.abs(dy);
-  return Math.min(sx, sy);
+/** Scale at which two label boxes, anchored `horizontalDelta`,`verticalDelta` apart in world units, stop overlapping. */
+export function separationScale(horizontalDelta: number, verticalDelta: number, width: number, height: number): number {
+  const horizontalScale =
+    horizontalDelta === 0 ? Number.POSITIVE_INFINITY : (width + LABEL_PADDING) / Math.abs(horizontalDelta);
+  const verticalScale =
+    verticalDelta === 0 ? Number.POSITIVE_INFINITY : (height + LABEL_PADDING) / Math.abs(verticalDelta);
+  return Math.min(horizontalScale, verticalScale);
 }
 
 /**
@@ -65,28 +67,30 @@ export function placeLabels(
   measure: Measure,
 ): PlacedLabel[] {
   const classes = labelClasses(inputs, cut);
-  const ordered = [...inputs].sort((a, b) => b.members - a.members || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const ordered = [...inputs].sort(
+    (first, second) => second.members - first.members || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
+  );
   const placed: PlacedLabel[] = [];
-  for (const l of ordered) {
-    const labelClass = classes.get(l.id) ?? "small";
-    const { width, height } = measure(l.name, fonts[labelClass]);
+  for (const input of ordered) {
+    const labelClass = classes.get(input.id) ?? "small";
+    const { width, height } = measure(input.name, fonts[labelClass]);
     let activeFromScale = 0;
-    for (const p of placed) {
-      const s = separationScale(
-        l.anchor[0] - p.anchor[0],
-        l.anchor[1] - p.anchor[1],
-        (width + p.width) / 2,
-        (height + p.height) / 2,
+    for (const other of placed) {
+      const separation = separationScale(
+        input.anchor[0] - other.anchor[0],
+        input.anchor[1] - other.anchor[1],
+        (width + other.width) / 2,
+        (height + other.height) / 2,
       );
-      if (p.activeFromScale < s && s > activeFromScale) activeFromScale = s;
+      if (other.activeFromScale < separation && separation > activeFromScale) activeFromScale = separation;
     }
-    placed.push({ id: l.id, name: l.name, anchor: l.anchor, labelClass, width, height, activeFromScale });
+    placed.push({ id: input.id, name: input.name, anchor: input.anchor, labelClass, width, height, activeFromScale });
   }
   return placed;
 }
 
 /** Deterministic text measure for environments without a canvas (tests). */
 export function estimateText(text: string, font: string): { width: number; height: number } {
-  const px = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "12");
-  return { width: text.length * 0.6 * px, height: px };
+  const pixels = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "12");
+  return { width: text.length * 0.6 * pixels, height: pixels };
 }

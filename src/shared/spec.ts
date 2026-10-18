@@ -72,26 +72,26 @@ export function validateSpec(input: unknown): MapSpec {
   const nodes = requireArray(raw.nodes, "nodes");
 
   const members = new Map<string, Set<string>>();
-  for (const [i, t] of territories.entries()) {
-    const path = `territories[${i}]`;
-    const territory = requireObject(t, path);
+  for (const [index, entry] of territories.entries()) {
+    const path = `territories[${index}]`;
+    const territory = requireObject(entry, path);
     const id = requireString(territory.id, `${path}.id`);
     if (members.has(id)) fail(`${path}.id`, `duplicate id ${id}`);
     requireString(territory.name, `${path}.name`);
     requireArray(territory.members, `${path}.members`);
     requirePoint(territory.centroid, `${path}.centroid`);
     if (territory.boundary !== undefined) {
-      for (const [j, p] of requireArray(territory.boundary, `${path}.boundary`).entries()) {
-        requirePoint(p, `${path}.boundary[${j}]`);
+      for (const [pointIndex, point] of requireArray(territory.boundary, `${path}.boundary`).entries()) {
+        requirePoint(point, `${path}.boundary[${pointIndex}]`);
       }
     }
     members.set(id, new Set());
   }
 
   const claimed = new Map<string, string | null>();
-  for (const [i, n] of nodes.entries()) {
-    const path = `nodes[${i}]`;
-    const node = requireObject(n, path);
+  for (const [index, entry] of nodes.entries()) {
+    const path = `nodes[${index}]`;
+    const node = requireObject(entry, path);
     const id = requireString(node.id, `${path}.id`);
     if (claimed.has(id)) fail(`${path}.id`, `duplicate id ${id}`);
     requireString(node.label, `${path}.label`);
@@ -102,12 +102,12 @@ export function validateSpec(input: unknown): MapSpec {
     claimed.set(id, territory);
   }
 
-  for (const [i, t] of territories.entries()) {
-    const territory = t as Territory;
+  for (const [index, entry] of territories.entries()) {
+    const territory = entry as Territory;
     const listed = members.get(territory.id) as Set<string>;
-    for (const [j, m] of territory.members.entries()) {
-      const path = `territories[${i}].members[${j}]`;
-      const id = requireString(m, path);
+    for (const [memberIndex, member] of territory.members.entries()) {
+      const path = `territories[${index}].members[${memberIndex}]`;
+      const id = requireString(member, path);
       if (!claimed.has(id)) fail(path, `unknown node ${id}`);
       const claims = claimed.get(id);
       if (claims !== territory.id) fail(path, `node ${id} claims territory ${claims === null ? "null" : claims}`);
@@ -115,9 +115,9 @@ export function validateSpec(input: unknown): MapSpec {
     }
   }
 
-  for (const [i, n] of (nodes as MapNode[]).entries()) {
-    if (n.territory !== null && !members.get(n.territory)?.has(n.id)) {
-      fail(`nodes[${i}].territory`, `territory ${n.territory} does not list ${n.id} among its members`);
+  for (const [index, node] of (nodes as MapNode[]).entries()) {
+    if (node.territory !== null && !members.get(node.territory)?.has(node.id)) {
+      fail(`nodes[${index}].territory`, `territory ${node.territory} does not list ${node.id} among its members`);
     }
   }
 

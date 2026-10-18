@@ -20,6 +20,12 @@ export interface CorpusMapView {
     visibleCount: number;
 }
 export interface CorpusMapProps {
+    /**
+     * The corpus to draw. Keep it referentially stable (state, a memo, or a
+     * module constant): a new object refits the view, so an inline
+     * `spec={{ ... }}` literal resets the user's zoom and pan on every parent
+     * render.
+     */
     spec: MapSpec;
     renderCard: (node: MapNode) => ReactNode;
     /** React 19 ref-as-prop; see `CorpusMapHandle`. */
@@ -80,7 +86,7 @@ export interface CorpusMapProps {
  * matter which source it came from; a new `spec` refits. To refit after a
  * box change, pass a `ref` (typed `CorpusMapHandle`) and call its `fit()`.
  */
-export declare function CorpusMap({ ref, ...props }: CorpusMapProps): ReactElement;
+export declare function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProps): ReactElement;
 
 // a11y/AccessibleTree.d.ts
 import type { ReactElement } from "react";
@@ -121,9 +127,9 @@ import { type Viewport } from "../viewport/viewport";
  * visually hidden (the canvas is decorative, the tree is the content), so the
  * territory or item whose button has focus is marked on the canvas instead.
  */
-export declare function paintFocusedTerritory(surface: Surface, scene: Scene, vp: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth">, id: string): void;
+export declare function paintFocusedTerritory(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth">, id: string): void;
 /** A ring around the focused item's point, one outline width clear of the point itself. */
-export declare function paintFocusedNode(surface: Surface, scene: Scene, vp: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth" | "pointRadius">, id: string): void;
+export declare function paintFocusedNode(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth" | "pointRadius">, id: string): void;
 
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";
@@ -167,7 +173,7 @@ export interface PlacedCard {
     y: number;
 }
 /** Top-left corners of the eight candidates, in preference order: right, left, above, below, then the diagonals. */
-export declare function candidates(x: number, y: number, w: number, h: number, gap: number): Array<[number, number]>;
+export declare function candidates(horizontal: number, vertical: number, width: number, height: number, gap: number): Array<[number, number]>;
 /**
  * Place a card beside each anchor, in the first of eight candidate positions
  * that stays inside the box and overlaps no placed card (Christensen, Marks and
@@ -204,7 +210,7 @@ export declare function parseColor(color: string): Rgba;
 /** `top` composited over an opaque `bottom`. */
 export declare function over(top: Rgba, bottom: Rgba): Rgba;
 /** WCAG 2.2 contrast ratio between two opaque colours. */
-export declare function contrastRatio(a: Rgba, b: Rgba): number;
+export declare function contrastRatio(first: Rgba, second: Rgba): number;
 export {};
 
 // labels/paintLabels.d.ts
@@ -226,7 +232,7 @@ export interface LabelBox {
  * a name pop out: a name that fits slides off the edge, clipped by the
  * canvas, and a position-dependent skip would break map-feel metric 7.
  */
-export declare function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme, box: LabelBox): void;
+export declare function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void;
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -246,7 +252,7 @@ export interface PlacedLabel {
     height: number;
     /**
      * Absolute scale units (`s_ij`, the same units as `Viewport.scale`, never
-     * divided by `fitScale`): the label is drawn when `vp.scale >=
+     * divided by `fitScale`): the label is drawn when `viewport.scale >=
      * activeFromScale`. Keeping it absolute is what lets a resize — which only
      * changes `fitScale` — skip a scene rebuild.
      */
@@ -262,8 +268,8 @@ export declare function labelClasses(inputs: readonly LabelInput[], cut: {
     large: number;
     medium: number;
 }): Map<string, LabelClass>;
-/** Scale at which two label boxes, anchored `dx`,`dy` apart in world units, stop overlapping. */
-export declare function separationScale(dx: number, dy: number, w: number, h: number): number;
+/** Scale at which two label boxes, anchored `horizontalDelta`,`verticalDelta` apart in world units, stop overlapping. */
+export declare function separationScale(horizontalDelta: number, verticalDelta: number, width: number, height: number): number;
 /**
  * Active ranges after Been, Daiches and Yap (2006): labels in priority order
  * (more members first, then id); each starts at the smallest absolute scale
@@ -283,8 +289,8 @@ export declare function estimateText(text: string, font: string): {
 
 // labels/pole.d.ts
 import type { Point, Ring } from "../territories/shape";
-/** Distance from `p` to the ring's outline, positive inside and negative outside. */
-export declare function signedDistance(p: Point, ring: Ring): number;
+/** Distance from `point` to the ring's outline, positive inside and negative outside. */
+export declare function signedDistance(point: Point, ring: Ring): number;
 /**
  * The interior point farthest from the outline (pole of inaccessibility), by
  * quadtree refinement: Garcia-Castellanos and Lombardo (2007), the idea behind
@@ -307,7 +313,7 @@ export interface LodThresholds {
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
 /**
  * Validated, defaulted thresholds: both fields finite and in
- * `[0, MAX_RATIO]`, `midAt <= nearAt`. Unvalidated thresholds silently break
+ * `[0, MAXIMUM_RATIO]`, `midAt <= nearAt`. Unvalidated thresholds silently break
  * the LOD contract — `{ midAt: 6, nearAt: -1 }` opens "near" immediately,
  * `{ midAt: NaN, nearAt: NaN }` sticks at "far" forever (`regimeAt` treats a
  * non-finite ratio as far, and a NaN threshold makes every comparison
@@ -324,7 +330,7 @@ import type { LodThresholds, Regime } from "./lod";
  * `hysteresis` below it, so a zoom oscillating around a threshold does not
  * mount and unmount cards on every tick.
  */
-export declare function regimeAt(rawRatio: number, t: LodThresholds, previous: Regime, hysteresis: number): Regime;
+export declare function regimeAt(rawRatio: number, thresholds: LodThresholds, previous: Regime, hysteresis: number): Regime;
 /**
  * Opacity of a layer that enters at `threshold`: 0 at the threshold, 1 at
  * threshold * (1 + band), linear between. A threshold of 0 or less means the
@@ -369,7 +375,7 @@ interface MinimapProps {
     corner: MinimapCorner;
     theme: Theme;
     /** Called with the world point under a press or drag on the minimap. */
-    onPoint: (worldX: number, worldY: number) => void;
+    onPoint: (worldHorizontal: number, worldVertical: number) => void;
 }
 /**
  * The minimap's React half: a fixed-size canvas painted by the pure
@@ -437,15 +443,15 @@ export interface ScreenPoint {
     x: number;
     y: number;
 }
-/** The point nearest to (x, y) within `radius` pixels, or null. Ties go to the earlier point. */
-export declare function nearestWithin(points: readonly ScreenPoint[], x: number, y: number, radius: number): ScreenPoint | null;
+/** The point nearest to (horizontal, vertical) within `radius` pixels, or null. Ties go to the earlier point. */
+export declare function nearestWithin(points: readonly ScreenPoint[], horizontal: number, vertical: number, radius: number): ScreenPoint | null;
 
 // points/paintPoints.d.ts
 import type { MapSpec } from "../shared/spec";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintPoints(surface: Surface, spec: MapSpec, vp: Viewport, theme: Theme): void;
+export declare function paintPoints(surface: Surface, spec: MapSpec, viewport: Viewport, theme: Theme): void;
 
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";
@@ -459,7 +465,7 @@ import type { Theme } from "./theme";
  * point layer's fade, and the canvas's CSS size (a name larger than the
  * canvas is skipped, see `paintLabels`). No ratio here — a placed
  * name carries its own absolute `activeFromScale` (see
- * `labels/placement.ts`), so `paintLabels` reads `vp.scale` directly
+ * `labels/placement.ts`), so `paintLabels` reads `viewport.scale` directly
  * instead of a fit-relative ratio threaded through the frame.
  *
  * `focusedTerritory`/`focusedNode` are the ids (primitives, so they can sit
@@ -480,7 +486,7 @@ export interface Frame {
  * mark, by a later territory's fill or by the focus outline, and the focus
  * outline is never covered by a boundary or a point.
  */
-export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, vp: Viewport, frame: Frame, theme: Theme): void;
+export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, frame: Frame, theme: Theme): void;
 
 // shared/scene.d.ts
 import { type Measure, type PlacedLabel } from "../labels/placement";
@@ -543,15 +549,15 @@ export declare function validateSpec(input: unknown): MapSpec;
 export interface Surface {
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-    circle(id: string, x: number, y: number, r: number, fill: string): void;
-    /** Draws `text` centred on (x, y). */
-    text(text: string, x: number, y: number, color: string, font: string): void;
+    circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
+    /** Draws `text` centred on (horizontal, vertical). */
+    text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
     /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
     globalAlpha(alpha: number): void;
     /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
     outline(points: Array<[number, number]>, color: string, width: number): void;
-    /** Strokes a circle of radius `r` centred on (x, y) (no fill) at `width`, leaving later calls untouched. */
-    ring(x: number, y: number, r: number, color: string, width: number): void;
+    /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
+    ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
 }
 export declare class RecordingSurface implements Surface {
     cleared: number;
@@ -590,13 +596,13 @@ export declare class RecordingSurface implements Surface {
     calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-    circle(id: string, x: number, y: number, r: number, fill: string): void;
-    text(text: string, x: number, y: number, color: string, font: string): void;
+    circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
+    text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
     globalAlpha(alpha: number): void;
     outline(points: Array<[number, number]>, color: string, width: number): void;
-    ring(x: number, y: number, r: number, color: string, width: number): void;
+    ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
 }
-export declare function canvasSurface(ctx: CanvasRenderingContext2D): Surface;
+export declare function canvasSurface(context: CanvasRenderingContext2D): Surface;
 
 // shared/theme.d.ts
 import type { LabelClass } from "../labels/placement";
@@ -661,7 +667,7 @@ import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintTerritories(surface: Surface, scene: Scene, vp: Viewport, theme: Theme): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
@@ -676,11 +682,11 @@ export type Ring = Point[];
 export declare function spacing(points: readonly Point[], quantile?: number): number;
 export declare function extent(points: readonly Point[]): number;
 /**
- * Outer rings of the union of disks of radius `r` around `points`, by
+ * Outer rings of the union of disks of radius `radius` around `points`, by
  * marching squares over the signed distance to the union. Holes are dropped:
  * a territory is drawn as regions, not as regions with gaps.
  */
-export declare function disksOutline(points: readonly Point[], r: number): Ring[];
+export declare function disksOutline(points: readonly Point[], radius: number): Ring[];
 /**
  * Groups of points whose disks of radius `link / 2` touch, by union-find over
  * a grid of cell `link`. Outlining each group on its own grid keeps one far
@@ -691,7 +697,7 @@ export declare function components(points: readonly Point[], link: number): Poin
 /** One pass of Chaikin corner cutting on a closed ring. */
 export declare function chaikin(ring: Ring): Ring;
 /** Even-odd point-in-polygon test. */
-export declare function contains(ring: Ring, [x, y]: Point): boolean;
+export declare function contains(ring: Ring, [horizontal, vertical]: Point): boolean;
 export declare function ringArea(ring: Ring): number;
 
 // viewport/fit.d.ts
@@ -725,23 +731,23 @@ export interface ElementSize {
     height: number;
 }
 /**
- * The size of `ref`'s element, from a `ResizeObserver`; `null` until the
+ * The size of `elementReference`'s element, from a `ResizeObserver`; `null` until the
  * first observation. A report equal to the current size never calls
  * `setSize` at all, so no render is ever scheduled for it — checked against
- * `sizeRef`, not the `size` state variable, because a same-reference-
+ * `sizeReference`, not the `size` state variable, because a same-reference-
  * returning functional update is only an optimization, not a guarantee:
  * measured empirically while building this hook (against the CorpusMap
  * frame-coalescing test's own technique of counting Profiler commits, not
  * renders — a render-body counter would have missed it), React still
  * re-commits a second, separate dispatch of an identical value once a real
- * state change has already committed before it. `sizeRef` is written
+ * state change has already committed before it. `sizeReference` is written
  * synchronously in this same callback, right where `size` is decided, rather
- * than through a `[size]`-keyed effect like `CorpusMap`'s `hoverRef` (which
+ * than through a `[size]`-keyed effect like `CorpusMap`'s `hoverReference` (which
  * needs one, since `hover` there has more than one writer): `size` has
  * exactly one writer, this callback, so there is no other update this ref
  * could fall behind.
  */
-export declare function useElementSize(ref: RefObject<HTMLElement | null>): ElementSize | null;
+export declare function useElementSize(elementReference: RefObject<HTMLElement | null>): ElementSize | null;
 
 // viewport/viewport.d.ts
 export interface Viewport {
@@ -749,23 +755,23 @@ export interface Viewport {
     tx: number;
     ty: number;
 }
-export declare function toScreen(v: Viewport, wx: number, wy: number): [number, number];
-export declare function toWorld(v: Viewport, sx: number, sy: number): [number, number];
-export declare function panBy(v: Viewport, dx: number, dy: number): Viewport;
-export declare function zoomAt(v: Viewport, sx: number, sy: number, factor: number): Viewport;
+export declare function toScreen(viewport: Viewport, worldHorizontal: number, worldVertical: number): [number, number];
+export declare function toWorld(viewport: Viewport, screenHorizontal: number, screenVertical: number): [number, number];
+export declare function panBy(viewport: Viewport, horizontalDelta: number, verticalDelta: number): Viewport;
+export declare function zoomAt(viewport: Viewport, screenHorizontal: number, screenVertical: number, factor: number): Viewport;
 /**
  * Like `zoomAt`, but lands on `scale` exactly instead of on
- * `v.scale * (scale / v.scale)`, which can miss the target by a float ulp —
+ * `viewport.scale * (scale / viewport.scale)`, which can miss the target by a float ulp —
  * enough to fall on the wrong side of a regime threshold.
  */
-export declare function zoomTo(v: Viewport, sx: number, sy: number, scale: number): Viewport;
+export declare function zoomTo(viewport: Viewport, screenHorizontal: number, screenVertical: number, scale: number): Viewport;
 /**
- * Clamps `scale` to `[fit / maxZoomOut, fit * maxZoomIn]`. The wheel
+ * Clamps `scale` to `[fit / maximumZoomOut, fit * maximumZoomIn]`. The wheel
  * handler and the imperative handle's `zoomIn`/`zoomOut` (showcase Task 3)
  * both reach it through `zoomStepScale`, so they clamp to exactly the same
  * band through the same code.
  */
-export declare function clampScale(scale: number, fit: number, maxZoomOut: number, maxZoomIn: number): number;
+export declare function clampScale(scale: number, fit: number, maximumZoomOut: number, maximumZoomIn: number): number;
 /**
  * The scale after one zoom step by `factor` (> 1 zooms in, < 1 zooms out),
  * clamped to the band like `clampScale`, but never moving opposite to the
@@ -774,14 +780,14 @@ export declare function clampScale(scale: number, fit: number, maxZoomOut: numbe
  * zoom-in into a zoom-out. Outside the band a step only moves toward it,
  * and a step away from it leaves the scale where it is.
  */
-export declare function zoomStepScale(scale: number, factor: number, fit: number, maxZoomOut: number, maxZoomIn: number): number;
+export declare function zoomStepScale(scale: number, factor: number, fit: number, maximumZoomOut: number, maximumZoomIn: number): number;
 /**
  * A box resize (showcase Task 2): keeps `scale` and keeps the world point
  * formerly at the old box's centre at the new box's centre, instead of
  * refitting — a spec change refits (via `fitSpec`); a box change alone does
  * not.
  */
-export declare function recenterOnBoxChange(v: Viewport, oldWidth: number, oldHeight: number, newWidth: number, newHeight: number): Viewport;
+export declare function recenterOnBoxChange(viewport: Viewport, oldWidth: number, oldHeight: number, newWidth: number, newHeight: number): Viewport;
 
 // viewport/wheel.d.ts
 import type { Tuning } from "../shared/tuning";
@@ -797,4 +803,4 @@ export interface WheelInput {
  * scale). `ctrlKey` marks a trackpad pinch. A single event is capped so a
  * large line- or page-mode notch cannot jump.
  */
-export declare function wheelZoomFactor(e: WheelInput, t: Pick<Tuning, "wheelSensitivity" | "pinchGain" | "maxZoomPerEvent">): number;
+export declare function wheelZoomFactor(input: WheelInput, tuning: Pick<Tuning, "wheelSensitivity" | "pinchGain" | "maxZoomPerEvent">): number;

@@ -17,27 +17,38 @@ interface Rect {
   h: number;
 }
 
-function overlaps(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+function overlaps(first: Rect, second: Rect): boolean {
+  return (
+    first.x < second.x + second.w &&
+    second.x < first.x + first.w &&
+    first.y < second.y + second.h &&
+    second.y < first.y + first.h
+  );
 }
 
-function distanceToRect(px: number, py: number, r: Rect): number {
-  const dx = Math.max(r.x - px, 0, px - (r.x + r.w));
-  const dy = Math.max(r.y - py, 0, py - (r.y + r.h));
-  return Math.hypot(dx, dy);
+function distanceToRect(pointHorizontal: number, pointVertical: number, rect: Rect): number {
+  const horizontalGap = Math.max(rect.x - pointHorizontal, 0, pointHorizontal - (rect.x + rect.w));
+  const verticalGap = Math.max(rect.y - pointVertical, 0, pointVertical - (rect.y + rect.h));
+  return Math.hypot(horizontalGap, verticalGap);
 }
 
 /** Top-left corners of the eight candidates, in preference order: right, left, above, below, then the diagonals. */
-export function candidates(x: number, y: number, w: number, h: number, gap: number): Array<[number, number]> {
+export function candidates(
+  horizontal: number,
+  vertical: number,
+  width: number,
+  height: number,
+  gap: number,
+): Array<[number, number]> {
   return [
-    [x + gap, y - h / 2],
-    [x - gap - w, y - h / 2],
-    [x - w / 2, y - gap - h],
-    [x - w / 2, y + gap],
-    [x + gap, y - gap - h],
-    [x - gap - w, y - gap - h],
-    [x + gap, y + gap],
-    [x - gap - w, y + gap],
+    [horizontal + gap, vertical - height / 2],
+    [horizontal - gap - width, vertical - height / 2],
+    [horizontal - width / 2, vertical - gap - height],
+    [horizontal - width / 2, vertical + gap],
+    [horizontal + gap, vertical - gap - height],
+    [horizontal - gap - width, vertical - gap - height],
+    [horizontal + gap, vertical + gap],
+    [horizontal - gap - width, vertical + gap],
   ];
 }
 
@@ -55,40 +66,40 @@ export function layoutCards(
   box: { width: number; height: number },
   gap = 6,
 ): PlacedCard[] {
-  const { width: w, height: h } = size;
+  const { width, height } = size;
   const placed: Array<PlacedCard & { rect: Rect }> = [];
-  for (const a of anchors) {
-    const free = candidates(a.x, a.y, w, h, gap)
-      .map(([x, y]) => ({ x, y, w, h }))
+  for (const anchor of anchors) {
+    const free = candidates(anchor.x, anchor.y, width, height, gap)
+      .map(([left, top]) => ({ x: left, y: top, w: width, h: height }))
       .find(
-        (r) =>
-          r.x >= 0 &&
-          r.y >= 0 &&
-          r.x + w <= box.width &&
-          r.y + h <= box.height &&
-          !placed.some((p) => overlaps(p.rect, r)),
+        (rect) =>
+          rect.x >= 0 &&
+          rect.y >= 0 &&
+          rect.x + width <= box.width &&
+          rect.y + height <= box.height &&
+          !placed.some((card) => overlaps(card.rect, rect)),
       );
     if (free) {
-      placed.push({ ids: [a.id], x: free.x, y: free.y, rect: free });
+      placed.push({ ids: [anchor.id], x: free.x, y: free.y, rect: free });
       continue;
     }
     let nearest: (PlacedCard & { rect: Rect }) | undefined;
     let best = Number.POSITIVE_INFINITY;
-    for (const p of placed) {
-      const d = distanceToRect(a.x, a.y, p.rect);
-      if (d < best) {
-        best = d;
-        nearest = p;
+    for (const card of placed) {
+      const distance = distanceToRect(anchor.x, anchor.y, card.rect);
+      if (distance < best) {
+        best = distance;
+        nearest = card;
       }
     }
     if (nearest) {
-      nearest.ids.push(a.id);
+      nearest.ids.push(anchor.id);
     } else {
-      const x = Math.max(0, Math.min(a.x + gap, box.width - w));
-      const y = Math.max(0, Math.min(a.y - h / 2, box.height - h));
-      const rect = { x, y, w, h };
-      placed.push({ ids: [a.id], x, y, rect });
+      const left = Math.max(0, Math.min(anchor.x + gap, box.width - width));
+      const top = Math.max(0, Math.min(anchor.y - height / 2, box.height - height));
+      const rect = { x: left, y: top, w: width, h: height };
+      placed.push({ ids: [anchor.id], x: left, y: top, rect });
     }
   }
-  return placed.map(({ ids, x, y }) => ({ ids, x, y }));
+  return placed.map(({ ids, x: left, y: top }) => ({ ids, x: left, y: top }));
 }

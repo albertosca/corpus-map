@@ -24,8 +24,8 @@ export function minimapFit(world: Bounds, size: { width: number; height: number 
   return fitBounds(world, size.width, size.height, MINIMAP_PADDING);
 }
 
-function clamp(v: number, hi: number): number {
-  return Math.min(hi, Math.max(0, v));
+function clamp(value: number, upper: number): number {
+  return Math.min(upper, Math.max(0, value));
 }
 
 /**
@@ -56,23 +56,23 @@ export function paintMinimap(
   theme: Theme,
 ): void {
   surface.clear();
-  const vp = minimapFit(world, size);
+  const fitted = minimapFit(world, size);
   for (const rings of scene.shapes.values()) {
     for (const ring of rings) {
       if (ring.length < 3) continue;
       surface.polygon(
-        ring.map(([x, y]) => toScreen(vp, x, y)),
+        ring.map(([horizontal, vertical]) => toScreen(fitted, horizontal, vertical)),
         theme.territoryFill,
         theme.territoryStroke,
       );
     }
   }
-  const [sx0, sy0] = toScreen(vp, view.x, view.y);
-  const [sx1, sy1] = toScreen(vp, view.x + view.w, view.y + view.h);
-  const left = clamp(Math.min(sx0, sx1), size.width);
-  const right = clamp(Math.max(sx0, sx1), size.width);
-  const top = clamp(Math.min(sy0, sy1), size.height);
-  const bottom = clamp(Math.max(sy0, sy1), size.height);
+  const [firstHorizontal, firstVertical] = toScreen(fitted, view.x, view.y);
+  const [secondHorizontal, secondVertical] = toScreen(fitted, view.x + view.w, view.y + view.h);
+  const left = clamp(Math.min(firstHorizontal, secondHorizontal), size.width);
+  const right = clamp(Math.max(firstHorizontal, secondHorizontal), size.width);
+  const top = clamp(Math.min(firstVertical, secondVertical), size.height);
+  const bottom = clamp(Math.max(firstVertical, secondVertical), size.height);
   surface.polygon(
     [
       [left, top],

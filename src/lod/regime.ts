@@ -8,17 +8,17 @@ const ORDER: Record<Regime, number> = { far: 0, mid: 1, near: 2 };
  * `hysteresis` below it, so a zoom oscillating around a threshold does not
  * mount and unmount cards on every tick.
  */
-export function regimeAt(rawRatio: number, t: LodThresholds, previous: Regime, hysteresis: number): Regime {
+export function regimeAt(rawRatio: number, thresholds: LodThresholds, previous: Regime, hysteresis: number): Regime {
   if (!Number.isFinite(rawRatio)) return "far";
   // `ratio` is scale / fitScale, and a scale built as fitScale * nearAt can
   // divide back to a float ulp below nearAt; a relative tolerance far below
   // anything a user can zoom to keeps it on the intended side.
   const ratio = rawRatio * (1 + 1e-9);
   const exit = 1 - hysteresis;
-  const plain: Regime = ratio >= t.nearAt ? "near" : ratio >= t.midAt ? "mid" : "far";
+  const plain: Regime = ratio >= thresholds.nearAt ? "near" : ratio >= thresholds.midAt ? "mid" : "far";
   if (ORDER[plain] >= ORDER[previous]) return plain;
-  if (previous === "near" && ratio >= t.nearAt * exit) return "near";
-  if (previous !== "far" && ratio >= t.midAt * exit) return "mid";
+  if (previous === "near" && ratio >= thresholds.nearAt * exit) return "near";
+  if (previous !== "far" && ratio >= thresholds.midAt * exit) return "mid";
   return plain;
 }
 
@@ -29,6 +29,6 @@ export function regimeAt(rawRatio: number, t: LodThresholds, previous: Regime, h
  */
 export function fade(ratio: number, threshold: number, band: number): number {
   if (threshold <= 0 || band <= 0) return ratio >= threshold ? 1 : 0;
-  const t = (ratio - threshold) / (threshold * band);
-  return Math.min(1, Math.max(0, t));
+  const progress = (ratio - threshold) / (threshold * band);
+  return Math.min(1, Math.max(0, progress));
 }

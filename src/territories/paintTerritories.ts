@@ -3,12 +3,12 @@ import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { toScreen, type Viewport } from "../viewport/viewport";
 
-export function paintTerritories(surface: Surface, scene: Scene, vp: Viewport, theme: Theme): void {
+export function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme): void {
   for (const rings of scene.shapes.values()) {
     for (const ring of rings) {
       if (ring.length >= 3) {
         surface.polygon(
-          ring.map(([x, y]) => toScreen(vp, x, y)),
+          ring.map(([horizontal, vertical]) => toScreen(viewport, horizontal, vertical)),
           theme.territoryFill,
           theme.territoryStroke,
         );

@@ -12,29 +12,27 @@ const EMPTY: Bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
 export function worldBounds(spec: MapSpec): Bounds {
   if (spec.nodes.length === 0) return { ...EMPTY };
-  let { minX, minY, maxX, maxY } = {
-    minX: Number.POSITIVE_INFINITY,
-    minY: Number.POSITIVE_INFINITY,
-    maxX: Number.NEGATIVE_INFINITY,
-    maxY: Number.NEGATIVE_INFINITY,
-  };
-  for (const n of spec.nodes) {
-    if (n.x < minX) minX = n.x;
-    if (n.y < minY) minY = n.y;
-    if (n.x > maxX) maxX = n.x;
-    if (n.y > maxY) maxY = n.y;
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const node of spec.nodes) {
+    if (node.x < left) left = node.x;
+    if (node.y < top) top = node.y;
+    if (node.x > right) right = node.x;
+    if (node.y > bottom) bottom = node.y;
   }
   // A single point, or a perfectly flat axis, would give a zero-width box and
   // an infinite scale. Widen it instead of special-casing the caller.
-  if (maxX - minX < 1e-9) {
-    minX -= 0.5;
-    maxX += 0.5;
+  if (right - left < 1e-9) {
+    left -= 0.5;
+    right += 0.5;
   }
-  if (maxY - minY < 1e-9) {
-    minY -= 0.5;
-    maxY += 0.5;
+  if (bottom - top < 1e-9) {
+    top -= 0.5;
+    bottom += 0.5;
   }
-  return { minX, minY, maxX, maxY };
+  return { minX: left, minY: top, maxX: right, maxY: bottom };
 }
 
 /**
@@ -49,14 +47,14 @@ export function worldBounds(spec: MapSpec): Bounds {
  * its own, not necessarily produced by `worldBounds`.
  */
 export function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport {
-  const usableW = Math.max(1, width - padding * 2);
-  const usableH = Math.max(1, height - padding * 2);
-  const w = Math.max(1e-9, bounds.maxX - bounds.minX);
-  const h = Math.max(1e-9, bounds.maxY - bounds.minY);
-  const scale = Math.min(usableW / w, usableH / h);
-  const cx = (bounds.minX + bounds.maxX) / 2;
-  const cy = (bounds.minY + bounds.maxY) / 2;
-  return { scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale };
+  const usableWidth = Math.max(1, width - padding * 2);
+  const usableHeight = Math.max(1, height - padding * 2);
+  const worldWidth = Math.max(1e-9, bounds.maxX - bounds.minX);
+  const worldHeight = Math.max(1e-9, bounds.maxY - bounds.minY);
+  const scale = Math.min(usableWidth / worldWidth, usableHeight / worldHeight);
+  const centreHorizontal = (bounds.minX + bounds.maxX) / 2;
+  const centreVertical = (bounds.minY + bounds.maxY) / 2;
+  return { scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale };
 }
 
 export function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport {

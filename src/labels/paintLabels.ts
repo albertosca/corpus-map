@@ -18,11 +18,11 @@ export interface LabelBox {
  * a name pop out: a name that fits slides off the edge, clipped by the
  * canvas, and a position-dependent skip would break map-feel metric 7.
  */
-export function paintLabels(surface: Surface, scene: Scene, vp: Viewport, theme: Theme, box: LabelBox): void {
-  for (const l of scene.labels) {
-    if (vp.scale < l.activeFromScale) continue;
-    if (l.width > box.width || l.height > box.height) continue;
-    const [x, y] = toScreen(vp, l.anchor[0], l.anchor[1]);
-    surface.text(l.name, x, y, theme.territoryLabel, theme.territoryFonts[l.labelClass]);
+export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void {
+  for (const label of scene.labels) {
+    if (viewport.scale < label.activeFromScale) continue;
+    if (label.width > box.width || label.height > box.height) continue;
+    const [horizontal, vertical] = toScreen(viewport, label.anchor[0], label.anchor[1]);
+    surface.text(label.name, horizontal, vertical, theme.territoryLabel, theme.territoryFonts[label.labelClass]);
   }
 }

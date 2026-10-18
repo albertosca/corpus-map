@@ -34,7 +34,7 @@ interface MinimapProps {
   corner: MinimapCorner;
   theme: Theme;
   /** Called with the world point under a press or drag on the minimap. */
-  onPoint: (worldX: number, worldY: number) => void;
+  onPoint: (worldHorizontal: number, worldVertical: number) => void;
 }
 
 /**
@@ -47,49 +47,49 @@ interface MinimapProps {
  * corner happens to sit.
  */
 export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapProps): ReactElement {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasReference = useRef<HTMLCanvasElement>(null);
   const dragging = useRef(false);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasReference.current;
     if (!canvas) return;
-    const dpr = window.devicePixelRatio ?? 1;
-    const bw = Math.round(MINIMAP_SIZE.width * dpr);
-    const bh = Math.round(MINIMAP_SIZE.height * dpr);
-    if (canvas.width !== bw) canvas.width = bw;
-    if (canvas.height !== bh) canvas.height = bh;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintMinimap(canvasSurface(ctx), scene, world, view, MINIMAP_SIZE, theme);
+    const devicePixelRatio = window.devicePixelRatio ?? 1;
+    const backingWidth = Math.round(MINIMAP_SIZE.width * devicePixelRatio);
+    const backingHeight = Math.round(MINIMAP_SIZE.height * devicePixelRatio);
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    paintMinimap(canvasSurface(context), scene, world, view, MINIMAP_SIZE, theme);
   }, [scene, world, view, theme]);
 
-  const pointAt = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
+  const pointAt = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = canvasReference.current?.getBoundingClientRect();
     if (!rect) return;
-    const vp = minimapFit(world, MINIMAP_SIZE);
-    const [wx, wy] = toWorld(vp, e.clientX - rect.left, e.clientY - rect.top);
-    onPoint(wx, wy);
+    const fitted = minimapFit(world, MINIMAP_SIZE);
+    const [worldHorizontal, worldVertical] = toWorld(fitted, event.clientX - rect.left, event.clientY - rect.top);
+    onPoint(worldHorizontal, worldVertical);
   };
 
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (e.button !== 0 || !e.isPrimary) return;
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.button !== 0 || !event.isPrimary) return;
     dragging.current = true;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    pointAt(e);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointAt(event);
   };
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     if (!dragging.current) return;
-    pointAt(e);
+    pointAt(event);
   };
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     dragging.current = false;
   };
-  const onPointerCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  const onPointerCancel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     dragging.current = false;
   };
 
@@ -115,7 +115,7 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
       }}
     >
       <canvas
-        ref={canvasRef}
+        ref={canvasReference}
         data-minimap-canvas=""
         style={{ display: "block", width: MINIMAP_SIZE.width, height: MINIMAP_SIZE.height }}
       />

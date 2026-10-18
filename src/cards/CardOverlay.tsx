@@ -30,8 +30,8 @@ export interface CardOverlayProps {
 // resolved by `CorpusMap` on the map surface, not here). Set through the
 // DOM rather than JSX so it also works on React 18, which does not know the
 // attribute.
-function markInert(el: HTMLDivElement | null): void {
-  el?.setAttribute("inert", "");
+function markInert(element: HTMLDivElement | null): void {
+  element?.setAttribute("inert", "");
 }
 
 export function CardOverlay({
@@ -49,10 +49,10 @@ export function CardOverlay({
   if (regime !== "near") return null;
 
   const shown = visibleNodes(spec, viewport, width, height, cap);
-  const byId = new Map(shown.map((n) => [n.id, n]));
-  const anchors: CardAnchor[] = shown.map((n) => {
-    const [x, y] = toScreen(viewport, n.x, n.y);
-    return { id: n.id, x, y };
+  const byId = new Map(shown.map((node) => [node.id, node]));
+  const anchors: CardAnchor[] = shown.map((node) => {
+    const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
+    return { id: node.id, x: horizontal, y: vertical };
   });
   const placed = layoutCards(anchors, cardSize, { width, height });
 

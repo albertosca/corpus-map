@@ -11,9 +11,9 @@ import { toScreen, type Viewport } from "../viewport/viewport";
  */
 export function visibleNodes(spec: MapSpec, viewport: Viewport, width: number, height: number, cap: number): MapNode[] {
   const onScreen: MapNode[] = [];
-  for (const n of spec.nodes) {
-    const [x, y] = toScreen(viewport, n.x, n.y);
-    if (x >= 0 && x <= width && y >= 0 && y <= height) onScreen.push(n);
+  for (const node of spec.nodes) {
+    const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
+    if (horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height) onScreen.push(node);
   }
   return onScreen.slice(0, cap);
 }

@@ -11,14 +11,14 @@ import { toScreen, type Viewport } from "../viewport/viewport";
 export function paintFocusedTerritory(
   surface: Surface,
   scene: Scene,
-  vp: Viewport,
+  viewport: Viewport,
   theme: Pick<Theme, "focusOutline" | "focusOutlineWidth">,
   id: string,
 ): void {
   for (const ring of scene.shapes.get(id) ?? []) {
     if (ring.length >= 3) {
       surface.outline(
-        ring.map(([x, y]) => toScreen(vp, x, y)),
+        ring.map(([horizontal, vertical]) => toScreen(viewport, horizontal, vertical)),
         theme.focusOutline,
         theme.focusOutlineWidth,
       );
@@ -30,12 +30,18 @@ export function paintFocusedTerritory(
 export function paintFocusedNode(
   surface: Surface,
   scene: Scene,
-  vp: Viewport,
+  viewport: Viewport,
   theme: Pick<Theme, "focusOutline" | "focusOutlineWidth" | "pointRadius">,
   id: string,
 ): void {
   const node = scene.byId.get(id);
   if (!node) return;
-  const [x, y] = toScreen(vp, node.x, node.y);
-  surface.ring(x, y, theme.pointRadius + theme.focusOutlineWidth, theme.focusOutline, theme.focusOutlineWidth);
+  const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
+  surface.ring(
+    horizontal,
+    vertical,
+    theme.pointRadius + theme.focusOutlineWidth,
+    theme.focusOutline,
+    theme.focusOutlineWidth,
+  );
 }

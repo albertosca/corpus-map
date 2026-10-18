@@ -50,18 +50,18 @@ export function AccessibleTree({
   onTerritoryFocusChange,
   onNodeFocusChange,
 }: AccessibleTreeProps): ReactElement {
-  const loose = spec.nodes.filter((n) => n.territory === null);
+  const loose = spec.nodes.filter((node) => node.territory === null);
 
   // The buttons are visually hidden, so `CorpusMap` draws their focus on the
   // canvas; it learns which one from focus/blur here. A focused button that
   // unmounts (the regime changed, or its item left the listed set) fires no
   // blur, so after every render a reported focus that is no longer inside
   // this tree is withdrawn too — otherwise a stale highlight would stay drawn.
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootReference = useRef<HTMLDivElement>(null);
   const reported = useRef(false);
   useEffect(() => {
     if (!reported.current) return;
-    if (rootRef.current?.contains(document.activeElement)) return;
+    if (rootReference.current?.contains(document.activeElement)) return;
     reported.current = false;
     onTerritoryFocusChange?.(null);
     onNodeFocusChange?.(null);
@@ -76,36 +76,39 @@ export function AccessibleTree({
   };
 
   return (
-    <div ref={rootRef} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+    <div
+      ref={rootReference}
+      style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}
+    >
       <div role="status" aria-live="polite">
         {ANNOUNCEMENT[regime]}
       </div>
       {regime === "near" ? (
         <ul>
-          {visibleNodes(spec, viewport, width, height, cap).map((n) => (
-            <li key={n.id}>
+          {visibleNodes(spec, viewport, width, height, cap).map((node) => (
+            <li key={node.id}>
               <button
                 type="button"
-                onClick={() => onSelect?.(n)}
-                onFocus={() => nodeFocus(n.id)}
+                onClick={() => onSelect?.(node)}
+                onFocus={() => nodeFocus(node.id)}
                 onBlur={() => nodeFocus(null)}
               >
-                {n.label}
+                {node.label}
               </button>
             </li>
           ))}
         </ul>
       ) : (
         <ul>
-          {spec.territories.map((t) => (
-            <li key={t.id}>
+          {spec.territories.map((territory) => (
+            <li key={territory.id}>
               <button
                 type="button"
-                onClick={() => onFocusTerritory?.(t)}
-                onFocus={() => territoryFocus(t.id)}
+                onClick={() => onFocusTerritory?.(territory)}
+                onFocus={() => territoryFocus(territory.id)}
                 onBlur={() => territoryFocus(null)}
               >
-                {t.name} ({t.members.length})
+                {territory.name} ({territory.members.length})
               </button>
             </li>
           ))}
