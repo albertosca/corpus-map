@@ -494,6 +494,22 @@ export interface Frame {
  */
 export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, frame: Frame, theme: Theme): void;
 
+// shared/presentation.d.ts
+/**
+ * The two ways the map presents itself (spec slice D §4): `guided` for the
+ * first look, `dense` for the analyst. Presentation never changes the LOD
+ * regimes; it only changes emphasis.
+ */
+export type Presentation = "guided" | "dense";
+/** In dense, territory fills are composited at this fraction of `theme.territoryFillAlpha`. */
+export declare const DENSE_FILL_FACTOR = 0.5;
+/**
+ * In dense, medium and small territory names are drawn at this alpha. The
+ * spec said 60%; at 0.6 the light theme reaches only 3.83:1, under metric
+ * 16's 4.5:1, so 0.7 (5.09:1 light, 6.89:1 dark).
+ */
+export declare const DENSE_NAME_ALPHA = 0.7;
+
 // shared/scene.d.ts
 import { type Measure, type PlacedLabel } from "../labels/placement";
 import { type Ring } from "../territories/shape";
@@ -637,8 +653,20 @@ export interface Theme {
     focusOutline: string;
     /** Line width of that outline, in CSS pixels. */
     focusOutlineWidth: number;
+    /**
+     * Categorical colours for territories, assigned so that territories whose
+     * visible borders touch get different colours (`territories/colour.ts`).
+     * Each entry is opaque; the fill is composited at `territoryFillAlpha`.
+     */
+    palette: string[];
+    /** Colour of a point with no territory, and of a territory the palette left uncoloured. */
+    pointNeutral: string;
+    /** Alpha at which the single territory fill layer is composited (guided presentation). */
+    territoryFillAlpha: number;
 }
 export declare const DEFAULT_THEME: Theme;
+/** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
+export declare const DARK_THEME: Theme;
 
 // shared/tuning.d.ts
 /**
