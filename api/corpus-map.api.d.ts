@@ -521,6 +521,10 @@ export interface Scene {
     byId: ReadonlyMap<string, MapNode>;
     shapes: ReadonlyMap<string, Ring[]>;
     labels: readonly PlacedLabel[];
+    /** Colour per territory id; a territory may be absent (empty palette), painters then use `theme.pointNeutral`. */
+    colours: ReadonlyMap<string, string>;
+    /** Territory ids, largest total ring area first: the fill layer's paint order. */
+    paintOrder: readonly string[];
 }
 /**
  * Only the fields this function actually reads, not the full `Tuning`/`Theme`
@@ -529,7 +533,7 @@ export interface Scene {
  * every render for an inline literal prop) without depending on unstable
  * whole-object identity for fields it never uses.
  */
-export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts">, measure: Measure): Scene;
+export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette">, measure: Measure): Scene;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
@@ -697,6 +701,39 @@ export interface Tuning {
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
+
+// territories/colour.d.ts
+import type { Territory } from "../shared/spec";
+import { type Ring } from "./shape";
+/** Cells along the longer side of the raster `visibleBorders` draws the shapes onto. */
+export declare const COLOUR_GRID_CELLS = 256;
+/** Territory ids by total ring area, largest first, ties by id: the fill layer's paint order. */
+export declare function largestFirst(shapes: ReadonlyMap<string, readonly Ring[]>): string[];
+export interface VisibleBorders {
+    /** Raster cells where each territory is the one on top (the smallest territory covering the cell). */
+    visibleCells: Map<string, number>;
+    /** For each territory, the territories it shares a visible border with, and that border's length in cells. */
+    neighbours: Map<string, Map<string, number>>;
+}
+/**
+ * Rasterises the shapes in `order` (largest first) onto a grid of `cells`
+ * along the longer side, so each cell ends up owned by the smallest
+ * territory covering it — what the fill layer shows there. Two territories
+ * are neighbours when owned cells of theirs touch side by side: a reader
+ * sees that border, so the two need different colours. Overlap alone does
+ * not count; on arXiv the overlap graph is too dense for any small palette.
+ */
+export declare function visibleBorders(shapes: ReadonlyMap<string, readonly Ring[]>, order: readonly string[], cells?: number): VisibleBorders;
+/**
+ * One colour per territory. A colour given in the data is kept as is; the
+ * rest are coloured greedily, most visible first (ties by id), each taking
+ * the palette colour that shares the least visible border with its already
+ * coloured neighbours (ties by palette order). A given colour weighs on its
+ * neighbours only when it is one of the palette's own colours. With an empty
+ * palette only the given colours are returned; painters fall back to
+ * `theme.pointNeutral` for the rest. Never throws.
+ */
+export declare function assignTerritoryColours(shapes: ReadonlyMap<string, readonly Ring[]>, territories: readonly Territory[], palette: readonly string[]): Map<string, string>;
 
 // territories/paintTerritories.d.ts
 import type { Scene } from "../shared/scene";

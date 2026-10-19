@@ -388,6 +388,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // passing the whole objects here would put the whole (unstable) objects
   // back in the dependency list.
   const measure = useMeasure();
+  // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
+  const paletteKey = theme.palette.join("|");
   const scene = useMemo(
     () =>
       buildScene(
@@ -402,6 +404,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             medium: theme.territoryFonts.medium,
             small: theme.territoryFonts.small,
           },
+          palette: paletteKey === "" ? [] : paletteKey.split("|"),
         },
         measure,
       ),
@@ -414,6 +417,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       theme.territoryFonts.large,
       theme.territoryFonts.medium,
       theme.territoryFonts.small,
+      paletteKey,
     ],
   );
 

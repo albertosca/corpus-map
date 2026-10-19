@@ -1,5 +1,6 @@
 import { type Measure, type PlacedLabel, placeLabels } from "../labels/placement";
 import { poleOfInaccessibility } from "../labels/pole";
+import { assignTerritoryColours, largestFirst } from "../territories/colour";
 import { disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import type { MapNode, MapSpec } from "./spec";
 import type { Theme } from "./theme";
@@ -10,6 +11,10 @@ export interface Scene {
   byId: ReadonlyMap<string, MapNode>;
   shapes: ReadonlyMap<string, Ring[]>;
   labels: readonly PlacedLabel[];
+  /** Colour per territory id; a territory may be absent (empty palette), painters then use `theme.pointNeutral`. */
+  colours: ReadonlyMap<string, string>;
+  /** Territory ids, largest total ring area first: the fill layer's paint order. */
+  paintOrder: readonly string[];
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
@@ -28,7 +33,7 @@ function largestRing(rings: readonly Ring[]): Ring | undefined {
 export function buildScene(
   spec: MapSpec,
   tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
-  theme: Pick<Theme, "territoryFonts">,
+  theme: Pick<Theme, "territoryFonts" | "palette">,
   measure: Measure,
 ): Scene {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
@@ -58,5 +63,11 @@ export function buildScene(
         : [territory.centroid[0], territory.centroid[1]];
     return { id: territory.id, name: territory.name, anchor, members: territory.members.length };
   });
-  return { byId, shapes, labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure) };
+  return {
+    byId,
+    shapes,
+    labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure),
+    colours: assignTerritoryColours(shapes, spec.territories, theme.palette),
+    paintOrder: largestFirst(shapes),
+  };
 }

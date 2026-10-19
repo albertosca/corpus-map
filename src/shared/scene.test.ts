@@ -11,6 +11,15 @@ import { DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
 describe("buildScene", () => {
+  it("carries a colour per territory and a largest-first paint order", () => {
+    const spec = generateCorpus({ seed: 1, size: 500 });
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(new Set(scene.paintOrder)).toEqual(new Set(spec.territories.map((territory) => territory.id)));
+    for (const territory of spec.territories) {
+      expect(DEFAULT_THEME.palette).toContain(scene.colours.get(territory.id));
+    }
+  });
+
   it("keeps a producer boundary verbatim instead of computing one", () => {
     const boundary: Array<[number, number]> = [
       [0, 0],
