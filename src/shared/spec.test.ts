@@ -197,4 +197,32 @@ describe("validateSpec", () => {
     const spec = { ...minimal, territories: [{ ...minimal.territories[0], boundary }] };
     expect(first(validateSpec(spec).territories).boundary).toHaveLength(3);
   });
+
+  describe("territory colour", () => {
+    const withColour = (colour: unknown) => ({
+      version: "1",
+      territories: [{ id: "t1", name: "One", members: ["a"], centroid: [0, 0], colour }],
+      nodes: [{ id: "a", label: "A", x: 0, y: 0, territory: "t1" }],
+    });
+
+    it("accepts the three supported notations", () => {
+      for (const colour of ["#003c96", "rgb(1,2,3)", "rgba(1,2,3,0.5)"]) {
+        expect(validateSpec(withColour(colour)).territories[0]?.colour).toBe(colour);
+      }
+    });
+
+    it("accepts a territory with no colour", () => {
+      const { colour: _unused, ...territory } = withColour("#000000").territories[0] as Record<string, unknown>;
+      expect(() => validateSpec({ ...withColour("#000000"), territories: [territory] })).not.toThrow();
+    });
+
+    it("rejects an unsupported notation, naming the path", () => {
+      expect(() => validateSpec(withColour("tomato"))).toThrow(SpecError);
+      expect(() => validateSpec(withColour("tomato"))).toThrow(/^territories\[0\]\.colour: /);
+    });
+
+    it("rejects a colour that is not a string", () => {
+      expect(() => validateSpec(withColour(42))).toThrow(/^territories\[0\]\.colour: expected a string/);
+    });
+  });
 });

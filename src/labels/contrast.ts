@@ -1,4 +1,22 @@
-type Rgba = [number, number, number, number];
+export type Rgba = [number, number, number, number];
+
+const HEX_NOTATION = /^#[0-9a-f]{6}$/i;
+const CHANNEL = "\\s*(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\s*";
+const ALPHA = "\\s*(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*";
+const THREE_CHANNEL_NOTATION = new RegExp(`^rgb\\(${CHANNEL},${CHANNEL},${CHANNEL}\\)$`, "i");
+const FOUR_CHANNEL_NOTATION = new RegExp(`^rgba\\(${CHANNEL},${CHANNEL},${CHANNEL},${ALPHA}\\)$`, "i");
+
+/**
+ * True for exactly the notations `parseColor` reads, written strictly: no
+ * surrounding whitespace, channels 0-255, alpha 0-1. `validateSpec` uses it
+ * for `Territory.colour`, so a colour from the data never reaches the
+ * canvas in a form the contrast checks cannot read.
+ */
+export function isSupportedColour(colour: string): boolean {
+  if (HEX_NOTATION.test(colour) || THREE_CHANNEL_NOTATION.test(colour)) return true;
+  const alpha = FOUR_CHANNEL_NOTATION.exec(colour)?.[4];
+  return alpha !== undefined && Number.parseFloat(alpha) <= 1;
+}
 
 /** Parses `rgba(r,g,b,a)`, `rgb(r,g,b)` and `#rrggbb` — the notations the theme uses. */
 export function parseColor(color: string): Rgba {

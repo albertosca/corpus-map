@@ -204,14 +204,20 @@ export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 
 // labels/contrast.d.ts
-type Rgba = [number, number, number, number];
+export type Rgba = [number, number, number, number];
+/**
+ * True for exactly the notations `parseColor` reads, written strictly: no
+ * surrounding whitespace, channels 0-255, alpha 0-1. `validateSpec` uses it
+ * for `Territory.colour`, so a colour from the data never reaches the
+ * canvas in a form the contrast checks cannot read.
+ */
+export declare function isSupportedColour(colour: string): boolean;
 /** Parses `rgba(r,g,b,a)`, `rgb(r,g,b)` and `#rrggbb` — the notations the theme uses. */
 export declare function parseColor(color: string): Rgba;
 /** `top` composited over an opaque `bottom`. */
 export declare function over(top: Rgba, bottom: Rgba): Rgba;
 /** WCAG 2.2 contrast ratio between two opaque colours. */
 export declare function contrastRatio(first: Rgba, second: Rgba): number;
-export {};
 
 // labels/paintLabels.d.ts
 import type { Scene } from "../shared/scene";
@@ -527,6 +533,8 @@ export interface Territory {
     members: string[];
     centroid: [number, number];
     boundary?: Array<[number, number]>;
+    /** Overrides the palette for this territory; `#rrggbb`, `rgb()` or `rgba()`. */
+    colour?: string;
 }
 export interface MapSpec {
     version: "1";

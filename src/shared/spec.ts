@@ -1,3 +1,5 @@
+import { isSupportedColour } from "../labels/contrast";
+
 export type NodeState = "visited" | "unvisited";
 
 export interface MapNode {
@@ -17,6 +19,8 @@ export interface Territory {
   members: string[];
   centroid: [number, number];
   boundary?: Array<[number, number]>;
+  /** Overrides the palette for this territory; `#rrggbb`, `rgb()` or `rgba()`. */
+  colour?: string;
 }
 
 export interface MapSpec {
@@ -84,6 +88,11 @@ export function validateSpec(input: unknown): MapSpec {
       for (const [pointIndex, point] of requireArray(territory.boundary, `${path}.boundary`).entries()) {
         requirePoint(point, `${path}.boundary[${pointIndex}]`);
       }
+    }
+    if (territory.colour !== undefined) {
+      const colour = requireString(territory.colour, `${path}.colour`);
+      if (!isSupportedColour(colour))
+        fail(`${path}.colour`, `unsupported colour ${colour}; use #rrggbb, rgb() or rgba()`);
     }
     members.set(id, new Set());
   }
