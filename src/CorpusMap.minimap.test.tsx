@@ -39,7 +39,7 @@ interface View {
 
 // jsdom has no canvas 2D implementation; `test/setup.ts` stubs `getContext`
 // to return `null` globally, which `Minimap`'s paint effect already handles
-// (`if (!ctx) return;`) but which also means that effect never actually
+// (`if (!context) return;`) but which also means that effect never actually
 // runs under the default stub — no use counting real paints against it.
 // This fake, installed only for the one test below and restored after,
 // mirrors `CorpusMap.test.tsx`'s own `recordingContext` pattern: enough
@@ -76,84 +76,96 @@ function fakeCtx(): CanvasRenderingContext2D {
 describe("CorpusMap minimap (showcase Task 4)", () => {
   it("is absent by default", () => {
     const { container } = render(
-      <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} />,
+      <CorpusMap spec={spec} renderCard={(node) => <div>{node.label}</div>} width={400} height={300} />,
     );
     expect(minimap(container)).toBeNull();
   });
 
   it("is absent with minimap={false}, same as omitting the prop", () => {
     const { container } = render(
-      <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={false} />,
+      <CorpusMap spec={spec} renderCard={(node) => <div>{node.label}</div>} width={400} height={300} minimap={false} />,
     );
     expect(minimap(container)).toBeNull();
   });
 
   it("is present in the bottom-left corner with minimap={true}", () => {
     const { container } = render(
-      <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
+      <CorpusMap spec={spec} renderCard={(node) => <div>{node.label}</div>} width={400} height={300} minimap={true} />,
     );
-    const el = minimap(container);
-    expect(el).not.toBeNull();
-    expect(el?.getAttribute("aria-hidden")).toBe("true");
-    expect(el?.style.bottom).toBe("12px");
-    expect(el?.style.left).toBe("12px");
-    expect(el?.style.top).toBe("");
-    expect(el?.style.right).toBe("");
+    const element = minimap(container);
+    expect(element).not.toBeNull();
+    expect(element?.getAttribute("aria-hidden")).toBe("true");
+    expect(element?.style.bottom).toBe("12px");
+    expect(element?.style.left).toBe("12px");
+    expect(element?.style.top).toBe("");
+    expect(element?.style.right).toBe("");
   });
 
   it("moves to the given corner with minimap={{ corner }}", () => {
     const { container } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
         minimap={{ corner: "top-right" }}
       />,
     );
-    const el = minimap(container);
-    expect(el?.style.top).toBe("12px");
-    expect(el?.style.right).toBe("12px");
-    expect(el?.style.bottom).toBe("");
-    expect(el?.style.left).toBe("");
+    const element = minimap(container);
+    expect(element?.style.top).toBe("12px");
+    expect(element?.style.right).toBe("12px");
+    expect(element?.style.bottom).toBe("");
+    expect(element?.style.left).toBe("");
   });
 
   it("does not repaint on an unrelated parent re-render, but does repaint on a real view change — a pan and a box resize (fix round 1, finding 2; extended fix round 2)", () => {
     let minimapPaints = 0;
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
-      const ctx = fakeCtx();
+      const context = fakeCtx();
       if (this.hasAttribute("data-minimap-canvas")) {
-        (ctx as unknown as { clearRect: () => void }).clearRect = () => {
+        (context as unknown as { clearRect: () => void }).clearRect = () => {
           minimapPaints += 1;
         };
       }
-      return ctx;
+      return context;
     } as unknown as typeof original;
     // A drag (below) is frame-coalesced through `scheduleFrame`/`rafId`, the
     // same queue-then-flush stub CorpusMap.handle.test.tsx's coalescing test
     // uses, so the pan's one scheduled frame runs on demand.
     const callbacks: FrameRequestCallback[] = [];
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     const flush = () => {
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
     };
     try {
       const { container, rerender } = render(
-        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
+        <CorpusMap
+          spec={spec}
+          renderCard={(node) => <div>{node.label}</div>}
+          width={400}
+          height={300}
+          minimap={true}
+        />,
       );
       expect(minimapPaints).toBe(1);
 
       // An unrelated parent re-render: the same props by value, but a fresh
       // element (so `CorpusMap`, not being `memo`-wrapped, re-runs its body)
-      // — `vp`/`width`/`height` never change, so the view is identical.
+      // — `viewport`/`width`/`height` never change, so the view is identical.
       rerender(
-        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={400} height={300} minimap={true} />,
+        <CorpusMap
+          spec={spec}
+          renderCard={(node) => <div>{node.label}</div>}
+          width={400}
+          height={300}
+          minimap={true}
+        />,
       );
       expect(minimapPaints).toBe(1);
 
@@ -162,19 +174,25 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       // (a minimap that never repaints again after mount) would leave both
       // of them green too, since neither ever drives a real view change and
       // checks the count actually moves. A genuine pan must bump it.
-      const el = surface(container);
-      fireEvent.pointerDown(el, { clientX: 0, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
-      fireEvent.pointerMove(el, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      const element = surface(container);
+      fireEvent.pointerDown(element, { clientX: 0, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      fireEvent.pointerMove(element, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 50, clientY: 0, pointerId: 9, button: 0, isPrimary: true });
       flush();
       expect(minimapPaints).toBe(2);
 
       // And a genuine box resize (showcase Task 2's own `recenterOnBoxChange`
       // path — a view change with no pointer interaction at all) must bump
-      // it again: `width` alone changing shifts `vp.tx`, which is exactly
+      // it again: `width` alone changing shifts `viewport.tx`, which is exactly
       // the kind of view change a `[]`-frozen memo would also miss.
       rerender(
-        <CorpusMap spec={spec} renderCard={(n) => <div>{n.label}</div>} width={800} height={300} minimap={true} />,
+        <CorpusMap
+          spec={spec}
+          renderCard={(node) => <div>{node.label}</div>}
+          width={800}
+          height={300}
+          minimap={true}
+        />,
       );
       expect(minimapPaints).toBe(3);
     } finally {
@@ -194,7 +212,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     // `scheduleFrame`) — so this test needs two separate flushes in the
     // same instance (one for the drag, one for the minimap press) and uses
     // the queue-then-flush stub (CorpusMap.handle.test.tsx's coalescing
-    // test), not an immediately-invoking one: a mock that calls `cb`
+    // test), not an immediately-invoking one: a mock that calls `callback`
     // synchronously inside `requestAnimationFrame` runs the callback (which
     // clears `rafId.current`) *before* that call's own return value
     // overwrites `rafId.current` back to non-null, so a second `scheduleFrame`
@@ -203,13 +221,13 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     // problem, so it is purely an artifact of that other mock style, not of
     // `scheduleFrame` itself.
     const callbacks: FrameRequestCallback[] = [];
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     const flush = () => {
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
     };
     const width = 150;
@@ -219,7 +237,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={width}
           height={height}
           onViewChange={onViewChange}
@@ -229,10 +247,10 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       expect(onViewChange).toHaveBeenCalledTimes(1);
       expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 1 } satisfies View);
 
-      const el = surface(container);
-      fireEvent.pointerDown(el, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerMove(el, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
+      const element = surface(container);
+      fireEvent.pointerDown(element, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerMove(element, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
       flush();
       expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 0 } satisfies View);
 
@@ -240,15 +258,15 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       // point to a small box around it), so pressing the minimap dead
       // centre must land the view back where it started: the node on
       // screen again.
-      const mm = minimap(container) as HTMLElement;
-      fireEvent.pointerDown(mm, {
+      const minimapElement = minimap(container) as HTMLElement;
+      fireEvent.pointerDown(minimapElement, {
         clientX: MINIMAP_SIZE.width / 2,
         clientY: MINIMAP_SIZE.height / 2,
         pointerId: 2,
         button: 0,
         isPrimary: true,
       });
-      fireEvent.pointerUp(mm, {
+      fireEvent.pointerUp(minimapElement, {
         clientX: MINIMAP_SIZE.width / 2,
         clientY: MINIMAP_SIZE.height / 2,
         pointerId: 2,
@@ -266,13 +284,13 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
     const width = 150;
     const height = 300;
     const callbacks: FrameRequestCallback[] = [];
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     const flush = () => {
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
     };
     try {
@@ -280,17 +298,17 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={width}
           height={height}
           onViewChange={onViewChange}
           minimap={true}
         />,
       );
-      const mm = minimap(container) as HTMLElement;
+      const minimapElement = minimap(container) as HTMLElement;
 
       // Press dead centre: the node (at the world centre) stays on screen.
-      fireEvent.pointerDown(mm, {
+      fireEvent.pointerDown(minimapElement, {
         clientX: MINIMAP_SIZE.width / 2,
         clientY: MINIMAP_SIZE.height / 2,
         pointerId: 5,
@@ -304,15 +322,15 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       // `onPointerMove`'s `dragging.current` branch, not exercised by a
       // press-and-release alone, and it must keep centring — the far-off
       // world point pushes the node off the (150-wide) main box.
-      fireEvent.pointerMove(mm, { clientX: 0, clientY: 0, pointerId: 5, button: 0, isPrimary: true });
+      fireEvent.pointerMove(minimapElement, { clientX: 0, clientY: 0, pointerId: 5, button: 0, isPrimary: true });
       flush();
       expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 0 } satisfies View);
 
       // A pointercancel must stop the drag: a further move with the same
       // pointerId, after the cancel, must not centre again.
       const callsBeforeCancel = onViewChange.mock.calls.length;
-      fireEvent.pointerCancel(mm, { pointerId: 5, button: 0, isPrimary: true });
-      fireEvent.pointerMove(mm, {
+      fireEvent.pointerCancel(minimapElement, { pointerId: 5, button: 0, isPrimary: true });
+      fireEvent.pointerMove(minimapElement, {
         clientX: MINIMAP_SIZE.width,
         clientY: MINIMAP_SIZE.height,
         pointerId: 5,
@@ -349,18 +367,28 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         } as DOMRect;
       }
       const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
+      const [boxLeft, boxTop, boxWidth, boxHeight] =
         id === null
           ? [0, 0, 400, 300]
           : [Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 100, 40];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+      return {
+        x: boxLeft,
+        y: boxTop,
+        width: boxWidth,
+        height: boxHeight,
+        left: boxLeft,
+        top: boxTop,
+        right: boxLeft + boxWidth,
+        bottom: boxTop + boxHeight,
+        toJSON: () => ({}),
+      } as DOMRect;
     });
     try {
       const onSelect = vi.fn();
       const { container } = render(
         <CorpusMap
           spec={threeNodeSpec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={400}
           height={300}
           thresholds={{ midAt: 0, nearAt: 0 }}
@@ -370,17 +398,17 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         />,
       );
 
-      const mm = minimap(container) as HTMLElement;
-      fireEvent.pointerDown(mm, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(mm, { clientX: 91, clientY: 31, pointerId: 1, button: 0, isPrimary: true });
+      const minimapElement = minimap(container) as HTMLElement;
+      fireEvent.pointerDown(minimapElement, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(minimapElement, { clientX: 91, clientY: 31, pointerId: 1, button: 0, isPrimary: true });
       expect(onSelect).not.toHaveBeenCalled();
 
       // Meaningfulness check: the very same click point, dispatched at the
       // surface instead of the minimap, does select — proving the guard
       // above, not a coincidentally-empty hit test, is what stopped it.
-      const el = surface(container);
-      fireEvent.pointerDown(el, { clientX: 90, clientY: 30, pointerId: 2, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 91, clientY: 31, pointerId: 2, button: 0, isPrimary: true });
+      const element = surface(container);
+      fireEvent.pointerDown(element, { clientX: 90, clientY: 30, pointerId: 2, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 91, clientY: 31, pointerId: 2, button: 0, isPrimary: true });
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a", label: "A" }));
     } finally {

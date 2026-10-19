@@ -16,7 +16,7 @@ export interface WheelCaptureProps {
   containerRef: RefObject<HTMLElement | null>;
 }
 
-const MAX_SAMPLES = 50;
+const MAXIMUM_SAMPLES = 50;
 
 const wrapStyle: CSSProperties = {
   display: "flex",
@@ -83,7 +83,12 @@ const tdStyle: CSSProperties = {
 /** What the "Copy" button writes — the samples without the internal `id`, oldest capture concerns aside. */
 function toClipboardPayload(samples: readonly WheelEventSample[]): string {
   return JSON.stringify(
-    samples.map(({ deltaY, deltaMode, ctrlKey, msSincePrevious }) => ({ deltaY, deltaMode, ctrlKey, msSincePrevious })),
+    samples.map(({ deltaY: verticalDelta, deltaMode, ctrlKey, msSincePrevious }) => ({
+      deltaY: verticalDelta,
+      deltaMode,
+      ctrlKey,
+      msSincePrevious,
+    })),
     null,
     2,
   );
@@ -99,36 +104,36 @@ function toClipboardPayload(samples: readonly WheelEventSample[]): string {
  * (`TuningPanel` mounts it conditionally); mounting attaches the listener,
  * unmounting removes it.
  */
-export function WheelCapture({ containerRef }: WheelCaptureProps): ReactElement {
+export function WheelCapture({ containerRef: containerReference }: WheelCaptureProps): ReactElement {
   const [samples, setSamples] = useState<WheelEventSample[]>([]);
-  const lastTimeRef = useRef<number | null>(null);
-  const nextIdRef = useRef(0);
+  const lastTimeReference = useRef<number | null>(null);
+  const nextIdReference = useRef(0);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
+    const element = containerReference.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
       const now = performance.now();
-      const previous = lastTimeRef.current;
-      lastTimeRef.current = now;
-      const id = nextIdRef.current;
-      nextIdRef.current += 1;
+      const previous = lastTimeReference.current;
+      lastTimeReference.current = now;
+      const id = nextIdReference.current;
+      nextIdReference.current += 1;
       const sample: WheelEventSample = {
         id,
-        deltaY: e.deltaY,
-        deltaMode: e.deltaMode,
-        ctrlKey: e.ctrlKey,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        ctrlKey: event.ctrlKey,
         msSincePrevious: previous === null ? null : Math.round(now - previous),
       };
-      // Read-only on purpose: never `e.preventDefault()` — a passive
+      // Read-only on purpose: never `event.preventDefault()` — a passive
       // listener could not stop the default action anyway, and this
       // listener exists to observe, not to act.
-      setSamples((prev) => [sample, ...prev].slice(0, MAX_SAMPLES));
+      setSamples((previous) => [sample, ...previous].slice(0, MAXIMUM_SAMPLES));
     };
-    el.addEventListener("wheel", onWheel, { passive: true });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [containerRef]);
+    element.addEventListener("wheel", onWheel, { passive: true });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [containerReference]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(toClipboardPayload(samples)).then(
@@ -159,12 +164,12 @@ export function WheelCapture({ containerRef }: WheelCaptureProps): ReactElement 
             </tr>
           </thead>
           <tbody>
-            {samples.map((s) => (
-              <tr key={s.id}>
-                <td style={tdStyle}>{s.deltaY.toFixed(2)}</td>
-                <td style={tdStyle}>{s.deltaMode}</td>
-                <td style={tdStyle}>{s.ctrlKey ? "yes" : "no"}</td>
-                <td style={tdStyle}>{s.msSincePrevious === null ? "-" : s.msSincePrevious}</td>
+            {samples.map((sample) => (
+              <tr key={sample.id}>
+                <td style={tdStyle}>{sample.deltaY.toFixed(2)}</td>
+                <td style={tdStyle}>{sample.deltaMode}</td>
+                <td style={tdStyle}>{sample.ctrlKey ? "yes" : "no"}</td>
+                <td style={tdStyle}>{sample.msSincePrevious === null ? "-" : sample.msSincePrevious}</td>
               </tr>
             ))}
           </tbody>

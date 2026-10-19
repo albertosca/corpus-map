@@ -1,7 +1,7 @@
 import type { CorpusMapHandle } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useState } from "react";
-import { DRAWER_MAX_WIDTH } from "./Drawer";
+import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
 
 interface ZoomControlsProps {
@@ -28,7 +28,8 @@ export const BUTTON_WIDTH = 84;
  * drawer cover it (reversible — see `Drawer.tsx`'s own doc comment)
  * rather than landing on other floating controls or off screen.
  */
-const WIDE_ENOUGH_TO_SHIFT_PX = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
+const WIDE_ENOUGH_TO_SHIFT_PX =
+  BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAXIMUM_WIDTH + GUTTER;
 
 /**
  * The controls' `right` offset at a viewport width, with the drawer (or the
@@ -37,7 +38,7 @@ const WIDE_ENOUGH_TO_SHIFT_PX = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH
  * `Footer` places itself against the same position the controls actually use.
  */
 export function zoomControlsRight(viewportWidth: number, drawerOpen: boolean): number {
-  return drawerOpen && viewportWidth >= WIDE_ENOUGH_TO_SHIFT_PX ? DRAWER_MAX_WIDTH + GUTTER : GUTTER;
+  return drawerOpen && viewportWidth >= WIDE_ENOUGH_TO_SHIFT_PX ? DRAWER_MAXIMUM_WIDTH + GUTTER : GUTTER;
 }
 
 const wrapStyle: CSSProperties = {
@@ -93,18 +94,18 @@ export function useViewportWidth(): number {
  * covers the controls (`Drawer.tsx`'s own doc comment covers why that is an
  * acceptable, reversible fallback rather than a bug).
  */
-export function ZoomControls({ mapRef, drawerOpen = false }: ZoomControlsProps): ReactElement {
+export function ZoomControls({ mapRef: mapReference, drawerOpen = false }: ZoomControlsProps): ReactElement {
   const viewportWidth = useViewportWidth();
   const style: CSSProperties = { ...wrapStyle, right: zoomControlsRight(viewportWidth, drawerOpen) };
   return (
     <div data-zoom-controls data-floating-control style={style}>
-      <button type="button" style={buttonStyle} onClick={() => mapRef.current?.zoomIn()}>
+      <button type="button" style={buttonStyle} onClick={() => mapReference.current?.zoomIn()}>
         Zoom in
       </button>
-      <button type="button" style={buttonStyle} onClick={() => mapRef.current?.zoomOut()}>
+      <button type="button" style={buttonStyle} onClick={() => mapReference.current?.zoomOut()}>
         Zoom out
       </button>
-      <button type="button" style={buttonStyle} onClick={() => mapRef.current?.fit()}>
+      <button type="button" style={buttonStyle} onClick={() => mapReference.current?.fit()}>
         Fit
       </button>
     </div>

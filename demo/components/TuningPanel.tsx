@@ -1,7 +1,7 @@
 import type { LodThresholds, Tuning } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { DRAWER_MAX_WIDTH } from "./Drawer";
+import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { WheelCapture } from "./WheelCapture";
 
 export interface TuningPanelProps {
@@ -53,7 +53,7 @@ const panelStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   width: "90vw",
-  maxWidth: DRAWER_MAX_WIDTH,
+  maxWidth: DRAWER_MAXIMUM_WIDTH,
   zIndex: 20,
   display: "flex",
   flexDirection: "column",
@@ -170,7 +170,7 @@ function formatFieldValue(value: number): string {
   return Number(value.toPrecision(6)).toString();
 }
 
-function RangeField({ id, label, min, max, step, value, onChange }: RangeFieldProps): ReactElement {
+function RangeField({ id, label, min: minimum, max: maximum, step, value, onChange }: RangeFieldProps): ReactElement {
   return (
     <div style={fieldRowStyle}>
       <label htmlFor={id} style={fieldLabelStyle}>
@@ -179,11 +179,11 @@ function RangeField({ id, label, min, max, step, value, onChange }: RangeFieldPr
       <input
         id={id}
         type="range"
-        min={min}
-        max={max}
+        min={minimum}
+        max={maximum}
         step={step}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(event) => onChange(Number(event.target.value))}
         style={rangeInputStyle}
       />
       <output htmlFor={id} style={valueStyle}>
@@ -244,8 +244,8 @@ const CARD_SIZE_FIELDS: readonly CardSizeFieldConfig[] = [
   { key: "height", label: "Card height (px)", min: 24, max: 160, step: 4 },
 ];
 
-const SYNTHETIC_SIZE_MIN = 1000;
-const SYNTHETIC_SIZE_MAX = 10000;
+const SYNTHETIC_SIZE_MINIMUM = 1000;
+const SYNTHETIC_SIZE_MAXIMUM = 10000;
 const SYNTHETIC_SIZE_STEP = 1000;
 
 /**
@@ -290,14 +290,14 @@ export function TuningPanel({
   onReset,
   onClose,
   returnFocusTo,
-  mapContainerRef,
+  mapContainerRef: mapContainerReference,
   topInset = 0,
 }: TuningPanelProps): ReactElement | null {
   const titleId = useId();
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
+  const closeButtonReference = useRef<HTMLButtonElement>(null);
+  const panelReference = useRef<HTMLElement>(null);
 
   // Opening moves focus into the panel (its Close button), so a keyboard
   // user lands where the controls are, and opening it from the drawer's
@@ -312,8 +312,8 @@ export function TuningPanel({
   });
   useEffect(() => {
     if (!open) return;
-    closeButtonRef.current?.focus();
-    const panel = panelRef.current;
+    closeButtonReference.current?.focus();
+    const panel = panelReference.current;
     return () => {
       const active = document.activeElement;
       if (active === null || active === document.body || panel?.contains(active)) restoreFocus();
@@ -328,8 +328,8 @@ export function TuningPanel({
   });
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onEscape();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -379,7 +379,7 @@ export function TuningPanel({
 
   return (
     <aside
-      ref={panelRef}
+      ref={panelReference}
       data-tuning-panel
       data-floating-control
       role="dialog"
@@ -391,7 +391,7 @@ export function TuningPanel({
         <h2 id={titleId} style={titleStyle}>
           Tuning
         </h2>
-        <button type="button" ref={closeButtonRef} onClick={handleClose} style={iconButtonStyle}>
+        <button type="button" ref={closeButtonReference} onClick={handleClose} style={iconButtonStyle}>
           Close
         </button>
       </div>
@@ -492,8 +492,8 @@ export function TuningPanel({
           <RangeField
             id="synthetic-size"
             label="Synthetic size"
-            min={SYNTHETIC_SIZE_MIN}
-            max={SYNTHETIC_SIZE_MAX}
+            min={SYNTHETIC_SIZE_MINIMUM}
+            max={SYNTHETIC_SIZE_MAXIMUM}
             step={SYNTHETIC_SIZE_STEP}
             value={syntheticSize}
             onChange={onSyntheticSizeChange}
@@ -507,7 +507,7 @@ export function TuningPanel({
               type="number"
               step={1}
               value={syntheticSeed}
-              onChange={(e) => handleSeedChange(e.target.value)}
+              onChange={(event) => handleSeedChange(event.target.value)}
               style={numberInputStyle}
             />
             <span />
@@ -516,7 +516,7 @@ export function TuningPanel({
       ) : null}
 
       <section aria-label="Wheel capture">
-        <WheelCapture containerRef={mapContainerRef} />
+        <WheelCapture containerRef={mapContainerReference} />
       </section>
     </aside>
   );

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // component itself dynamically (`await import("./App")`), per-test, so each
 // gets its own fresh module graph for `vi.doMock`/`vi.resetModules`.
 import type { AppProps } from "./App";
-import { DRAWER_MAX_WIDTH } from "./components/Drawer";
+import { DRAWER_MAXIMUM_WIDTH } from "./components/Drawer";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
   GUTTER,
@@ -1054,15 +1054,15 @@ describe("App (showcase Task 5)", () => {
 
         // Parsed the same way `checkNoOverflowAt375` reads inline values —
         // no layout engine in jsdom. The drawer's `right` is `0` and its
-        // rendered width, at this viewport, is capped at `DRAWER_MAX_WIDTH`
+        // rendered width, at this viewport, is capped at `DRAWER_MAXIMUM_WIDTH`
         // by its own `maxWidth` (its `width: 90vw` would be far larger), so
-        // its left edge sits at `right + DRAWER_MAX_WIDTH` from the
+        // its left edge sits at `right + DRAWER_MAXIMUM_WIDTH` from the
         // viewport's own right edge. The controls' right edge sits left of
         // that exactly when their own `right` offset is greater.
         const drawer = container.querySelector<HTMLElement>("[data-drawer]");
         const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
         const drawerRight = Number.parseFloat(drawer?.style.right ?? "");
-        const drawerLeftFromViewportRight = drawerRight + DRAWER_MAX_WIDTH;
+        const drawerLeftFromViewportRight = drawerRight + DRAWER_MAXIMUM_WIDTH;
         const zoomRight = Number.parseFloat(zoom?.style.right ?? "");
         expect(zoomRight).toBeGreaterThan(drawerLeftFromViewportRight);
       });
@@ -1148,7 +1148,7 @@ describe("App (showcase Task 5)", () => {
       });
 
       it("the breakpoint itself is derived from BOTTOM_LEFT_COLUMN_WIDTH, not just the drawer, and clears both it and the drawer", async () => {
-        const breakpoint = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAX_WIDTH + GUTTER;
+        const breakpoint = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAXIMUM_WIDTH + GUTTER;
         setViewportWidth(breakpoint);
         const { container } = await renderApp(SELECT_SPEC);
         await screen.findByText(territoryButtonText(SELECT_SPEC));
@@ -1550,7 +1550,7 @@ describe("App (showcase Task 5)", () => {
         const panel = container.querySelector<HTMLElement>("[data-tuning-panel]");
         const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
         const panelRight = Number.parseFloat(panel?.style.right ?? "");
-        const panelLeftFromViewportRight = panelRight + DRAWER_MAX_WIDTH;
+        const panelLeftFromViewportRight = panelRight + DRAWER_MAXIMUM_WIDTH;
         const zoomRight = Number.parseFloat(zoom?.style.right ?? "");
         expect(zoomRight).toBeGreaterThan(panelLeftFromViewportRight);
       });

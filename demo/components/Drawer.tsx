@@ -35,7 +35,7 @@ const ANIMATION_STYLE = `
  * `ZoomControls` can compute how far to shift itself left of the drawer's
  * edge rather than hard-coding a second copy of this number.
  */
-export const DRAWER_MAX_WIDTH = 320;
+export const DRAWER_MAXIMUM_WIDTH = 320;
 
 const panelStyle: CSSProperties = {
   position: "fixed",
@@ -43,7 +43,7 @@ const panelStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   width: "90vw",
-  maxWidth: DRAWER_MAX_WIDTH,
+  maxWidth: DRAWER_MAXIMUM_WIDTH,
   zIndex: 20,
   display: "flex",
   flexDirection: "column",
@@ -198,7 +198,7 @@ export function Drawer({
   topInset = 0,
 }: DrawerProps): ReactElement | null {
   const titleId = useId();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonReference = useRef<HTMLButtonElement>(null);
 
   // No `useCallback` here on purpose: this reads `returnFocusTo.current` —
   // a ref access the React Compiler's static analysis cannot reconcile
@@ -216,7 +216,7 @@ export function Drawer({
   // view change (zoom, wheel, drag), so an effect keyed on `onClose` would
   // pull focus into the drawer each time the map moved.
   useEffect(() => {
-    if (node) closeButtonRef.current?.focus();
+    if (node) closeButtonReference.current?.focus();
   }, [node]);
 
   // The Escape listener reads the latest `onClose` through an effect event,
@@ -228,8 +228,8 @@ export function Drawer({
   const open = node !== null;
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onEscape();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -265,7 +265,7 @@ export function Drawer({
           <h2 id={titleId} style={titleStyle}>
             {node.label}
           </h2>
-          <button type="button" ref={closeButtonRef} onClick={close} style={closeButtonStyle}>
+          <button type="button" ref={closeButtonReference} onClick={close} style={closeButtonStyle}>
             Close
           </button>
         </div>

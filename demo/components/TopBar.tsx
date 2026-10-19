@@ -85,15 +85,15 @@ export function TopBar({
   onChange,
   tuningOpen,
   onToggleTuning,
-  gearButtonRef,
-  barRef,
+  gearButtonRef: gearButtonReference,
+  barRef: barReference,
 }: TopBarProps): ReactElement {
-  const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value as GalleryEntry["id"]);
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    onChange(event.target.value as GalleryEntry["id"]);
   };
 
   return (
-    <header ref={barRef} data-topbar data-floating-control style={barStyle}>
+    <header ref={barReference} data-topbar data-floating-control style={barStyle}>
       <strong style={{ fontSize: 15 }}>corpus-map</strong>
       <label htmlFor="corpus-select" style={labelStyle}>
         Corpus
@@ -107,7 +107,7 @@ export function TopBar({
       </select>
       <button
         type="button"
-        ref={gearButtonRef}
+        ref={gearButtonReference}
         aria-pressed={tuningOpen}
         onClick={onToggleTuning}
         style={gearButtonStyle}

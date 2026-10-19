@@ -21,12 +21,12 @@ const spec: MapSpec = {
   ],
 };
 
-const vp = { scale: 10, tx: 0, ty: 0 };
+const viewport = { scale: 10, tx: 0, ty: 0 };
 /** Larger than any name these tests paint, so none is skipped for its size. */
 const BOX = { width: 4000, height: 4000 };
 /**
- * `vp` shifted in from the canvas's top-left corner, so the names of `spec`
- * (anchored near world (1, 1), screen (10, 10) under `vp`) sit well inside
+ * `viewport` shifted in from the canvas's top-left corner, so the names of `spec`
+ * (anchored near world (1, 1), screen (10, 10) under `viewport`) sit well inside
  * the canvas and the tests that expect a name do not lean on edge clipping.
  */
 const LABEL_VP = { scale: 10, tx: 200, ty: 200 };
@@ -42,73 +42,73 @@ function frameFor(regime: Regime, extra?: Partial<Frame>): Frame {
 }
 
 function paintSpec(
-  s: MapSpec,
+  mapSpec: MapSpec,
   surface: RecordingSurface,
   regime: Regime,
   extra?: Partial<Frame>,
-  at: typeof vp = vp,
+  currentViewport: typeof viewport = viewport,
 ): void {
-  const scene = buildScene(s, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-  paint(surface, scene, s, at, frameFor(regime, extra), DEFAULT_THEME);
+  const scene = buildScene(mapSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  paint(surface, scene, mapSpec, currentViewport, frameFor(regime, extra), DEFAULT_THEME);
 }
 
 describe("paint", () => {
   it("draws territory boundary and name at the far regime, and no points", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "far", undefined, LABEL_VP);
-    expect(s.polygons).toHaveLength(1);
-    expect(s.texts.map((t) => t.text)).toContain("North");
-    expect(s.circles).toHaveLength(0);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "far", undefined, LABEL_VP);
+    expect(surface.polygons).toHaveLength(1);
+    expect(surface.texts.map((recordedText) => recordedText.text)).toContain("North");
+    expect(surface.circles).toHaveLength(0);
   });
 
   it("draws boundaries and every point at the mid regime", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid");
-    expect(s.polygons).toHaveLength(1);
-    expect(s.circles).toHaveLength(4);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid");
+    expect(surface.polygons).toHaveLength(1);
+    expect(surface.circles).toHaveLength(4);
   });
 
   it("draws an un-territoried node without stretching any boundary toward it", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid");
-    const ring = first(s.polygons).points;
-    expect(ring.every(([x]) => x < 90)).toBe(true);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid");
+    const ring = first(surface.polygons).points;
+    expect(ring.every(([horizontal]) => horizontal < 90)).toBe(true);
   });
 
   it("renders a spec where every node is un-territoried", () => {
     const only = { version: "1", territories: [], nodes: [spec.nodes[3]] } as MapSpec;
-    const s = new RecordingSurface();
-    paintSpec(only, s, "mid");
-    expect(s.polygons).toHaveLength(0);
-    expect(s.circles).toHaveLength(1);
+    const surface = new RecordingSurface();
+    paintSpec(only, surface, "mid");
+    expect(surface.polygons).toHaveLength(0);
+    expect(surface.circles).toHaveLength(1);
   });
 
   it("distinguishes visited from unvisited by fill", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid");
-    const a = s.circles.find((c) => c.id === "a");
-    const b = s.circles.find((c) => c.id === "b");
-    expect(a?.fill).not.toBe(b?.fill);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid");
+    const visitedCircle = surface.circles.find((circle) => circle.id === "a");
+    const unvisitedCircle = surface.circles.find((circle) => circle.id === "b");
+    expect(visitedCircle?.fill).not.toBe(unvisitedCircle?.fill);
   });
 
   it("treats a node with no state as unvisited", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid");
-    const b = s.circles.find((c) => c.id === "b");
-    const c = s.circles.find((c) => c.id === "c");
-    expect(c?.fill).toBe(b?.fill);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid");
+    const unvisitedCircle = surface.circles.find((circle) => circle.id === "b");
+    const stateless = surface.circles.find((circle) => circle.id === "c");
+    expect(stateless?.fill).toBe(unvisitedCircle?.fill);
   });
 
   it("places points through the viewport transform", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid");
-    expect(s.circles.find((c) => c.id === "b")).toMatchObject({ x: 20, y: 0 });
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid");
+    expect(surface.circles.find((circle) => circle.id === "b")).toMatchObject({ x: 20, y: 0 });
   });
 
   it("clears before drawing", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "far");
-    expect(s.cleared).toBe(1);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "far");
+    expect(surface.cleared).toBe(1);
   });
 
   it("uses an explicit territory boundary instead of hull", () => {
@@ -133,9 +133,9 @@ describe("paint", () => {
         { id: "z", label: "Z", x: 1, y: 2, territory: "t2" },
       ],
     };
-    const s = new RecordingSurface();
-    paintSpec(specWithBoundary, s, "mid");
-    const ring = first(s.polygons).points;
+    const surface = new RecordingSurface();
+    paintSpec(specWithBoundary, surface, "mid");
+    const ring = first(surface.polygons).points;
     expect(ring).toEqual([
       [0, 0],
       [30, 0],
@@ -144,18 +144,18 @@ describe("paint", () => {
   });
 
   it("paints points at the frame's pointAlpha, and the alpha is reset to 1 afterwards", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid", { pointAlpha: 0.4 });
-    expect(s.alphas[0]).toBe(0.4);
-    expect(s.alphas[s.alphas.length - 1]).toBe(1);
-    expect(s.circles).toHaveLength(4);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid", { pointAlpha: 0.4 });
+    expect(surface.alphas[0]).toBe(0.4);
+    expect(surface.alphas[surface.alphas.length - 1]).toBe(1);
+    expect(surface.circles).toHaveLength(4);
   });
 
   it("paints no points when pointAlpha is 0", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "mid", { pointAlpha: 0 });
-    expect(s.circles).toHaveLength(0);
-    expect(s.alphas).toHaveLength(0);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid", { pointAlpha: 0 });
+    expect(surface.circles).toHaveLength(0);
+    expect(surface.alphas).toHaveLength(0);
   });
 
   it("does not draw a name whose activeFromScale exceeds the current viewport scale", () => {
@@ -176,7 +176,7 @@ describe("paint", () => {
       ],
     };
     const scene = buildScene(two, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-    const small = scene.labels.find((l) => l.id === "small");
+    const small = scene.labels.find((label) => label.id === "small");
     if (!small) throw new Error("expected a placed label for 'small'");
     expect(small.activeFromScale).toBeGreaterThan(0);
 
@@ -189,7 +189,7 @@ describe("paint", () => {
       { regime: "mid", pointAlpha: 1, ...BOX },
       DEFAULT_THEME,
     );
-    expect(below.texts.map((t) => t.text)).not.toContain("Small Territory");
+    expect(below.texts.map((recordedText) => recordedText.text)).not.toContain("Small Territory");
 
     const above = new RecordingSurface();
     paint(
@@ -200,7 +200,7 @@ describe("paint", () => {
       { regime: "mid", pointAlpha: 1, ...BOX },
       DEFAULT_THEME,
     );
-    expect(above.texts.map((t) => t.text)).toContain("Small Territory");
+    expect(above.texts.map((recordedText) => recordedText.text)).toContain("Small Territory");
   });
 });
 
@@ -211,7 +211,7 @@ describe("paint order", () => {
       territories: [
         { id: "t1", name: "North", members: ["a", "b", "c"], centroid: [1, 1] },
         // Far enough from t1 (dy = 100) that its name's activeFromScale
-        // stays well below the module `vp`'s scale of 10, so both names
+        // stays well below the module `viewport`'s scale of 10, so both names
         // are visible for this order check.
         { id: "t2", name: "South", members: ["d", "e", "f"], centroid: [1, 101] },
       ],
@@ -224,9 +224,9 @@ describe("paint order", () => {
         { id: "f", label: "F", x: 1, y: 102, territory: "t2" },
       ],
     };
-    const s = new RecordingSurface();
-    paintSpec(two, s, "mid", undefined, LABEL_VP);
-    expect(s.calls).toEqual([
+    const surface = new RecordingSurface();
+    paintSpec(two, surface, "mid", undefined, LABEL_VP);
+    expect(surface.calls).toEqual([
       "clear",
       "polygon",
       "polygon",
@@ -239,9 +239,9 @@ describe("paint order", () => {
   });
 
   it("paints boundaries then names, and no points, at the far regime", () => {
-    const s = new RecordingSurface();
-    paintSpec(spec, s, "far", undefined, LABEL_VP);
-    expect(s.calls).toEqual(["clear", "polygon", "text"]);
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "far", undefined, LABEL_VP);
+    expect(surface.calls).toEqual(["clear", "polygon", "text"]);
   });
 });
 
@@ -251,24 +251,24 @@ describe("names at the canvas edge", () => {
   // places the canvas half a pixel either side of the box of "North" (the
   // only name `spec` places), measured from its anchor.
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-  const north = scene.labels.find((l) => l.name === "North");
+  const north = scene.labels.find((label) => label.name === "North");
   if (!north) throw new Error("expected a placed label for North");
-  const halfW = north.width / 2;
-  const halfH = north.height / 2;
+  const halfWidth = north.width / 2;
+  const halfHeight = north.height / 2;
   // Screen position of the anchor under LABEL_VP.
-  const ax = north.anchor[0] * LABEL_VP.scale + LABEL_VP.tx;
-  const ay = north.anchor[1] * LABEL_VP.scale + LABEL_VP.ty;
-  const drawn = (at: typeof vp, width: number, height: number): string[] => {
-    const s = new RecordingSurface();
-    paint(s, scene, spec, at, { regime: "far", pointAlpha: 0, width, height }, DEFAULT_THEME);
-    return s.texts.map((t) => t.text);
+  const anchorHorizontal = north.anchor[0] * LABEL_VP.scale + LABEL_VP.tx;
+  const anchorVertical = north.anchor[1] * LABEL_VP.scale + LABEL_VP.ty;
+  const drawn = (currentViewport: typeof viewport, width: number, height: number): string[] => {
+    const surface = new RecordingSurface();
+    paint(surface, scene, spec, currentViewport, { regime: "far", pointAlpha: 0, width, height }, DEFAULT_THEME);
+    return surface.texts.map((recordedText) => recordedText.text);
   };
 
   // A view that puts the anchor at the centre of a `width` x `height` canvas.
   const centred = (width: number, height: number) => ({
     ...LABEL_VP,
-    tx: LABEL_VP.tx + width / 2 - ax,
-    ty: LABEL_VP.ty + height / 2 - ay,
+    tx: LABEL_VP.tx + width / 2 - anchorHorizontal,
+    ty: LABEL_VP.ty + height / 2 - anchorVertical,
   });
 
   it("skips a name wider or taller than the canvas, even centred in it", () => {
@@ -282,10 +282,14 @@ describe("names at the canvas edge", () => {
 
   it("draws a name that fits the canvas but crosses its edge, left for the canvas to clip", () => {
     // Box half a pixel past the left, top, right and bottom edges in turn.
-    expect(drawn({ ...LABEL_VP, tx: LABEL_VP.tx - (ax - halfW) - 0.5 }, 4000, 4000)).toEqual(["North"]);
-    expect(drawn({ ...LABEL_VP, ty: LABEL_VP.ty - (ay - halfH) - 0.5 }, 4000, 4000)).toEqual(["North"]);
-    expect(drawn(LABEL_VP, ax + halfW - 0.5, 4000)).toEqual(["North"]);
-    expect(drawn(LABEL_VP, 4000, ay + halfH - 0.5)).toEqual(["North"]);
+    expect(drawn({ ...LABEL_VP, tx: LABEL_VP.tx - (anchorHorizontal - halfWidth) - 0.5 }, 4000, 4000)).toEqual([
+      "North",
+    ]);
+    expect(drawn({ ...LABEL_VP, ty: LABEL_VP.ty - (anchorVertical - halfHeight) - 0.5 }, 4000, 4000)).toEqual([
+      "North",
+    ]);
+    expect(drawn(LABEL_VP, anchorHorizontal + halfWidth - 0.5, 4000)).toEqual(["North"]);
+    expect(drawn(LABEL_VP, 4000, anchorVertical + halfHeight - 0.5)).toEqual(["North"]);
   });
 });
 
@@ -303,22 +307,24 @@ describe("metric 14: point overlap", () => {
     const fit = fitSpec(corpus, width, height, 24);
     const ratio = DEFAULT_THRESHOLDS.midAt;
     const scale = fit.scale * ratio;
-    const b = worldBounds(corpus);
-    const cx = (b.minX + b.maxX) / 2;
-    const cy = (b.minY + b.maxY) / 2;
-    const vp2 = { scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale };
+    const bounds = worldBounds(corpus);
+    const centreHorizontal = (bounds.minX + bounds.maxX) / 2;
+    const centreVertical = (bounds.minY + bounds.maxY) / 2;
+    const vp2 = { scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale };
     const screenPoints = corpus.nodes
-      .map((n) => [n.x * vp2.scale + vp2.tx, n.y * vp2.scale + vp2.ty] as [number, number])
-      .filter(([x, y]) => x >= 0 && x <= width && y >= 0 && y <= height);
+      .map((node) => [node.x * vp2.scale + vp2.tx, node.y * vp2.scale + vp2.ty] as [number, number])
+      .filter(
+        ([horizontal, vertical]) => horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height,
+      );
 
     const threshold = 2 * DEFAULT_THEME.pointRadius;
     let overlapping = 0;
-    for (let i = 0; i < screenPoints.length; i += 1) {
-      const [xi, yi] = screenPoints[i] as [number, number];
-      for (let j = 0; j < screenPoints.length; j += 1) {
-        if (i === j) continue;
-        const [xj, yj] = screenPoints[j] as [number, number];
-        if (Math.hypot(xi - xj, yi - yj) < threshold) {
+    for (let index = 0; index < screenPoints.length; index += 1) {
+      const [horizontalAt, verticalAt] = screenPoints[index] as [number, number];
+      for (let otherIndex = 0; otherIndex < screenPoints.length; otherIndex += 1) {
+        if (index === otherIndex) continue;
+        const [otherHorizontal, otherVertical] = screenPoints[otherIndex] as [number, number];
+        if (Math.hypot(horizontalAt - otherHorizontal, verticalAt - otherVertical) < threshold) {
           overlapping += 1;
           break;
         }
@@ -349,21 +355,24 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
   const scene = buildScene(two, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   const screenRings = (id: string) =>
     (scene.shapes.get(id) ?? []).map((ring) =>
-      ring.map(([x, y]) => [x * LABEL_VP.scale + LABEL_VP.tx, y * LABEL_VP.scale + LABEL_VP.ty]),
+      ring.map(([horizontal, vertical]) => [
+        horizontal * LABEL_VP.scale + LABEL_VP.tx,
+        vertical * LABEL_VP.scale + LABEL_VP.ty,
+      ]),
     );
   const paintWith = (regime: Regime, extra: Partial<Frame>): RecordingSurface => {
-    const s = new RecordingSurface();
-    paint(s, scene, two, LABEL_VP, frameFor(regime, extra), DEFAULT_THEME);
-    return s;
+    const surface = new RecordingSurface();
+    paint(surface, scene, two, LABEL_VP, frameFor(regime, extra), DEFAULT_THEME);
+    return surface;
   };
 
   it("outlines every ring of the focused territory, and only that one, in the theme's focus style", () => {
-    const s = paintWith("far", { focusedTerritory: "t2" });
+    const surface = paintWith("far", { focusedTerritory: "t2" });
     expect(screenRings("t2").length).toBeGreaterThan(0);
-    expect(s.outlines.map((o) => o.points)).toEqual(screenRings("t2"));
-    for (const o of s.outlines) {
-      expect(o.color).toBe(DEFAULT_THEME.focusOutline);
-      expect(o.width).toBe(DEFAULT_THEME.focusOutlineWidth);
+    expect(surface.outlines.map((outline) => outline.points)).toEqual(screenRings("t2"));
+    for (const outline of surface.outlines) {
+      expect(outline.color).toBe(DEFAULT_THEME.focusOutline);
+      expect(outline.width).toBe(DEFAULT_THEME.focusOutlineWidth);
     }
   });
 
@@ -374,17 +383,17 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
   });
 
   it("draws the outline above boundaries and points, below names", () => {
-    const s = paintWith("mid", { focusedTerritory: "t1" });
-    const firstOutline = s.calls.indexOf("outline");
-    expect(firstOutline).toBeGreaterThan(s.calls.lastIndexOf("polygon"));
-    expect(firstOutline).toBeGreaterThan(s.calls.lastIndexOf("alpha"));
-    expect(firstOutline).toBeLessThan(s.calls.indexOf("text"));
+    const surface = paintWith("mid", { focusedTerritory: "t1" });
+    const firstOutline = surface.calls.indexOf("outline");
+    expect(firstOutline).toBeGreaterThan(surface.calls.lastIndexOf("polygon"));
+    expect(firstOutline).toBeGreaterThan(surface.calls.lastIndexOf("alpha"));
+    expect(firstOutline).toBeLessThan(surface.calls.indexOf("text"));
   });
 
   it("rings the focused item's point, at full opacity, in the focus style", () => {
-    const s = paintWith("near", { focusedNode: "e", pointAlpha: 0.3 });
-    expect(s.rings).toHaveLength(1);
-    const ring = first(s.rings);
+    const surface = paintWith("near", { focusedNode: "e", pointAlpha: 0.3 });
+    expect(surface.rings).toHaveLength(1);
+    const ring = first(surface.rings);
     expect(ring).toMatchObject({
       x: 2 * LABEL_VP.scale + LABEL_VP.tx,
       y: 100 * LABEL_VP.scale + LABEL_VP.ty,
@@ -393,7 +402,7 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
     });
     expect(ring.r).toBeGreaterThan(DEFAULT_THEME.pointRadius);
     // After the faded point pass has reset the alpha to 1.
-    expect(s.calls.indexOf("ring")).toBeGreaterThan(s.calls.lastIndexOf("alpha"));
+    expect(surface.calls.indexOf("ring")).toBeGreaterThan(surface.calls.lastIndexOf("alpha"));
     expect(paintWith("near", { focusedNode: "missing" }).rings).toEqual([]);
   });
 });

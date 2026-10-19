@@ -43,9 +43,9 @@ describe("DEFAULT_THEME focus outline", () => {
     const outline = parseColor(DEFAULT_THEME.focusOutline);
     expect(outline[3], "an opaque outline, so its contrast does not depend on what is under it").toBe(1);
     for (const page of pages) {
-      const bg = parseColor(page);
-      const underFill = over(parseColor(DEFAULT_THEME.territoryFill), bg);
-      expect(contrastRatio(outline, bg), `against ${page}`).toBeGreaterThanOrEqual(3);
+      const background = parseColor(page);
+      const underFill = over(parseColor(DEFAULT_THEME.territoryFill), background);
+      expect(contrastRatio(outline, background), `against ${page}`).toBeGreaterThanOrEqual(3);
       expect(contrastRatio(outline, underFill), `against the territory fill over ${page}`).toBeGreaterThanOrEqual(3);
     }
   });

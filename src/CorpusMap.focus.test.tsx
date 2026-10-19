@@ -27,7 +27,7 @@ function recordingContext(frames: Stroke[][]): CanvasRenderingContext2D {
   let path: Array<[number, number]> = [];
   let arc: Stroke["arc"] = null;
   const saved: Array<{ strokeStyle: string; lineWidth: number; fillStyle: string }> = [];
-  const ctx = {
+  const context = {
     canvas: { width: 0, height: 0 },
     fillStyle: "",
     strokeStyle: "",
@@ -41,34 +41,34 @@ function recordingContext(frames: Stroke[][]): CanvasRenderingContext2D {
       frames.push([]);
     },
     save: () => {
-      saved.push({ strokeStyle: ctx.strokeStyle, lineWidth: ctx.lineWidth, fillStyle: ctx.fillStyle });
+      saved.push({ strokeStyle: context.strokeStyle, lineWidth: context.lineWidth, fillStyle: context.fillStyle });
     },
     restore: () => {
-      const s = saved.pop();
-      if (s) Object.assign(ctx, s);
+      const savedState = saved.pop();
+      if (savedState) Object.assign(context, savedState);
     },
     beginPath: () => {
       path = [];
       arc = null;
     },
-    moveTo: (x: number, y: number) => {
-      path.push([x, y]);
+    moveTo: (horizontal: number, vertical: number) => {
+      path.push([horizontal, vertical]);
     },
-    lineTo: (x: number, y: number) => {
-      path.push([x, y]);
+    lineTo: (horizontal: number, vertical: number) => {
+      path.push([horizontal, vertical]);
     },
-    arc: (x: number, y: number, r: number) => {
-      arc = { x, y, r };
+    arc: (horizontal: number, vertical: number, radius: number) => {
+      arc = { x: horizontal, y: vertical, r: radius };
     },
     closePath: () => {},
     fill: () => {},
     stroke: () => {
-      frames[frames.length - 1]?.push({ style: ctx.strokeStyle, width: ctx.lineWidth, points: path, arc });
+      frames[frames.length - 1]?.push({ style: context.strokeStyle, width: context.lineWidth, points: path, arc });
     },
     fillText: () => {},
     measureText: (text: string) => ({ width: text.length * 6 }),
   };
-  return ctx as unknown as CanvasRenderingContext2D;
+  return context as unknown as CanvasRenderingContext2D;
 }
 
 const spec: MapSpec = {
@@ -86,11 +86,11 @@ const spec: MapSpec = {
     { id: "f", label: "Zeta", x: 1, y: 12, territory: "t2" },
   ],
 };
-const W = 400;
-const H = 300;
+const WIDTH = 400;
+const HEIGHT = 300;
 
-const isFocusStyle = (s: Stroke) =>
-  s.style === DEFAULT_THEME.focusOutline && s.width === DEFAULT_THEME.focusOutlineWidth;
+const isFocusStyle = (stroke: Stroke) =>
+  stroke.style === DEFAULT_THEME.focusOutline && stroke.width === DEFAULT_THEME.focusOutlineWidth;
 
 describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () => {
   let frames: Stroke[][];
@@ -103,12 +103,12 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     // width) carries over to the next frame unless the painter restores it.
     const contexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D>();
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
-      let ctx = contexts.get(this);
-      if (!ctx) {
-        ctx = recordingContext(frames);
-        contexts.set(this, ctx);
+      let context = contexts.get(this);
+      if (!context) {
+        context = recordingContext(frames);
+        contexts.set(this, context);
       }
-      return ctx;
+      return context;
     } as unknown as typeof original;
   });
 
@@ -120,13 +120,15 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
 
   /** The territory's rings as `CorpusMap` projects them at its fitted view. */
   function expectedRings(id: string): Array<Array<[number, number]>> {
-    const vp = fitSpec(spec, W, H, 24);
+    const viewport = fitSpec(spec, WIDTH, HEIGHT, 24);
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-    return (scene.shapes.get(id) ?? []).filter((r) => r.length >= 3).map((r) => r.map(([x, y]) => toScreen(vp, x, y)));
+    return (scene.shapes.get(id) ?? [])
+      .filter((ring) => ring.length >= 3)
+      .map((ring) => ring.map(([horizontal, vertical]) => toScreen(viewport, horizontal, vertical)));
   }
 
   it("outlines the focused territory's rings in the focus style, removes the outline on blur, and moves it to the next territory", () => {
-    render(<CorpusMap spec={spec} renderCard={() => null} width={W} height={H} />);
+    render(<CorpusMap spec={spec} renderCard={() => null} width={WIDTH} height={HEIGHT} />);
     expect(frames.length).toBeGreaterThan(0);
     expect(lastFrameFocusStrokes()).toEqual([]);
 
@@ -136,36 +138,44 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     act(() => north.focus());
     const northRings = expectedRings("t1");
     expect(northRings.length).toBeGreaterThan(0);
-    expect(lastFrameFocusStrokes().map((s) => s.points)).toEqual(northRings);
+    expect(lastFrameFocusStrokes().map((stroke) => stroke.points)).toEqual(northRings);
 
     act(() => south.focus());
-    expect(lastFrameFocusStrokes().map((s) => s.points)).toEqual(expectedRings("t2"));
+    expect(lastFrameFocusStrokes().map((stroke) => stroke.points)).toEqual(expectedRings("t2"));
 
     act(() => south.blur());
     expect(lastFrameFocusStrokes()).toEqual([]);
   });
 
   it("does not leave the focus width on the context for the next frame's boundaries", () => {
-    render(<CorpusMap spec={spec} renderCard={() => null} width={W} height={H} />);
+    render(<CorpusMap spec={spec} renderCard={() => null} width={WIDTH} height={HEIGHT} />);
     act(() => screen.getByRole("button", { name: /North/ }).focus());
     // A second focused frame: its boundaries are stroked after the first
     // frame's outline, so a leaked line width would show on them.
     act(() => screen.getByRole("button", { name: /South/ }).focus());
     expect(lastFrameFocusStrokes().length).toBeGreaterThan(0);
-    const boundaries = (frames[frames.length - 1] ?? []).filter((s) => !isFocusStyle(s));
+    const boundaries = (frames[frames.length - 1] ?? []).filter((stroke) => !isFocusStyle(stroke));
     expect(boundaries.length).toBeGreaterThan(0);
-    for (const b of boundaries) expect(b.width).toBe(1);
+    for (const boundary of boundaries) expect(boundary.width).toBe(1);
   });
 
   it("rings the focused item's point at the near regime, and removes it on blur", () => {
-    render(<CorpusMap spec={spec} renderCard={() => null} width={W} height={H} thresholds={{ midAt: 0, nearAt: 0 }} />);
+    render(
+      <CorpusMap
+        spec={spec}
+        renderCard={() => null}
+        width={WIDTH}
+        height={HEIGHT}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+      />,
+    );
     const epsilon = screen.getByRole("button", { name: "Epsilon" });
     act(() => epsilon.focus());
     const rings = lastFrameFocusStrokes();
     expect(rings).toHaveLength(1);
-    const [ex, ey] = toScreen(fitSpec(spec, W, H, 24), 2, 10);
-    expect(rings[0]?.arc?.x).toBeCloseTo(ex, 6);
-    expect(rings[0]?.arc?.y).toBeCloseTo(ey, 6);
+    const [expectedHorizontal, expectedVertical] = toScreen(fitSpec(spec, WIDTH, HEIGHT, 24), 2, 10);
+    expect(rings[0]?.arc?.x).toBeCloseTo(expectedHorizontal, 6);
+    expect(rings[0]?.arc?.y).toBeCloseTo(expectedVertical, 6);
 
     act(() => epsilon.blur());
     expect(lastFrameFocusStrokes()).toEqual([]);
@@ -173,7 +183,13 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
 
   it("drops the highlight when the focused button leaves the tree without a blur (its item is no longer listed)", () => {
     const { rerender } = render(
-      <CorpusMap spec={spec} renderCard={() => null} width={W} height={H} thresholds={{ midAt: 0, nearAt: 0 }} />,
+      <CorpusMap
+        spec={spec}
+        renderCard={() => null}
+        width={WIDTH}
+        height={HEIGHT}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+      />,
     );
     act(() => screen.getByRole("button", { name: "Epsilon" }).focus());
     expect(lastFrameFocusStrokes()).toHaveLength(1);
@@ -183,8 +199,8 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
       <CorpusMap
         spec={spec}
         renderCard={() => null}
-        width={W}
-        height={H}
+        width={WIDTH}
+        height={HEIGHT}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardCap={0}
       />,
@@ -195,24 +211,36 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
 
   it("never paints an item ring once the regime leaves near, not even on the first frame after", () => {
     const { rerender } = render(
-      <CorpusMap spec={spec} renderCard={() => null} width={W} height={H} thresholds={{ midAt: 0, nearAt: 0 }} />,
+      <CorpusMap
+        spec={spec}
+        renderCard={() => null}
+        width={WIDTH}
+        height={HEIGHT}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+      />,
     );
     act(() => screen.getByRole("button", { name: "Epsilon" }).focus());
     expect(lastFrameFocusStrokes()).toHaveLength(1);
 
     const before = frames.length;
     rerender(
-      <CorpusMap spec={spec} renderCard={() => null} width={W} height={H} thresholds={{ midAt: 50, nearAt: 60 }} />,
+      <CorpusMap
+        spec={spec}
+        renderCard={() => null}
+        width={WIDTH}
+        height={HEIGHT}
+        thresholds={{ midAt: 50, nearAt: 60 }}
+      />,
     );
     expect(screen.queryByRole("button", { name: "Epsilon" })).toBeNull();
     expect(frames.length).toBeGreaterThan(before);
     for (const frame of frames.slice(before)) {
-      expect(frame.filter((s) => isFocusStyle(s) && s.arc !== null)).toEqual([]);
+      expect(frame.filter((stroke) => isFocusStyle(stroke) && stroke.arc !== null)).toEqual([]);
     }
   });
 
   it("drops a territory highlight once the regime reaches near, where territory buttons are not listed", () => {
-    render(<CorpusMap spec={spec} renderCard={() => null} width={W} height={H} />);
+    render(<CorpusMap spec={spec} renderCard={() => null} width={WIDTH} height={HEIGHT} />);
     const north = screen.getByRole("button", { name: /North/ });
     act(() => north.focus());
     expect(lastFrameFocusStrokes().length).toBeGreaterThan(0);
@@ -224,7 +252,7 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     expect(screen.queryByRole("button", { name: /North/ })).toBeNull();
     expect(frames.length).toBeGreaterThan(before);
     for (const frame of frames.slice(before)) {
-      expect(frame.filter((s) => isFocusStyle(s) && s.arc === null)).toEqual([]);
+      expect(frame.filter((stroke) => isFocusStyle(stroke) && stroke.arc === null)).toEqual([]);
     }
   });
 });
