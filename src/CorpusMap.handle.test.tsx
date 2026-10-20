@@ -15,6 +15,7 @@ interface View {
   regime: Regime;
   ratio: number;
   visibleCount: number;
+  presentation: string;
 }
 
 function surface(container: HTMLElement): HTMLElement {
@@ -41,7 +42,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
         onViewChange={(view) => calls.push(view)}
       />,
     );
-    expect(calls[0]).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
+    expect(calls[0]).toEqual({ regime: "far", ratio: 1, visibleCount: 1, presentation: "guided" });
 
     act(() => handle.current?.zoomIn());
     expect(lastCall(calls).ratio).toBeGreaterThan(1);
@@ -193,7 +194,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     // and fit()'s ratio of 1 is still above that bound. If fit() reset the
     // regime the way a spec swap does, this lands back on "mid" instead.
     act(() => handle.current?.fit());
-    expect(lastCall(calls)).toEqual({ regime: "mid", ratio: 1, visibleCount: 1 });
+    expect(lastCall(calls)).toEqual({ regime: "mid", ratio: 1, visibleCount: 1, presentation: "dense" });
   });
 
   it("fires onViewChange once on mount with ratio 1", () => {
@@ -208,7 +209,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
       />,
     );
     expect(onViewChange).toHaveBeenCalledTimes(1);
-    expect(onViewChange).toHaveBeenCalledWith({ regime: "far", ratio: 1, visibleCount: 1 });
+    expect(onViewChange).toHaveBeenCalledWith({ regime: "far", ratio: 1, visibleCount: 1, presentation: "guided" });
   });
 
   it("produces at most one onViewChange call for 100 pointer moves coalesced into one animation frame", () => {
@@ -238,7 +239,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
         />,
       );
       expect(calls).toHaveLength(1);
-      expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
+      expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1, presentation: "guided" });
 
       const element = surface(container);
       fireEvent.pointerDown(element, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
@@ -256,7 +257,7 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
       // Exactly one more call for the whole coalesced frame, reporting the
       // node now off-screen (centre 75 + 100px drag = 175 > width 150).
       expect(calls).toHaveLength(2);
-      expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 0 });
+      expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 0, presentation: "guided" });
     } finally {
       raf.mockRestore();
     }
@@ -321,6 +322,6 @@ describe("CorpusMap imperative handle (showcase Task 3)", () => {
     expect(calls).toHaveLength(1);
     act(() => handle.current?.fit());
     expect(calls).toHaveLength(2);
-    expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1 });
+    expect(lastCall(calls)).toEqual({ regime: "far", ratio: 1, visibleCount: 1, presentation: "guided" });
   });
 });

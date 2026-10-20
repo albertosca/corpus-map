@@ -6,6 +6,7 @@ import { UNVISITED_RING_WIDTH } from "../points/paintPoints";
 import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { fitSpec, worldBounds } from "../viewport/fit";
 import { type Frame, paint } from "./paint";
+import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { buildScene } from "./scene";
 import type { MapSpec } from "./spec";
 import { RecordingSurface } from "./surface";
@@ -450,5 +451,69 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
     // After the faded point pass has reset the alpha to 1.
     expect(surface.calls.indexOf("ring")).toBeGreaterThan(surface.calls.lastIndexOf("alpha"));
     expect(paintWith("near", { focusedNode: "missing" }).rings).toEqual([]);
+  });
+});
+
+describe("presentation (slice D)", () => {
+  /**
+   * Two territories far apart, so both names are active under `LABEL_VP`:
+   * "Big" (three members, ranked large) and "Tiny" (one member, ranked small).
+   * `spec` has a single territory, which ranks small, so it cannot show the
+   * large/muted split.
+   */
+  const presentationSpec: MapSpec = {
+    version: "1",
+    territories: [
+      { id: "big", name: "Big", members: ["a", "b", "c"], centroid: [1, 1] },
+      { id: "tiny", name: "Tiny", members: ["d"], centroid: [60, 60] },
+    ],
+    nodes: [
+      { id: "a", label: "A", x: 0, y: 0, territory: "big" },
+      { id: "b", label: "B", x: 2, y: 0, territory: "big" },
+      { id: "c", label: "C", x: 1, y: 2, territory: "big" },
+      { id: "d", label: "D", x: 60, y: 60, territory: "tiny" },
+    ],
+  };
+
+  function paintFrame(extra: Partial<Frame>): RecordingSurface {
+    const surface = new RecordingSurface();
+    paintSpec(presentationSpec, surface, "far", extra, LABEL_VP);
+    return surface;
+  }
+
+  it("composites the fill layer at half alpha in dense", () => {
+    expect(paintFrame({ presentation: "guided" }).layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
+    expect(paintFrame({ presentation: "dense" }).layers).toEqual([
+      DEFAULT_THEME.territoryFillAlpha * DENSE_FILL_FACTOR,
+    ]);
+  });
+
+  it("draws large names at full emphasis and mutes medium and small names in dense", () => {
+    const surface = paintFrame({ presentation: "dense" });
+    expect(surface.texts.map((text) => text.text).sort()).toEqual(["Big", "Tiny"]);
+    const firstName = surface.calls.indexOf("text");
+    const names = surface.calls.slice(firstName);
+    expect(names.filter((call) => call === "alpha")).toHaveLength(2);
+    expect(surface.alphas.slice(-2)).toEqual([DENSE_NAME_ALPHA, 1]);
+    expect(names).toEqual(["text", "alpha", "text", "alpha"]);
+    expect(surface.texts.map((text) => text.text)).toEqual(["Big", "Tiny"]);
+  });
+
+  it("does not touch the alpha around names in guided, or when no muted name is drawn", () => {
+    const guided = paintFrame({ presentation: "guided" });
+    expect(guided.calls.slice(guided.calls.indexOf("text")).includes("alpha")).toBe(false);
+    // "Tiny" (its member and so its anchor) right beside "Big" stays inactive at this scale, so
+    // dense draws only the large name and never sets the alpha around names.
+    const crowded: MapSpec = {
+      ...presentationSpec,
+      territories: presentationSpec.territories.map((territory) =>
+        territory.id === "tiny" ? { ...territory, centroid: [1.2, 1] } : territory,
+      ),
+      nodes: presentationSpec.nodes.map((node) => (node.id === "d" ? { ...node, x: 1.2, y: 1 } : node)),
+    };
+    const onlyLarge = new RecordingSurface();
+    paintSpec(crowded, onlyLarge, "far", { presentation: "dense" }, LABEL_VP);
+    expect(onlyLarge.texts.map((text) => text.text)).toEqual(["Big"]);
+    expect(onlyLarge.calls.slice(onlyLarge.calls.indexOf("text")).includes("alpha")).toBe(false);
   });
 });

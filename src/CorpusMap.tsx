@@ -18,6 +18,7 @@ import { visibleNodes } from "./lod/visible";
 import { Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { paint } from "./shared/paint";
+import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildScene } from "./shared/scene";
 import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
@@ -47,11 +48,12 @@ export interface CorpusMapHandle {
   fit(): void;
 }
 
-/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, and how many nodes are on screen (uncapped). */
+/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
   regime: Regime;
   ratio: number;
   visibleCount: number;
+  presentation: Presentation;
 }
 
 export interface CorpusMapProps {
@@ -100,6 +102,12 @@ export interface CorpusMapProps {
    * one commit per frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
+  /**
+   * `"auto"` (default) is guided at far and dense at mid and near; a fixed
+   * value locks it. Never changes the LOD regimes, only emphasis (spec
+   * slice D §4).
+   */
+  presentation?: PresentationSetting;
   /**
    * A 160 x 110 canvas in a corner of the box (default off), drawing the
    * territory shapes and the current view; pressing or dragging it centres
@@ -372,6 +380,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // pass renders and paints.
   const next = regimeAt(ratio, thresholds, regime, tuning.hysteresis);
   if (next !== regime) setRegime(next);
+  const presentation = resolvePresentation(properties.presentation ?? "auto", next);
   // A wheel zoom can leave the mid/near regimes without any further pointer
   // move to trigger the frame-flush clear below — adjusted here, during
   // render, so a stale hover name never has a frame where it is visibly
@@ -449,10 +458,23 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         height,
         focusedTerritory: paintedTerritoryFocus,
         focusedNode: paintedNodeFocus,
+        presentation,
       },
       theme,
     );
-  }, [spec, scene, viewport, next, pointAlpha, theme, width, height, paintedTerritoryFocus, paintedNodeFocus]);
+  }, [
+    spec,
+    scene,
+    viewport,
+    next,
+    pointAlpha,
+    theme,
+    width,
+    height,
+    paintedTerritoryFocus,
+    paintedNodeFocus,
+    presentation,
+  ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
   // event on every render; the effect fires on mount (so the consumer learns
@@ -496,11 +518,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const firedView = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
-    const key = `${next}|${ratio}|${visibleCount}|${refits}`;
+    const key = `${next}|${ratio}|${visibleCount}|${refits}|${presentation}`;
     if (firedView.current === key) return;
     firedView.current = key;
-    onViewChangeReference.current?.({ regime: next, ratio, visibleCount });
-  }, [next, ratio, visibleCount, ready, refits]);
+    onViewChangeReference.current?.({ regime: next, ratio, visibleCount, presentation });
+  }, [next, ratio, visibleCount, ready, refits, presentation]);
 
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
   // rebuilt every commit and its closures — `viewport`/`fitScale`/`fitted`/

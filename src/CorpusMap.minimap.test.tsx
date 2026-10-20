@@ -35,6 +35,7 @@ interface View {
   regime: string;
   ratio: number;
   visibleCount: number;
+  presentation: string;
 }
 
 // jsdom has no canvas 2D implementation; `test/setup.ts` stubs `getContext`
@@ -245,14 +246,24 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         />,
       );
       expect(onViewChange).toHaveBeenCalledTimes(1);
-      expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 1 } satisfies View);
+      expect(onViewChange).toHaveBeenLastCalledWith({
+        regime: "far",
+        ratio: 1,
+        visibleCount: 1,
+        presentation: "guided",
+      } satisfies View);
 
       const element = surface(container);
       fireEvent.pointerDown(element, { clientX: 0, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
       fireEvent.pointerMove(element, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
       fireEvent.pointerUp(element, { clientX: 100, clientY: 0, pointerId: 1, button: 0, isPrimary: true });
       flush();
-      expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 0 } satisfies View);
+      expect(onViewChange).toHaveBeenLastCalledWith({
+        regime: "far",
+        ratio: 1,
+        visibleCount: 0,
+        presentation: "guided",
+      } satisfies View);
 
       // The single node sits at the world centre (worldBounds widens a lone
       // point to a small box around it), so pressing the minimap dead
@@ -274,7 +285,12 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         isPrimary: true,
       });
       flush();
-      expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 1 } satisfies View);
+      expect(onViewChange).toHaveBeenLastCalledWith({
+        regime: "far",
+        ratio: 1,
+        visibleCount: 1,
+        presentation: "guided",
+      } satisfies View);
     } finally {
       raf.mockRestore();
     }
@@ -316,7 +332,12 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
         isPrimary: true,
       });
       flush();
-      expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 1 } satisfies View);
+      expect(onViewChange).toHaveBeenLastCalledWith({
+        regime: "far",
+        ratio: 1,
+        visibleCount: 1,
+        presentation: "guided",
+      } satisfies View);
 
       // Still held down, drag to the minimap's own top-left corner: this is
       // `onPointerMove`'s `dragging.current` branch, not exercised by a
@@ -324,7 +345,12 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
       // world point pushes the node off the (150-wide) main box.
       fireEvent.pointerMove(minimapElement, { clientX: 0, clientY: 0, pointerId: 5, button: 0, isPrimary: true });
       flush();
-      expect(onViewChange).toHaveBeenLastCalledWith({ regime: "far", ratio: 1, visibleCount: 0 } satisfies View);
+      expect(onViewChange).toHaveBeenLastCalledWith({
+        regime: "far",
+        ratio: 1,
+        visibleCount: 0,
+        presentation: "guided",
+      } satisfies View);
 
       // A pointercancel must stop the drag: a further move with the same
       // pointerId, after the cancel, must not centre again.

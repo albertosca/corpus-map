@@ -1,6 +1,7 @@
 // CorpusMap.d.ts
 import { type ReactElement, type ReactNode, type Ref } from "react";
 import { type LodThresholds, type Regime } from "./lod/lod";
+import { type Presentation, type PresentationSetting } from "./shared/presentation";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
 import { type Tuning } from "./shared/tuning";
@@ -13,11 +14,12 @@ export interface CorpusMapHandle {
     /** Resets the viewport to the fitted view, the same reset a `spec` change applies. */
     fit(): void;
 }
-/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, and how many nodes are on screen (uncapped). */
+/** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
     regime: Regime;
     ratio: number;
     visibleCount: number;
+    presentation: Presentation;
 }
 export interface CorpusMapProps {
     /**
@@ -68,6 +70,12 @@ export interface CorpusMapProps {
      * one commit per frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
+    /**
+     * `"auto"` (default) is guided at far and dense at mid and near; a fixed
+     * value locks it. Never changes the LOD regimes, only emphasis (spec
+     * slice D §4).
+     */
+    presentation?: PresentationSetting;
     /**
      * A 160 x 110 canvas in a corner of the box (default off), drawing the
      * territory shapes and the current view; pressing or dragging it centres
@@ -196,6 +204,7 @@ export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS, resolveThresholds } from "./lod/lod";
 export type { MinimapCorner } from "./minimap/Minimap";
+export type { Presentation, PresentationSetting } from "./shared/presentation";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
@@ -220,6 +229,7 @@ export declare function over(top: Rgba, bottom: Rgba): Rgba;
 export declare function contrastRatio(first: Rgba, second: Rgba): number;
 
 // labels/paintLabels.d.ts
+import { type Presentation } from "../shared/presentation";
 import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
@@ -228,6 +238,8 @@ import { type Viewport } from "../viewport/viewport";
 export interface LabelBox {
     width: number;
     height: number;
+    /** Absent means guided. */
+    presentation?: Presentation | undefined;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
@@ -237,6 +249,8 @@ export interface LabelBox {
  * Where a name sits never enters the decision, so pan and zoom cannot make
  * a name pop out: a name that fits slides off the edge, clipped by the
  * canvas, and a position-dependent skip would break map-feel metric 7.
+ * In dense, large names keep full emphasis and the medium and small ones are
+ * drawn at `DENSE_NAME_ALPHA`, after the large ones.
  */
 export declare function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void;
 
@@ -472,6 +486,7 @@ export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpe
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";
 import type { Viewport } from "../viewport/viewport";
+import { type Presentation } from "./presentation";
 import type { Scene } from "./scene";
 import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
@@ -495,6 +510,8 @@ export interface Frame {
     height: number;
     focusedTerritory?: string | null | undefined;
     focusedNode?: string | null | undefined;
+    /** Guided or dense emphasis (spec slice D §4); absent means guided. */
+    presentation?: Presentation | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
@@ -506,6 +523,7 @@ export interface Frame {
 export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, frame: Frame, theme: Theme): void;
 
 // shared/presentation.d.ts
+import type { Regime } from "../lod/lod";
 /**
  * The two ways the map presents itself (spec slice D §4): `guided` for the
  * first look, `dense` for the analyst. Presentation never changes the LOD
@@ -520,6 +538,10 @@ export declare const DENSE_FILL_FACTOR = 0.5;
  * 16's 4.5:1, so 0.7 (5.09:1 light, 6.89:1 dark).
  */
 export declare const DENSE_NAME_ALPHA = 0.7;
+/** What the `presentation` prop accepts: a fixed presentation, or `"auto"` (the default). */
+export type PresentationSetting = "auto" | Presentation;
+/** `"auto"` is guided at the far regime and dense at mid and near; a fixed value ignores the regime. */
+export declare function resolvePresentation(requested: PresentationSetting, regime: Regime): Presentation;
 
 // shared/scene.d.ts
 import { type Measure, type PlacedLabel } from "../labels/placement";

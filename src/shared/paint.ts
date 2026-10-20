@@ -4,6 +4,7 @@ import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
 import { paintTerritories } from "../territories/paintTerritories";
 import type { Viewport } from "../viewport/viewport";
+import { DENSE_FILL_FACTOR, type Presentation } from "./presentation";
 import type { Scene } from "./scene";
 import type { MapSpec } from "./spec";
 import type { Surface } from "./surface";
@@ -28,6 +29,8 @@ export interface Frame {
   height: number;
   focusedTerritory?: string | null | undefined;
   focusedNode?: string | null | undefined;
+  /** Guided or dense emphasis (spec slice D §4); absent means guided. */
+  presentation?: Presentation | undefined;
 }
 
 /**
@@ -46,7 +49,8 @@ export function paint(
   theme: Theme,
 ): void {
   surface.clear();
-  paintTerritories(surface, scene, viewport, theme, theme.territoryFillAlpha);
+  const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
+  paintTerritories(surface, scene, viewport, theme, fillAlpha);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, scene, spec, viewport, theme);
