@@ -107,6 +107,13 @@ Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so 
 
 `cardSize?: { width: number; height: number }` (default `{ width: 160, height: 56 }`) sets the frame the library draws around each card; `renderCard` only fills its content. The library places that frame beside the node's point — trying eight candidate positions around it before falling back to grouping the node into the nearest already-placed card, shown with a "+ N" badge — so cards never hang off a point's corner or cover each other. At the mid and near regimes, hovering the nearest point within `tuning.hoverRadius` screen pixels shows its label in a small tooltip.
 
+### Keyboard and screen readers
+
+- Tab reaches the map surface, a named region (`label`, default "Map of N items"). While it has focus, the arrow keys pan by a tenth of the box (Shift: half), `+`/`=` and `-` zoom, `0` or `Home` fits the whole corpus, and `Esc` zooms out one level of detail. When the keys settle, the number of items on screen is announced once.
+- While the map has focus it also captures `Ctrl`/`Cmd` + `+`/`-` as map zoom, so a reader who relies on browser zoom moves focus off the map first.
+- The canvas is decorative; the content is a visually hidden accessible tree right after the surface. Far out it lists the territories under their group headings, then "Unassigned" (the items with no territory); inside a territory it leads with "Back to overview", then the on-screen items under their territory's heading. Focus never falls to the page when the tree changes under it. The legend's group headers are headings too.
+- `headingLevel` (2–6, default 3) sets the level of every heading the map renders; pick the one that fits your page's outline. The ref handle's `focus()` moves focus to the map surface.
+
 ## The demo
 
 Run `npm run dev` to open the demo — a full-window showcase, not a component preview: the map fills the browser window (`CorpusMap` with no `width`/`height`, filling its parent), a top bar picks the corpus, a bottom-left minimap and indicator (`regime · ratio× · N items`, read straight from `onViewChange`) sit above it, bottom-right zoom controls drive the map's own `CorpusMapHandle` ("Zoom in", "Zoom out", "Fit"), and a footer shows a data-source disclosure for the corpora that need one. Selecting a node opens a drawer with its label and territory — for arXiv, also its publication year and a link to the paper's abstract page; every other corpus gets a generic field list from its `meta`.
@@ -120,7 +127,7 @@ During development the demo consumes the library through a Vite alias to `src/`,
 ## Guarantees
 
 - **Canvas 2D baseline, no WebGPU required.** The point field renders on Canvas 2D; nothing in this library ever requires WebGPU or WebGL to run.
-- **Keyboard and screen-reader reachable, with a known gap.** Every zoom level is mirrored by a visually hidden, always-present accessible tree with a live region announcing the current regime. What is reachable today: at the far and mid regimes, one button per territory (Enter zooms the map to it); at the near regime, one button per on-screen item, capped, and Enter selects it. The focused territory or item is outlined on the canvas. Keyboard zoom-out and pan are not implemented yet, so once a territory is open the keyboard cannot leave it; see [BACKLOG.md](docs/superpowers/BACKLOG.md).
+- **Keyboard and screen-reader reachable, and audited.** Every zoom level is mirrored by a visually hidden, always-present accessible tree with a live region announcing the current regime: territories under their group headings and an "Unassigned" control at the far and mid regimes, "Back to overview" and the on-screen items, capped, at the near regime. The focused map surface pans, zooms, fits and zooms out from the keyboard, so a reader can open one territory, leave it and open another; a test walks exactly that. The focused territory or item is outlined on the canvas. An axe audit, canaried with injected defects, runs over the map's states and the demo in the suite; contrast and the spoken experience are checked by hand in a browser (see [Keyboard and screen readers](#keyboard-and-screen-readers)).
 
 ## Performance
 

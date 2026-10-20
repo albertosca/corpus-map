@@ -1,5 +1,6 @@
 // CorpusMap.d.ts
 import { type ReactElement, type ReactNode, type Ref } from "react";
+import { type HeadingLevel } from "./a11y/headingLevel";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MinimapCorner } from "./minimap/Minimap";
 import { type Presentation, type PresentationSetting } from "./shared/presentation";
@@ -14,6 +15,8 @@ export interface CorpusMapHandle {
     zoomOut(): void;
     /** Resets the viewport to the fitted view, the same reset a `spec` change applies. */
     fit(): void;
+    /** Focuses the map surface, so a consumer has an element to return focus to after a dialog (spec slice B §4). */
+    focus(): void;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
@@ -71,6 +74,10 @@ export interface CorpusMapProps {
      * one commit per frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
+    /** The map surface's accessible name. Defaults to "Map of N items". */
+    label?: string | undefined;
+    /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
+    headingLevel?: HeadingLevel | undefined;
     /**
      * `"auto"` (default) is guided at far and dense at mid and near; a fixed
      * value locks it. Never changes the LOD regimes, only emphasis (spec
@@ -120,7 +127,10 @@ export declare function CorpusMap({ ref: handleReference, ...properties }: Corpu
 import type { ReactElement } from "react";
 import type { Regime } from "../lod/lod";
 import type { MapNode, MapSpec, Territory } from "../shared/spec";
+import { type Theme } from "../shared/theme";
+import type { TerritoryGroup } from "../territories/groups";
 import type { Viewport } from "../viewport/viewport";
+import type { HeadingTag } from "./headingLevel";
 export interface AccessibleTreeProps {
     spec: MapSpec;
     regime: Regime;
@@ -128,22 +138,44 @@ export interface AccessibleTreeProps {
     width: number;
     height: number;
     cap: number;
+    /** The scene's territory groups; headings appear only when there are some (spec slice B §5). */
+    groups?: readonly TerritoryGroup[] | undefined;
+    /** Dimmed territory ids: left out of the tree. */
+    hidden?: ReadonlySet<string> | undefined;
+    heading?: HeadingTag | undefined;
+    theme?: Pick<Theme, "cardBackground" | "territoryLabel" | "focusOutline" | "focusOutlineWidth"> | undefined;
     onFocusTerritory?: ((territory: Territory) => void) | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
+    onOverview?: (() => void) | undefined;
+    onUnassigned?: (() => void) | undefined;
+    /** Called when a focused control unmounted and the new tree has none to take its place. */
+    onFocusFallback?: (() => void) | undefined;
     /** Reports the id of the territory whose button gains keyboard focus, and `null` when it loses it. */
     onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
     /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
     onNodeFocusChange?: ((id: string | null) => void) | undefined;
 }
 /**
- * The canvas is decorative; this is the content. It mirrors the current
- * regime rather than the corpus, which is what keeps it bounded: ~10
- * territories at the far/mid regime, and at the near regime only the nodes
- * that are on screen, capped at `cap` — the same bound `CardOverlay` uses
- * for its cards. A corpus of ten thousand items never produces a tree of
- * ten thousand elements.
+ * The canvas is decorative; this is the content (spec slice B §5). It
+ * mirrors the regime: at far and mid, territory buttons under their group
+ * headings, then "Unassigned"; at near, "Back to overview" and the on-screen
+ * items under their territory's heading, capped at `cap` overall — the
+ * bound `CardOverlay` uses, so ten thousand items never make ten thousand
+ * elements. Everything is visually hidden except the two controls with no
+ * shape on the canvas, which show in the corner while focused.
  */
-export declare function AccessibleTree({ spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect, onTerritoryFocusChange, onNodeFocusChange, }: AccessibleTreeProps): ReactElement;
+export declare function AccessibleTree(properties: AccessibleTreeProps): ReactElement;
+
+// a11y/headingLevel.d.ts
+export type HeadingLevel = 2 | 3 | 4 | 5 | 6;
+export type HeadingTag = "h2" | "h3" | "h4" | "h5" | "h6";
+export declare const DEFAULT_HEADING_LEVEL: HeadingLevel;
+/**
+ * The element every heading the library renders uses (spec slice B §5): the
+ * host page owns the outline, so it picks the level. Validated like
+ * `resolveThresholds`, because a JavaScript consumer is not held to the type.
+ */
+export declare function resolveHeadingLevel(input: number | undefined): HeadingTag;
 
 // a11y/paintFocus.d.ts
 import type { Scene } from "../shared/scene";
@@ -223,6 +255,7 @@ export declare function layoutCards(anchors: readonly CardAnchor[], size: {
 }, gap?: number): PlacedCard[];
 
 // index.d.ts
+export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
@@ -360,6 +393,7 @@ export declare function useMeasure(): Measure;
 
 // legend/Legend.d.ts
 import { type ReactElement } from "react";
+import type { HeadingTag } from "../a11y/headingLevel";
 import { type Corner } from "../shared/corner";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
@@ -377,6 +411,8 @@ export interface LegendProps {
     theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
     /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
     narrow: boolean;
+    /** The element group disclosures sit in, so a screen reader can jump between groups (spec slice B §6). */
+    heading?: HeadingTag | undefined;
     onEntry: (id: string) => void;
     onHiddenChange: (ids: string[]) => void;
 }
@@ -1115,6 +1151,43 @@ export declare const LABEL_FIT_PASSES = 3;
  * the fitted scale flip in and out, and the result never settles.
  */
 export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels" | "groupLabels">, width: number, height: number, padding: number): Viewport;
+
+// viewport/keyboard.d.ts
+import type { LodThresholds, Regime } from "../lod/lod";
+export interface KeyInput {
+    key: string;
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    altKey: boolean;
+}
+export type KeyboardCommand = {
+    kind: "pan";
+    horizontal: number;
+    vertical: number;
+} | {
+    kind: "zoom";
+    direction: "in" | "out";
+} | {
+    kind: "fit";
+} | {
+    kind: "regimeOut";
+};
+/**
+ * The surface's key map (spec slice B §4). Pan fractions are of the view's
+ * width/height, signed in the direction the view travels: ArrowRight shows
+ * what lies to the right. Ctrl/Cmd are taken only with the zoom keys — the
+ * map captures the browser's page zoom while it has focus — and Ctrl+0
+ * stays the browser's zoom reset. Alt is never taken.
+ */
+export declare function keyboardCommand(input: KeyInput): KeyboardCommand | null;
+/**
+ * Where `Esc` zooms to, as a ratio of the fitted scale: from near, the
+ * geometric middle of the mid band (its lower edge floored at the fitted
+ * ratio 1, so a `midAt` below 1 never makes `Esc` zoom in); from mid, or
+ * when the mid band is empty, the fit itself. Nothing at far.
+ */
+export declare function regimeOutRatio(regime: Regime, thresholds: LodThresholds): number | null;
 
 // viewport/useElementSize.d.ts
 import { type RefObject } from "react";

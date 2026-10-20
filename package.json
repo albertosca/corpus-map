@@ -43,7 +43,7 @@
   },
   "sizeLimit": {
     "file": "dist/corpus-map.js",
-    "maxGzipBytes": 18660
+    "maxGzipBytes": 20170
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

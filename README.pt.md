@@ -107,6 +107,13 @@ Cards são decorativos. O overlay em que vivem é `aria-hidden` e `inert`, entã
 
 `cardSize?: { width: number; height: number }` (padrão `{ width: 160, height: 56 }`) define o quadro que a biblioteca desenha ao redor de cada card; `renderCard` só preenche o conteúdo dele. A biblioteca posiciona esse quadro ao lado do ponto do nó — tentando oito posições candidatas ao redor dele antes de recorrer a agrupar o nó no card já posicionado mais próximo, mostrado com um badge "+ N" — então cards nunca ficam pendurados no canto de um ponto nem se cobrem. Nos regimes médio e próximo, passar o mouse sobre o ponto mais próximo dentro de `tuning.hoverRadius` pixels de tela mostra o nome dele numa pequena dica.
 
+### Teclado e leitores de tela
+
+- Tab chega à superfície do mapa, uma região nomeada (`label`, padrão "Map of N items"). Com o foco nela, as setas deslocam um décimo da caixa (Shift: metade), `+`/`=` e `-` dão zoom, `0` ou `Home` enquadra o corpus inteiro, e `Esc` afasta um nível de detalhe. Quando as teclas param, o número de itens na tela é anunciado uma vez.
+- Com o foco no mapa, ele também captura `Ctrl`/`Cmd` + `+`/`-` como zoom do mapa, então quem depende do zoom do navegador tira o foco do mapa antes.
+- O canvas é decorativo; o conteúdo é uma árvore acessível visualmente oculta logo depois da superfície. De longe ela lista os territórios sob os cabeçalhos dos seus grupos e depois "Unassigned" (os itens sem território); dentro de um território ela começa com "Back to overview" e segue com os itens na tela sob o cabeçalho do seu território. O foco nunca cai para a página quando a árvore muda por baixo dele. Os cabeçalhos de grupo da legenda também são headings.
+- `headingLevel` (2–6, padrão 3) define o nível de todo heading que o mapa renderiza; escolha o que encaixa no esquema da sua página. O `focus()` do handle da ref leva o foco para a superfície do mapa.
+
 ## A demo
 
 Rode `npm run dev` para abrir a demo — uma vitrine em tela cheia, não um preview de componente: o mapa preenche a janela do navegador (`CorpusMap` sem `width`/`height`, preenchendo o pai), uma barra superior escolhe o corpus, um minimapa e um indicador no canto inferior esquerdo (`regime · razão× · N itens`, lido direto de `onViewChange`) ficam acima dele, controles de zoom no canto inferior direito acionam o `CorpusMapHandle` do próprio mapa ("Zoom in", "Zoom out", "Fit"), e um rodapé mostra um aviso de fonte de dados para os corpora que precisam de um. Selecionar um nó abre uma gaveta com o rótulo e o território dele — para o arXiv, também o ano de publicação e um link para a página de resumo do paper; todo outro corpus recebe uma lista genérica de campos a partir do `meta`.
@@ -120,7 +127,7 @@ Em desenvolvimento a demo consome a biblioteca por um alias do Vite para `src/`,
 ## Garantias
 
 - **Baseline em Canvas 2D, sem exigir WebGPU.** O campo de pontos é renderizado em Canvas 2D; nada nesta biblioteca exige WebGPU ou WebGL para funcionar.
-- **Alcançável por teclado e leitor de tela, com uma lacuna conhecida.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, com uma live region anunciando o regime atual. O que é alcançável hoje: nos regimes distante e médio, um botão por território (Enter dá zoom no mapa até ele); no regime próximo, um botão por item na tela, limitado pelo cap, e Enter o seleciona. O território ou item com o foco ganha um contorno no canvas. Zoom-out e pan por teclado ainda não estão implementados, então, uma vez aberto um território, o teclado não consegue sair dele; veja [BACKLOG.md](docs/superpowers/BACKLOG.md).
+- **Alcançável por teclado e leitor de tela, e auditado.** Cada nível de zoom é espelhado por uma árvore acessível visualmente oculta e sempre presente, com uma live region anunciando o regime atual: territórios sob os cabeçalhos dos seus grupos e um controle "Unassigned" nos regimes distante e médio, "Back to overview" e os itens na tela, limitados pelo cap, no regime próximo. A superfície do mapa com foco desloca, dá zoom, enquadra e afasta pelo teclado, então quem lê consegue abrir um território, sair dele e abrir outro; um teste percorre exatamente isso. O território ou item com o foco ganha um contorno no canvas. Uma auditoria axe, com canário de defeitos injetados, roda sobre os estados do mapa e a demo na suíte; contraste e a experiência falada são conferidos à mão num navegador (veja [Teclado e leitores de tela](#teclado-e-leitores-de-tela)).
 
 ## Performance
 
