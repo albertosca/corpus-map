@@ -21,6 +21,12 @@ export interface Territory {
   boundary?: Array<[number, number]>;
   /** Overrides the palette for this territory; `#rrggbb`, `rgb()` or `rgba()`. */
   colour?: string;
+  /**
+   * The group this territory belongs to, by display name; territories with
+   * the same `group` share one. If any territory carries it, groups are not
+   * derived and the others fall under "Other" (spec categories §3).
+   */
+  group?: string;
 }
 
 export interface MapSpec {
@@ -93,6 +99,10 @@ export function validateSpec(input: unknown): MapSpec {
       const colour = requireString(territory.colour, `${path}.colour`);
       if (!isSupportedColour(colour))
         fail(`${path}.colour`, `unsupported colour ${colour}; use #rrggbb, rgb() or rgba()`);
+    }
+    if (territory.group !== undefined) {
+      const group = requireString(territory.group, `${path}.group`);
+      if (group.trim() === "") fail(`${path}.group`, "expected a non-empty string");
     }
     members.set(id, new Set());
   }

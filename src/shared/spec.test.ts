@@ -225,4 +225,23 @@ describe("validateSpec", () => {
       expect(() => validateSpec(withColour(42))).toThrow(/^territories\[0\]\.colour: expected a string/);
     });
   });
+
+  describe("territory group", () => {
+    const withGroup = (group: unknown) => ({
+      version: "1",
+      territories: [{ id: "t1", name: "One", members: ["a"], centroid: [0, 0], group }],
+      nodes: [{ id: "a", label: "A", x: 0, y: 0, territory: "t1" }],
+    });
+
+    it("accepts a non-empty string", () => {
+      expect(validateSpec(withGroup("Vision")).territories[0]?.group).toBe("Vision");
+    });
+
+    it("rejects an empty or blank string, and a non-string, naming the field", () => {
+      for (const group of ["", "   ", 3]) {
+        expect(() => validateSpec(withGroup(group))).toThrow(SpecError);
+        expect(() => validateSpec(withGroup(group))).toThrow(/\.group/);
+      }
+    });
+  });
 });
