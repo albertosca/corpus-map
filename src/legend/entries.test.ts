@@ -11,7 +11,7 @@ const territory = (id: string, members: number): Territory => ({
 
 describe("legendEntries", () => {
   it("lists territories by member count, largest first, ties by id, with their colour or the fallback", () => {
-    const { entries, more } = legendEntries(
+    const entries = legendEntries(
       [territory("b", 2), territory("a", 2), territory("c", 5)],
       new Map([["c", "red"]]),
       "grey",
@@ -21,18 +21,23 @@ describe("legendEntries", () => {
       ["a", "grey", 2],
       ["b", "grey", 2],
     ]);
-    expect(more).toBe(0);
   });
 
-  it("stops at the limit and counts the rest", () => {
-    const territories = Array.from({ length: 10 }, (_, index) => territory(`t${index}`, index));
-    const { entries, more } = legendEntries(territories, new Map(), "grey");
-    expect(entries).toHaveLength(8);
-    expect(more).toBe(2);
+  it("lists every territory, most members first, ties by id", () => {
+    const territories = Array.from({ length: 12 }, (_, index) => ({
+      id: `t${String(index).padStart(2, "0")}`,
+      name: `T${index}`,
+      members: Array.from({ length: index % 3 }, (_, member) => `m${index}-${member}`),
+      centroid: [0, 0] as [number, number],
+    }));
+    const entries = legendEntries(territories, new Map(), "#888");
+    expect(entries).toHaveLength(12);
+    expect(entries.map((entry) => entry.members)).toEqual([2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0]);
+    expect(entries[0]?.id).toBe("t02");
   });
 
   it("returns nothing for a spec without territories", () => {
-    expect(legendEntries([], new Map(), "grey")).toEqual({ entries: [], more: 0 });
+    expect(legendEntries([], new Map(), "grey")).toEqual([]);
   });
 });
 

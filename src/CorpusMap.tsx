@@ -427,7 +427,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     properties.legend === true ? "top-left" : properties.legend ? properties.legend.corner : null;
   const legendPlacement = legendRequest === null ? null : legendCorner(legendRequest, minimapCorner);
   const legend = useMemo(
-    () => legendEntries(spec.territories, scene.colours, theme.pointNeutral),
+    // Task 7 replaces the Legend props; "more" no longer exists.
+    () => ({ entries: legendEntries(spec.territories, scene.colours, theme.pointNeutral), more: 0 }),
     [spec, scene, theme.pointNeutral],
   );
   // Same zoom band as a manual zoom; a territory with no drawable ring has nothing to zoom to.

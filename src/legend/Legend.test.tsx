@@ -43,12 +43,11 @@ describe("Legend", () => {
     expect(screen.queryByRole("button", { name: "North" })).toBeNull();
   });
 
-  it("reports the pressed territory and says how many were left out", () => {
+  it("reports the pressed territory", () => {
     const onEntry = vi.fn();
-    render(<Legend {...props({ onEntry, more: 4 })} />);
+    render(<Legend {...props({ onEntry })} />);
     fireEvent.click(screen.getByRole("button", { name: "South" }));
     expect(onEntry).toHaveBeenCalledWith("south");
-    expect(screen.getByText("+4 more")).toBeTruthy();
   });
 
   it("keeps pointer presses from reaching the map underneath", () => {
