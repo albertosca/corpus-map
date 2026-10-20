@@ -3,6 +3,7 @@ import type { MapSpec } from "corpus-map";
 import { DARK_THEME, DEFAULT_THEME, DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { auditAccessibility, violationIds } from "../test/audit";
 // Type-only: safe to import statically even though every test imports the
 // component itself dynamically (`await import("./App")`), per-test, so each
 // gets its own fresh module graph for `vi.doMock`/`vi.resetModules`.
@@ -20,6 +21,7 @@ import {
   ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 } from "./components/floatingLayout";
 import { BUTTON_WIDTH } from "./components/ZoomControls";
+import arxivJson from "./corpora/arxiv.json";
 import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
 import { syntheticSpec } from "./corpora/synthetic";
@@ -617,6 +619,14 @@ describe("App (showcase Task 5)", () => {
     fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "constellations" } });
     await screen.findByText(territoryButtonText(constellationsSpec));
     expect(screen.queryByText(/^Synthetic corpus,/)).toBeNull();
+  });
+
+  it("passes the accessibility audit with the real arXiv corpus loaded", async () => {
+    const { container } = await renderApp(arxivJson);
+    // The real corpus builds an 8000-item scene; under a loaded suite that takes longer than the default 1 s.
+    await screen.findByText(territoryButtonText(arxivJson as MapSpec), undefined, { timeout: 10_000 });
+    expect(screen.getAllByRole("heading", { level: 2 }).length).toBeGreaterThan(0);
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
   });
 
   it("calls the zoom handle from the Zoom in button and the indicator reflects the new ratio", async () => {

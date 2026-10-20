@@ -441,6 +441,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             renderCard={CARDS[current.id]}
             minimap
             legend
+            headingLevel={2}
             theme={scheme === "dark" ? DARK_THEME : DEFAULT_THEME}
             tuning={appliedTuning}
             thresholds={appliedThresholds}
