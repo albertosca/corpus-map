@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateCorpus } from "../../fixtures/synthetic/generate";
 import { estimateText } from "../labels/placement";
 import { DEFAULT_THRESHOLDS, type Regime } from "../lod/lod";
+import { UNVISITED_RING_WIDTH } from "../points/paintPoints";
 import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { fitSpec, worldBounds } from "../viewport/fit";
 import { type Frame, paint } from "./paint";
@@ -53,20 +54,40 @@ function paintSpec(
   paint(surface, scene, mapSpec, currentViewport, frameFor(regime, extra), DEFAULT_THEME);
 }
 
+/** Every point mark painted: visited discs and unvisited rings. */
+function pointMarks(surface: RecordingSurface): number {
+  return surface.circles.length + surface.hollowCircles.length;
+}
+
+/** `spec` painted at `regime` under `viewport`. */
+function paintAt(regime: Regime): RecordingSurface {
+  const surface = new RecordingSurface();
+  paintSpec(spec, surface, regime);
+  return surface;
+}
+
+/** A spec holding only `spec`'s un-territoried node, painted at `regime`. */
+function paintLooseNodeAt(regime: Regime): RecordingSurface {
+  const only = { version: "1", territories: [], nodes: [spec.nodes[3]] } as MapSpec;
+  const surface = new RecordingSurface();
+  paintSpec(only, surface, regime);
+  return surface;
+}
+
 describe("paint", () => {
   it("draws territory boundary and name at the far regime, and no points", () => {
     const surface = new RecordingSurface();
     paintSpec(spec, surface, "far", undefined, LABEL_VP);
     expect(surface.polygons).toHaveLength(1);
     expect(surface.texts.map((recordedText) => recordedText.text)).toContain("North");
-    expect(surface.circles).toHaveLength(0);
+    expect(pointMarks(surface)).toBe(0);
   });
 
   it("draws boundaries and every point at the mid regime", () => {
     const surface = new RecordingSurface();
     paintSpec(spec, surface, "mid");
     expect(surface.polygons).toHaveLength(1);
-    expect(surface.circles).toHaveLength(4);
+    expect(pointMarks(surface)).toBe(4);
   });
 
   it("draws an un-territoried node without stretching any boundary toward it", () => {
@@ -77,33 +98,38 @@ describe("paint", () => {
   });
 
   it("renders a spec where every node is un-territoried", () => {
-    const only = { version: "1", territories: [], nodes: [spec.nodes[3]] } as MapSpec;
-    const surface = new RecordingSurface();
-    paintSpec(only, surface, "mid");
+    const surface = paintLooseNodeAt("mid");
     expect(surface.polygons).toHaveLength(0);
-    expect(surface.circles).toHaveLength(1);
+    expect(pointMarks(surface)).toBe(1);
   });
 
-  it("distinguishes visited from unvisited by fill", () => {
-    const surface = new RecordingSurface();
-    paintSpec(spec, surface, "mid");
-    const visitedCircle = surface.circles.find((circle) => circle.id === "a");
-    const unvisitedCircle = surface.circles.find((circle) => circle.id === "b");
-    expect(visitedCircle?.fill).not.toBe(unvisitedCircle?.fill);
+  it("draws a visited point as a filled disc and an unvisited one as a ring, both in the territory's colour", () => {
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    const surface = paintAt("mid");
+    const visited = surface.circles.find((circle) => circle.id === "a");
+    const unvisited = surface.hollowCircles.find((circle) => circle.id === "b");
+    expect(visited?.fill).toBe(scene.colours.get("t1"));
+    expect(visited?.r).toBe(DEFAULT_THEME.pointRadius);
+    expect(unvisited?.colour).toBe(scene.colours.get("t1"));
+    expect(unvisited?.width).toBe(UNVISITED_RING_WIDTH);
+    expect((unvisited?.r ?? 0) + UNVISITED_RING_WIDTH / 2).toBe(DEFAULT_THEME.pointRadius);
   });
 
   it("treats a node with no state as unvisited", () => {
-    const surface = new RecordingSurface();
-    paintSpec(spec, surface, "mid");
-    const unvisitedCircle = surface.circles.find((circle) => circle.id === "b");
-    const stateless = surface.circles.find((circle) => circle.id === "c");
-    expect(stateless?.fill).toBe(unvisitedCircle?.fill);
+    expect(paintAt("mid").hollowCircles.some((circle) => circle.id === "c")).toBe(true);
+  });
+
+  it("paints a point with no territory in pointNeutral", () => {
+    const surface = paintLooseNodeAt("mid");
+    const marks = [
+      ...surface.circles.map((circle) => circle.fill),
+      ...surface.hollowCircles.map((circle) => circle.colour),
+    ];
+    expect(marks).toEqual([DEFAULT_THEME.pointNeutral]);
   });
 
   it("places points through the viewport transform", () => {
-    const surface = new RecordingSurface();
-    paintSpec(spec, surface, "mid");
-    expect(surface.circles.find((circle) => circle.id === "b")).toMatchObject({ x: 20, y: 0 });
+    expect(paintAt("mid").hollowCircles.find((circle) => circle.id === "b")).toMatchObject({ x: 20, y: 0 });
   });
 
   it("clears before drawing", () => {
@@ -155,13 +181,13 @@ describe("paint", () => {
     paintSpec(spec, surface, "mid", { pointAlpha: 0.4 });
     expect(surface.alphas[0]).toBe(0.4);
     expect(surface.alphas[surface.alphas.length - 1]).toBe(1);
-    expect(surface.circles).toHaveLength(4);
+    expect(pointMarks(surface)).toBe(4);
   });
 
   it("paints no points when pointAlpha is 0", () => {
     const surface = new RecordingSurface();
     paintSpec(spec, surface, "mid", { pointAlpha: 0 });
-    expect(surface.circles).toHaveLength(0);
+    expect(pointMarks(surface)).toBe(0);
     expect(surface.alphas).toHaveLength(0);
   });
 
@@ -242,7 +268,8 @@ describe("paint order", () => {
       "outline",
       "outline",
       "alpha",
-      ...Array(6).fill("circle"),
+      // None of these nodes is visited, so every point is a ring.
+      ...Array(6).fill("hollowCircle"),
       "alpha",
       "text",
       "text",

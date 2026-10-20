@@ -10,6 +10,8 @@ export interface Surface {
   outline(points: Array<[number, number]>, color: string, width: number): void;
   /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+  /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
+  hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
   /**
    * Draws `draw`'s calls into one offscreen layer and composites it once at
    * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -28,7 +30,10 @@ export class RecordingSurface implements Surface {
   outlines: Array<{ points: Array<[number, number]>; color: string; width: number }> = [];
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
   layers: number[] = [];
-  calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd"> = [];
+  hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
+  calls: Array<
+    "clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd"
+  > = [];
 
   clear() {
     this.calls.push("clear");
@@ -41,6 +46,10 @@ export class RecordingSurface implements Surface {
   circle(id: string, horizontal: number, vertical: number, radius: number, fill: string) {
     this.calls.push("circle");
     this.circles.push({ id, x: horizontal, y: vertical, r: radius, fill });
+  }
+  hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number) {
+    this.calls.push("hollowCircle");
+    this.hollowCircles.push({ id, x: horizontal, y: vertical, r: radius, colour, width });
   }
   text(text: string, horizontal: number, vertical: number, color: string, font: string) {
     this.calls.push("text");
@@ -101,6 +110,15 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.arc(horizontal, vertical, radius, 0, Math.PI * 2);
       context.fillStyle = fill;
       context.fill();
+    },
+    hollowCircle(_id, horizontal, vertical, radius, colour, width) {
+      context.save();
+      context.beginPath();
+      context.arc(horizontal, vertical, radius, 0, Math.PI * 2);
+      context.strokeStyle = colour;
+      context.lineWidth = width;
+      context.stroke();
+      context.restore();
     },
     text(text, horizontal, vertical, color, font) {
       context.fillStyle = color;

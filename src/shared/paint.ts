@@ -49,7 +49,7 @@ export function paint(
   paintTerritories(surface, scene, viewport, theme, theme.territoryFillAlpha);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
-    paintPoints(surface, spec, viewport, theme);
+    paintPoints(surface, scene, spec, viewport, theme);
     surface.globalAlpha(1);
   }
   if (typeof frame.focusedTerritory === "string")

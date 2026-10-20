@@ -454,11 +454,20 @@ export interface ScreenPoint {
 export declare function nearestWithin(points: readonly ScreenPoint[], horizontal: number, vertical: number, radius: number): ScreenPoint | null;
 
 // points/paintPoints.d.ts
+import type { Scene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintPoints(surface: Surface, spec: MapSpec, viewport: Viewport, theme: Theme): void;
+/** Stroke width of an unvisited point's ring, in CSS pixels (spec slice D §4). */
+export declare const UNVISITED_RING_WIDTH = 1.5;
+/**
+ * Each point in its territory's colour (`pointNeutral` without one), with
+ * its state shown by shape, not by colour alone (WCAG 2.2 SC 1.4.1): a
+ * visited point is a filled disc, any other a ring whose outer edge sits at
+ * the same `pointRadius`, so both marks have the same footprint.
+ */
+export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">): void;
 
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";
@@ -588,6 +597,8 @@ export interface Surface {
     outline(points: Array<[number, number]>, color: string, width: number): void;
     /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+    /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
+    hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
     /**
      * Draws `draw`'s calls into one offscreen layer and composites it once at
      * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -631,10 +642,19 @@ export declare class RecordingSurface implements Surface {
         width: number;
     }>;
     layers: number[];
-    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd">;
+    hollowCircles: Array<{
+        id: string;
+        x: number;
+        y: number;
+        r: number;
+        colour: string;
+        width: number;
+    }>;
+    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
+    hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
     text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
     globalAlpha(alpha: number): void;
     outline(points: Array<[number, number]>, color: string, width: number): void;

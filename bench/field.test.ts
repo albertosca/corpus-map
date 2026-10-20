@@ -44,10 +44,12 @@ describe("point field", () => {
       paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
       samples.push(performance.now() - start);
       expect(surface.polygons.length).toBeGreaterThanOrEqual(TERRITORY_COUNT);
-      expect(surface.circles).toHaveLength(10_000);
+      expect(surface.circles.length + surface.hollowCircles.length).toBe(10_000);
     }
-    const med = median(samples);
-    console.log(`paint median ${med.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms)`);
-    expect(med).toBeLessThan(BUDGET_MS);
+    const medianMs = median(samples);
+    console.log(
+      `paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms)`,
+    );
+    expect(medianMs).toBeLessThan(BUDGET_MS);
   });
 });
