@@ -6,6 +6,6 @@ export type { MinimapCorner } from "./minimap/Minimap";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
-export { DEFAULT_THEME } from "./shared/theme";
+export { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";

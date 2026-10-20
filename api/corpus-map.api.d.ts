@@ -199,7 +199,7 @@ export type { MinimapCorner } from "./minimap/Minimap";
 export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
-export { DEFAULT_THEME } from "./shared/theme";
+export { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 
@@ -666,24 +666,20 @@ export declare function canvasSurface(context: CanvasRenderingContext2D): Surfac
 // shared/theme.d.ts
 import type { LabelClass } from "../labels/placement";
 export interface Theme {
-    territoryFill: string;
-    territoryStroke: string;
     territoryLabel: string;
     territoryFonts: Record<LabelClass, string>;
     cardBackground: string;
     cardBorder: string;
     hoverBackground: string;
     hoverText: string;
-    visited: string;
-    unvisited: string;
     pointRadius: number;
     /**
      * Colour of the outline drawn on the canvas around the territory (or the
      * item's point) whose button in the accessible tree has keyboard focus —
      * the tree itself is visually hidden, so this is the only visible focus.
      * Opaque, and at least 3:1 against the map's background (WCAG 2.2 SC
-     * 1.4.11); the default is checked against white and #f7f7f8, bare and
-     * under `territoryFill`.
+     * 1.4.11); each theme's is checked against its pages, bare and under every
+     * palette fill (`theme.test.ts`).
      */
     focusOutline: string;
     /** Line width of that outline, in CSS pixels. */
