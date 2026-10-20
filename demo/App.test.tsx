@@ -48,11 +48,12 @@ const TINY_ARXIV_SPEC: MapSpec = {
   ],
 };
 
-/** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name> (<memberCount>)"`. */
+/** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name>, <count> item(s)"`. */
 function territoryButtonText(spec: MapSpec, index = 0): string {
   const territory = spec.territories[index];
   if (!territory) throw new Error(`spec has no territory at index ${index}`);
-  return `${territory.name} (${territory.members.length})`;
+  const count = territory.members.length;
+  return `${territory.name}, ${count} ${count === 1 ? "item" : "items"}`;
 }
 
 const VIEWPORT_WIDTH_PX = 375;

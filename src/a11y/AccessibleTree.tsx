@@ -1,9 +1,12 @@
 import type { ReactElement } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Regime } from "../lod/lod";
 import { visibleNodes } from "../lod/visible";
 import type { MapNode, MapSpec, Territory } from "../shared/spec";
+import { DEFAULT_THEME, type Theme } from "../shared/theme";
+import type { TerritoryGroup } from "../territories/groups";
 import type { Viewport } from "../viewport/viewport";
+import type { HeadingTag } from "./headingLevel";
 
 export interface AccessibleTreeProps {
   spec: MapSpec;
@@ -12,8 +15,18 @@ export interface AccessibleTreeProps {
   width: number;
   height: number;
   cap: number;
+  /** The scene's territory groups; headings appear only when there are some (spec slice B §5). */
+  groups?: readonly TerritoryGroup[] | undefined;
+  /** Dimmed territory ids: left out of the tree. */
+  hidden?: ReadonlySet<string> | undefined;
+  heading?: HeadingTag | undefined;
+  theme?: Pick<Theme, "cardBackground" | "territoryLabel" | "focusOutline" | "focusOutlineWidth"> | undefined;
   onFocusTerritory?: ((territory: Territory) => void) | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
+  onOverview?: (() => void) | undefined;
+  onUnassigned?: (() => void) | undefined;
+  /** Called when a focused control unmounted and the new tree has none to take its place. */
+  onFocusFallback?: (() => void) | undefined;
   /** Reports the id of the territory whose button gains keyboard focus, and `null` when it loses it. */
   onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
   /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
@@ -21,6 +34,8 @@ export interface AccessibleTreeProps {
 }
 
 const UNASSIGNED = "Unassigned";
+const NO_GROUPS: readonly TerritoryGroup[] = [];
+const NOTHING_HIDDEN: ReadonlySet<string> = new Set();
 
 // One string per regime, so a far→mid change is announced too — the tree's
 // items do not change between those two, only what the canvas shows.
@@ -30,26 +45,34 @@ const ANNOUNCEMENT: Record<Regime, string> = {
   near: "Showing individual items",
 };
 
+const VISUALLY_HIDDEN = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+} as const;
+
+function itemCount(count: number): string {
+  return `${count} ${count === 1 ? "item" : "items"}`;
+}
+
 /**
- * The canvas is decorative; this is the content. It mirrors the current
- * regime rather than the corpus, which is what keeps it bounded: ~10
- * territories at the far/mid regime, and at the near regime only the nodes
- * that are on screen, capped at `cap` — the same bound `CardOverlay` uses
- * for its cards. A corpus of ten thousand items never produces a tree of
- * ten thousand elements.
+ * The canvas is decorative; this is the content (spec slice B §5). It
+ * mirrors the regime: at far and mid, territory buttons under their group
+ * headings, then "Unassigned"; at near, "Back to overview" and the on-screen
+ * items under their territory's heading, capped at `cap` overall — the
+ * bound `CardOverlay` uses, so ten thousand items never make ten thousand
+ * elements. Everything is visually hidden except the two controls with no
+ * shape on the canvas, which show in the corner while focused.
  */
-export function AccessibleTree({
-  spec,
-  regime,
-  viewport,
-  width,
-  height,
-  cap,
-  onFocusTerritory,
-  onSelect,
-  onTerritoryFocusChange,
-  onNodeFocusChange,
-}: AccessibleTreeProps): ReactElement {
+export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
+  const { spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect } = properties;
+  const groups = properties.groups ?? NO_GROUPS;
+  const hidden = properties.hidden ?? NOTHING_HIDDEN;
+  const Heading = properties.heading ?? "h3";
+  const theme = properties.theme ?? DEFAULT_THEME;
   const loose = spec.nodes.filter((node) => node.territory === null);
 
   // The buttons are visually hidden, so `CorpusMap` draws their focus on the
@@ -59,66 +82,199 @@ export function AccessibleTree({
   // this tree is withdrawn too — otherwise a stale highlight would stay drawn.
   const rootReference = useRef<HTMLDivElement>(null);
   const reported = useRef(false);
+  // The element last focused inside the tree, and the territory last opened:
+  // the focus-restore rule (spec slice B §5, amended) acts only when that
+  // element left the document and focus fell to `body`.
+  const lastFocused = useRef<HTMLElement | null>(null);
+  const lastTerritory = useRef<string | null>(null);
+  const [focusedControl, setFocusedControl] = useState<"overview" | "unassigned" | null>(null);
+
   useEffect(() => {
-    if (!reported.current) return;
-    if (rootReference.current?.contains(document.activeElement)) return;
-    reported.current = false;
-    onTerritoryFocusChange?.(null);
-    onNodeFocusChange?.(null);
+    const root = rootReference.current;
+    const previous = lastFocused.current;
+    if (reported.current && !root?.contains(document.activeElement)) {
+      reported.current = false;
+      properties.onTerritoryFocusChange?.(null);
+      properties.onNodeFocusChange?.(null);
+    }
+    if (previous !== null && !previous.isConnected && document.activeElement === document.body && root) {
+      lastFocused.current = null;
+      // The withdrawal above runs first, so a restore onto a control with no
+      // canvas shape leaves no stale highlight; a restored territory button
+      // reports itself again from its own `onFocus`.
+      const target =
+        root.querySelector<HTMLElement>("[data-tree-overview]") ??
+        (lastTerritory.current === null
+          ? null
+          : root.querySelector<HTMLElement>(`[data-tree-territory="${CSS.escape(lastTerritory.current)}"]`)) ??
+        root.querySelector<HTMLElement>("button");
+      if (target) target.focus();
+      else properties.onFocusFallback?.();
+    }
   });
+
+  const remember = (element: HTMLElement) => {
+    lastFocused.current = element;
+  };
+  const forget = (relatedTarget: EventTarget | null) => {
+    // Focus moving elsewhere inside the tree keeps the rule armed via the next `remember`.
+    if (relatedTarget instanceof Node && rootReference.current?.contains(relatedTarget)) return;
+    if (relatedTarget !== null) lastFocused.current = null;
+  };
   const territoryFocus = (id: string | null) => {
     reported.current = id !== null;
-    onTerritoryFocusChange?.(id);
+    properties.onTerritoryFocusChange?.(id);
   };
   const nodeFocus = (id: string | null) => {
     reported.current = id !== null;
-    onNodeFocusChange?.(id);
+    properties.onNodeFocusChange?.(id);
   };
+
+  const controlStyle = (control: "overview" | "unassigned") =>
+    focusedControl === control
+      ? {
+          position: "absolute" as const,
+          left: 8,
+          top: 8,
+          zIndex: 3,
+          padding: "4px 8px",
+          minHeight: 24,
+          font: "13px system-ui, sans-serif",
+          background: theme.cardBackground,
+          color: theme.territoryLabel,
+          border: "none",
+          borderRadius: 4,
+          outline: `${theme.focusOutlineWidth}px solid ${theme.focusOutline}`,
+        }
+      : VISUALLY_HIDDEN;
+
+  const territoryButton = (territory: Territory) => (
+    <li key={territory.id}>
+      <button
+        type="button"
+        data-tree-territory={territory.id}
+        onClick={() => {
+          lastTerritory.current = territory.id;
+          onFocusTerritory?.(territory);
+        }}
+        onFocus={(event) => {
+          remember(event.currentTarget);
+          territoryFocus(territory.id);
+        }}
+        onBlur={(event) => {
+          forget(event.relatedTarget);
+          territoryFocus(null);
+        }}
+      >
+        {`${territory.name}, ${itemCount(territory.members.length)}`}
+      </button>
+    </li>
+  );
+
+  const nodeButton = (node: MapNode) => (
+    <li key={node.id}>
+      <button
+        type="button"
+        onClick={() => onSelect?.(node)}
+        onFocus={(event) => {
+          remember(event.currentTarget);
+          nodeFocus(node.id);
+        }}
+        onBlur={(event) => {
+          forget(event.relatedTarget);
+          nodeFocus(null);
+        }}
+      >
+        {node.label}
+      </button>
+    </li>
+  );
+
+  const control = (kind: "overview" | "unassigned", text: string, onClick: (() => void) | undefined) => (
+    <button
+      type="button"
+      data-tree-overview={kind === "overview" ? "" : undefined}
+      data-tree-unassigned={kind === "unassigned" ? "" : undefined}
+      style={controlStyle(kind)}
+      onClick={() => onClick?.()}
+      onFocus={(event) => {
+        remember(event.currentTarget);
+        setFocusedControl(kind);
+      }}
+      onBlur={(event) => {
+        forget(event.relatedTarget);
+        setFocusedControl(null);
+      }}
+    >
+      {text}
+    </button>
+  );
+
+  const shown = spec.territories.filter((territory) => !hidden.has(territory.id));
+  let content: ReactElement;
+  if (regime === "near") {
+    const nodes = visibleNodes(spec, viewport, width, height, cap);
+    const byTerritory = new Map<string | null, MapNode[]>();
+    for (const node of nodes) {
+      const list = byTerritory.get(node.territory) ?? [];
+      list.push(node);
+      byTerritory.set(node.territory, list);
+    }
+    const sections = [
+      ...shown.map((territory) => ({ key: territory.id, name: territory.name, nodes: byTerritory.get(territory.id) })),
+      { key: "unassigned", name: UNASSIGNED, nodes: byTerritory.get(null) },
+    ].filter((section) => section.nodes !== undefined);
+    content = (
+      <>
+        {control("overview", "Back to overview", properties.onOverview)}
+        {sections.map((section) => (
+          <div key={section.key} style={VISUALLY_HIDDEN}>
+            <Heading>{section.name}</Heading>
+            <ul>{section.nodes?.map(nodeButton)}</ul>
+          </div>
+        ))}
+      </>
+    );
+  } else {
+    const byId = new Map(shown.map((territory) => [territory.id, territory] as const));
+    const headed = groups
+      .map((group) => ({
+        group,
+        members: group.members.flatMap((id) => {
+          const territory = byId.get(id);
+          return territory ? [territory] : [];
+        }),
+      }))
+      .filter((entry) => entry.members.length > 0);
+    content = (
+      <>
+        {groups.length === 0 ? (
+          <ul style={VISUALLY_HIDDEN}>{shown.map(territoryButton)}</ul>
+        ) : (
+          headed.map(({ group, members }) => (
+            <div key={group.id} style={VISUALLY_HIDDEN}>
+              <Heading>{group.name}</Heading>
+              <ul>{members.map(territoryButton)}</ul>
+            </div>
+          ))
+        )}
+        {loose.length > 0
+          ? control("unassigned", `${UNASSIGNED}, ${itemCount(loose.length)}`, properties.onUnassigned)
+          : null}
+      </>
+    );
+  }
 
   return (
     <div
       ref={rootReference}
-      style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}
+      data-accessible-tree=""
+      style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0 }}
     >
-      <div role="status" aria-live="polite">
+      <div role="status" aria-live="polite" style={VISUALLY_HIDDEN}>
         {ANNOUNCEMENT[regime]}
       </div>
-      {regime === "near" ? (
-        <ul>
-          {visibleNodes(spec, viewport, width, height, cap).map((node) => (
-            <li key={node.id}>
-              <button
-                type="button"
-                onClick={() => onSelect?.(node)}
-                onFocus={() => nodeFocus(node.id)}
-                onBlur={() => nodeFocus(null)}
-              >
-                {node.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <ul>
-          {spec.territories.map((territory) => (
-            <li key={territory.id}>
-              <button
-                type="button"
-                onClick={() => onFocusTerritory?.(territory)}
-                onFocus={() => territoryFocus(territory.id)}
-                onBlur={() => territoryFocus(null)}
-              >
-                {territory.name} ({territory.members.length})
-              </button>
-            </li>
-          ))}
-          {loose.length > 0 && (
-            <li>
-              {UNASSIGNED} ({loose.length})
-            </li>
-          )}
-        </ul>
-      )}
+      {content}
     </div>
   );
 }
