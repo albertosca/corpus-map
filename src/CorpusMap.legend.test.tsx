@@ -32,7 +32,7 @@ function mount(extra: { legend?: boolean | { corner: "top-left" }; minimap?: { c
   render(
     <CorpusMap
       spec={spec}
-      width={400}
+      width={600}
       height={300}
       renderCard={() => null}
       onViewChange={(view) => views.push(view)}

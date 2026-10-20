@@ -3,6 +3,7 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -27,6 +28,7 @@ import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
+import { onScreenTerritories } from "./territories/hitTest";
 import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { useElementSize } from "./viewport/useElementSize";
@@ -124,6 +126,17 @@ export interface CorpusMapProps {
    * clockwise when the minimap holds its corner.
    */
   legend?: boolean | { corner: MinimapCorner };
+  /**
+   * Territory ids drawn faded (spec categories §5): their points take no
+   * hover, card or selection and leave the accessible tree. Present means
+   * controlled. Unknown ids are ignored, so a list saved against another
+   * corpus never breaks the map.
+   */
+  hiddenTerritories?: readonly string[] | undefined;
+  /** The initial faded ids when `hiddenTerritories` is absent. */
+  defaultHiddenTerritories?: readonly string[] | undefined;
+  /** Fired by every legend checkbox and "Show all", with the new sorted list. */
+  onHiddenTerritoriesChange?: ((ids: string[]) => void) | undefined;
 }
 
 const FIT_PADDING = 24;
@@ -413,11 +426,46 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const groupAlpha = next === "far" ? 1 - fade(ratio, tuning.groupNamesUntil, tuning.fadeBand) : 0;
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
+  // The dimmed set enters memoisation as one key (JSON, so no id can collide
+  // with a separator), filtered to this spec's territories: a fresh array
+  // literal with the same ids repaints nothing, and unknown ids vanish.
+  const [uncontrolledHidden, setUncontrolledHidden] = useState<readonly string[]>(
+    () => properties.defaultHiddenTerritories ?? [],
+  );
+  const controlled = properties.hiddenTerritories !== undefined;
+  const requestedHidden = properties.hiddenTerritories ?? uncontrolledHidden;
+  const territoryIds = useMemo(() => new Set(spec.territories.map((territory) => territory.id)), [spec]);
+  const hiddenKey = JSON.stringify([...new Set(requestedHidden.filter((id) => territoryIds.has(id)))].sort());
+  const dimmed = useMemo<ReadonlySet<string>>(
+    () => (hiddenKey === "[]" ? NO_DIMMED : new Set(JSON.parse(hiddenKey) as string[])),
+    [hiddenKey],
+  );
+  // The spec without dimmed territories' points: what cards, the accessible
+  // tree, hover and `visibleCount` read. Painting keeps the whole spec.
+  const liveSpec = useMemo(
+    () =>
+      dimmed.size === 0
+        ? spec
+        : { ...spec, nodes: spec.nodes.filter((node) => node.territory === null || !dimmed.has(node.territory)) },
+    [spec, dimmed],
+  );
+  const onHiddenChangeReference = useRef(properties.onHiddenTerritoriesChange);
+  useEffect(() => {
+    onHiddenChangeReference.current = properties.onHiddenTerritoriesChange;
+  });
+  const onHiddenChange = useCallback(
+    (ids: string[]) => {
+      if (!controlled) setUncontrolledHidden(ids);
+      onHiddenChangeReference.current?.(ids);
+    },
+    [controlled],
+  );
+
   // `onViewChange`'s node count: on-screen, uncapped — like the hover
   // hit-test's own `visibleNodes(..., Infinity)` call above, not the
   // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
   // same count a maxed-out card cap would otherwise hide (showcase Task 3).
-  const visibleCount = ready ? visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY).length : 0;
+  const visibleCount = ready ? visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).length : 0;
 
   // `false`/absent (no prop, or `minimap={false}`) are identical: no corner,
   // no `Minimap`. `true` picks the default corner; `{ corner }` picks that
@@ -431,6 +479,20 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     () => legendEntries(spec.territories, scene.colours, theme.pointNeutral),
     [spec, scene, theme.pointNeutral],
   );
+  // The legend is memoised: every prop below keeps its identity across a pan
+  // that leaves the on-screen set alone. The on-screen list is recomputed
+  // each render (linear over precomputed boxes) and keyed by its content.
+  const onScreenKey = JSON.stringify(onScreenTerritories(scene.bounds, viewport, width, height));
+  const onScreen = useMemo<ReadonlySet<string>>(() => new Set(JSON.parse(onScreenKey) as string[]), [onScreenKey]);
+  const legendTheme = useMemo(
+    () => ({
+      cardBackground: theme.cardBackground,
+      cardBorder: theme.cardBorder,
+      territoryLabel: theme.territoryLabel,
+      pointNeutral: theme.pointNeutral,
+    }),
+    [theme.cardBackground, theme.cardBorder, theme.territoryLabel, theme.pointNeutral],
+  );
   // Same zoom band as a manual zoom; a territory with no drawable ring has nothing to zoom to.
   const onLegendEntry = (id: string) => {
     const bounds = ringBounds(scene.shapes.get(id) ?? []);
@@ -439,6 +501,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       fitClamped(bounds, width, height, FIT_PADDING, fitScale / MAXIMUM_ZOOM_OUT, fitScale * MAXIMUM_ZOOM_IN),
     );
   };
+  const onLegendEntryReference = useRef(onLegendEntry);
+  useEffect(() => {
+    onLegendEntryReference.current = onLegendEntry;
+  });
+  const stableOnLegendEntry = useCallback((id: string) => onLegendEntryReference.current(id), []);
   const world = useMemo(() => sceneBounds(spec, scene.shapes), [spec, scene]);
   // The main view's own world-space bounding rectangle, in world units —
   // what the minimap draws its view rectangle from, and a dependency of its
@@ -487,6 +554,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         focusedNode: paintedNodeFocus,
         presentation,
         groupAlpha,
+        dimmed,
       },
       theme,
     );
@@ -503,6 +571,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     paintedNodeFocus,
     presentation,
     groupAlpha,
+    dimmed,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
@@ -682,7 +751,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         // card cap, so hover must be resolvable against all of them, not
         // just the first `cardCap` in spec order (C1) — otherwise most
         // on-screen points past the cap are silently unhoverable.
-        const points = visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
+        const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
           const [left, top] = toScreen(viewport, node.x, node.y);
           return { id: node.id, x: left, y: top };
         });
@@ -800,7 +869,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
           {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
           <canvas ref={canvasReference} aria-hidden="true" style={{ width, height, display: "block" }} />
           <CardOverlay
-            spec={spec}
+            spec={liveSpec}
             viewport={viewport}
             regime={next}
             cap={cardCap}
@@ -834,7 +903,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             </div>
           ) : null}
           <AccessibleTree
-            spec={spec}
+            spec={liveSpec}
             regime={next}
             viewport={viewport}
             width={width}
@@ -875,16 +944,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
           {legendPlacement ? (
             <Legend
               entries={legendList}
-              // Wired in Task 8.
               groups={scene.groups}
-              onScreen={NO_DIMMED}
-              hidden={NO_DIMMED}
-              narrow={false}
-              onHiddenChange={() => {}}
+              onScreen={onScreen}
+              hidden={dimmed}
               presentation={presentation}
               corner={legendPlacement}
-              theme={theme}
-              onEntry={onLegendEntry}
+              theme={legendTheme}
+              narrow={width < 480}
+              onEntry={stableOnLegendEntry}
+              onHiddenChange={onHiddenChange}
             />
           ) : null}
         </>
