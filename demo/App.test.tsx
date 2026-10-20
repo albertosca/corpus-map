@@ -1163,6 +1163,19 @@ describe("App (showcase Task 5)", () => {
         }
       });
 
+      it("the map starts below the top bar at every swept width, so the legend's toggle and the fitted names are never under it (slice D browser check)", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+
+        for (const width of SWEEP_WIDTHS) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+          act(() => FakeResizeObserver.fireAll());
+          const mapShell = container.querySelector<HTMLElement>("[data-map-shell]");
+          expect(mapShell?.style.top).toBe(`${FakeResizeObserver.topBarHeight(width)}px`);
+        }
+      });
+
       it("the breakpoint itself is derived from BOTTOM_LEFT_COLUMN_WIDTH, not just the drawer, and clears both it and the drawer", async () => {
         const breakpoint = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER + BUTTON_WIDTH + GUTTER + DRAWER_MAXIMUM_WIDTH + GUTTER;
         setViewportWidth(breakpoint);

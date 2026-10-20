@@ -239,8 +239,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   // Focused when the panel closes -- the gear button in `TopBar`, the same
   // return-focus pattern `mapShellReference`/`Drawer` already use.
   const gearButtonReference = useRef<HTMLButtonElement>(null);
-  // The drawer and the tuning panel start below the top bar, whose height is
-  // measured because it wraps onto more rows on a narrow screen.
+  // The map, the drawer and the tuning panel start below the top bar, whose
+  // height is measured because it wraps onto more rows on a narrow screen. A
+  // map under the bar hid the legend's toggle and the fitted names' top row.
   const topBarReference = useRef<HTMLElement>(null);
   const topBarHeight = useBorderBoxHeight(topBarReference);
 
@@ -432,7 +433,7 @@ export function App({ loadArxiv }: AppProps = {}) {
 
   return (
     <div data-app-shell style={shellStyle}>
-      <div ref={mapShellReference} tabIndex={-1} data-map-shell style={mapShellStyle}>
+      <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
           <CorpusMap
             ref={mapReference}
