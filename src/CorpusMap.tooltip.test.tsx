@@ -152,6 +152,47 @@ describe("territory tooltip", () => {
     expect(container.querySelector("[data-hover-territories]")).toBeNull();
   });
 
+  it("closes when the territory under it is dimmed after it opened", () => {
+    const { container, surface, rerender } = mount({ hiddenTerritories: [] });
+    hoverAt(surface, insideNorth());
+    expect(container.querySelector("[data-hover-territories]")).not.toBeNull();
+    rerender(<CorpusMap spec={spec} width={400} height={300} renderCard={() => null} hiddenTerritories={["north"]} />);
+    expect(container.querySelector("[data-hover-territories]")).toBeNull();
+  });
+
+  it("drops a point name when its territory is dimmed after it opened", () => {
+    const thresholds = { midAt: 0, nearAt: 64 };
+    const { container, surface, rerender } = mount({ thresholds, hiddenTerritories: [] });
+    const point = screenAt(spec, [2, 2]);
+    hoverAt(surface, { clientX: point.clientX + 4, clientY: point.clientY });
+    expect(container.querySelector('[data-hover="north0"]')).not.toBeNull();
+    rerender(
+      <CorpusMap
+        spec={spec}
+        width={400}
+        height={300}
+        renderCard={() => null}
+        thresholds={thresholds}
+        hiddenTerritories={["north"]}
+      />,
+    );
+    expect(container.querySelector("[data-hover]")).toBeNull();
+  });
+
+  it("closes when the pointer moves onto the legend or the minimap", () => {
+    for (const selector of ["[data-legend]", "[data-minimap]"]) {
+      const { container, surface, unmount } = mount({ legend: true, minimap: true });
+      hoverAt(surface, insideNorth());
+      expect(container.querySelector("[data-hover-territories]")).not.toBeNull();
+      const overlay = container.querySelector(selector) as HTMLElement;
+      fireEvent.pointerOver(overlay, { pointerType: "mouse" });
+      fireEvent.pointerMove(overlay, { pointerType: "mouse" });
+      flush();
+      expect(container.querySelector("[data-hover-territories]"), selector).toBeNull();
+      unmount();
+    }
+  });
+
   it("a point wins over its territory in mid and shows the territory's name beside the label", () => {
     const { container, surface } = mount({ thresholds: { midAt: 0, nearAt: 64 } });
     const point = screenAt(spec, [2, 2]);

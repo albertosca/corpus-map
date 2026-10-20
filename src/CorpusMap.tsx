@@ -487,6 +487,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     () => (hiddenKey === "[]" ? NO_DIMMED : new Set(JSON.parse(hiddenKey) as string[])),
     [hiddenKey],
   );
+  // A territory dimmed while it is named, from the legend or by a controlled
+  // consumer, drops the name in this same render (spec categories §5): no
+  // pointer move is coming to re-resolve it while the pointer is elsewhere.
+  if (
+    hover !== null &&
+    dimmed.size > 0 &&
+    (hover.kind === "territories"
+      ? hover.ids.some((id) => dimmed.has(id))
+      : dimmed.has(nodesById.get(hover.id)?.territory ?? ""))
+  )
+    setHover(null);
   // The spec without dimmed territories' points: what cards, the accessible
   // tree, hover and `visibleCount` read. Painting keeps the whole spec.
   const liveSpec = useMemo(
@@ -902,6 +913,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     drag.current = null;
   };
 
+  // The legend and the minimap stop pointer moves, so the map never sees the
+  // pointer arrive on them; entering either closes the hover here instead.
+  const onPointerOver = (event: PointerEvent) => {
+    if (!(event.target instanceof Element) || !event.target.closest("[data-legend], [data-minimap]")) return;
+    hoverPoint.current = null;
+    if (hover !== null) setHover(null);
+  };
+
   // A touch fires `pointerleave` right after `pointerup`, which would close
   // the balloon the tap just opened; a later press closes it instead.
   const onPointerLeave = (event: PointerEvent) => {
@@ -948,6 +967,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onPointerLeave={onPointerLeave}
+      onPointerOver={onPointerOver}
       style={{
         position: "relative",
         // Explicit props keep today's literal pixel box; without them the
