@@ -8,7 +8,7 @@ import { buildScene } from "./shared/scene";
 import { type MapSpec, validateSpec } from "./shared/spec";
 import { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
 import { DEFAULT_TUNING } from "./shared/tuning";
-import { GROUP_LINE_OPACITY } from "./territories/tooltipPosition";
+import { GROUP_LINE_OPACITY, TOOLTIP_ROW_LIMIT } from "./territories/tooltipPosition";
 import { fitScene } from "./viewport/fitScene";
 import { toScreen } from "./viewport/viewport";
 
@@ -112,6 +112,38 @@ describe("territory tooltip", () => {
     const tooltip = container.querySelector("[data-hover-territories]");
     expect(tooltip?.getAttribute("data-hover-territories")).toBe("wide inner");
     expect(tooltip?.textContent).not.toContain("papers");
+  });
+
+  it("caps the rows at TOOLTIP_ROW_LIMIT, largest first, and counts the rest", () => {
+    const nested = Array.from({ length: 8 }, (_unused, index) => ({
+      id: `t${index}`,
+      name: `Nest ${index}`,
+      members: Array.from({ length: index + 1 }, (_member, memberIndex) => `t${index}m${memberIndex}`),
+      centroid: [10, 10] as [number, number],
+      boundary: square(index, index, 20 - 2 * index),
+    }));
+    const stacked = validateSpec({
+      version: "1",
+      territories: nested,
+      nodes: nested.flatMap((territory, index) =>
+        territory.members.map((member, memberIndex) => ({
+          id: member,
+          label: member,
+          x: index + 0.5 + memberIndex * 0.01,
+          y: index + 0.5,
+          territory: territory.id,
+        })),
+      ),
+    });
+    const { container, surface } = mount({}, stacked);
+    hoverAt(surface, screenAt(stacked, [10, 10]));
+    const tooltip = container.querySelector("[data-hover-territories]");
+    expect(tooltip?.getAttribute("data-hover-territories")?.split(" ")).toHaveLength(8);
+    const text = tooltip?.textContent ?? "";
+    for (const index of [7, 6, 5, 4, 3]) expect(text).toContain(`Nest ${index}`);
+    for (const index of [2, 1, 0]) expect(text).not.toContain(`Nest ${index}`);
+    expect(TOOLTIP_ROW_LIMIT).toBe(5);
+    expect(text).toContain("+3 more");
   });
 
   it("does not name a dimmed territory", () => {

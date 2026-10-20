@@ -1053,6 +1053,8 @@ export declare function ringArea(ring: Ring): number;
 export declare const TOOLTIP_OFFSET = 12;
 /** Opacity of the group line in the territory balloon; CorpusMap.tooltip.test.tsx pins 4.5:1 contrast in both themes. */
 export declare const GROUP_LINE_OPACITY = 0.8;
+/** Rows the territory balloon lists before "+N more": deep zoom stacks twenty-odd territories under one cursor. */
+export declare const TOOLTIP_ROW_LIMIT = 5;
 /** The tooltip's top-left corner: below-right of the cursor, flipped on an axis where it would leave the map, never above or left of it. */
 export declare function tooltipPosition(cursorHorizontal: number, cursorVertical: number, boxWidth: number, boxHeight: number, mapWidth: number, mapHeight: number, offset?: number): {
     left: number;

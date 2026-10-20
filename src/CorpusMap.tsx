@@ -30,7 +30,7 @@ import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
-import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, tooltipPosition } from "./territories/tooltipPosition";
+import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { useElementSize } from "./viewport/useElementSize";
@@ -1031,7 +1031,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                 maxWidth: 260,
               }}
             >
-              {hover.ids.map((id) => (
+              {hover.ids.slice(0, TOOLTIP_ROW_LIMIT).map((id) => (
                 <div key={id}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span
@@ -1049,6 +1049,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                   {groupOf.has(id) ? <div style={{ opacity: GROUP_LINE_OPACITY }}>{groupOf.get(id)}</div> : null}
                 </div>
               ))}
+              {hover.ids.length > TOOLTIP_ROW_LIMIT ? (
+                <div style={{ opacity: GROUP_LINE_OPACITY }}>{`+${hover.ids.length - TOOLTIP_ROW_LIMIT} more`}</div>
+              ) : null}
             </div>
           ) : null}
           <AccessibleTree
