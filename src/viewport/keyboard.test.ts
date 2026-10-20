@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import { keyboardCommand, regimeOutRatio } from "./keyboard";
+
+const plain = { shiftKey: false, ctrlKey: false, metaKey: false, altKey: false };
+
+describe("keyboardCommand", () => {
+  it.each([
+    ["ArrowRight", 0.1, 0],
+    ["ArrowLeft", -0.1, 0],
+    ["ArrowDown", 0, 0.1],
+    ["ArrowUp", 0, -0.1],
+  ])("pans a tenth of the view for %s", (key, horizontal, vertical) => {
+    expect(keyboardCommand({ ...plain, key })).toEqual({ kind: "pan", horizontal, vertical });
+  });
+
+  it("pans half the view with Shift", () => {
+    expect(keyboardCommand({ ...plain, key: "ArrowLeft", shiftKey: true })).toEqual({
+      kind: "pan",
+      horizontal: -0.5,
+      vertical: 0,
+    });
+  });
+
+  it.each(["+", "="])("zooms in on %s, with or without Ctrl, Cmd or Shift", (key) => {
+    for (const modifiers of [{}, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) {
+      expect(keyboardCommand({ ...plain, ...modifiers, key })).toEqual({ kind: "zoom", direction: "in" });
+    }
+  });
+
+  it("zooms out on -, with or without Ctrl or Cmd", () => {
+    for (const modifiers of [{}, { ctrlKey: true }, { metaKey: true }]) {
+      expect(keyboardCommand({ ...plain, ...modifiers, key: "-" })).toEqual({ kind: "zoom", direction: "out" });
+    }
+  });
+
+  it.each(["0", "Home"])("fits on %s", (key) => {
+    expect(keyboardCommand({ ...plain, key })).toEqual({ kind: "fit" });
+  });
+
+  it("zooms out one regime on Escape", () => {
+    expect(keyboardCommand({ ...plain, key: "Escape" })).toEqual({ kind: "regimeOut" });
+  });
+
+  it("leaves Ctrl+0 to the browser's zoom reset", () => {
+    expect(keyboardCommand({ ...plain, key: "0", ctrlKey: true })).toBeNull();
+    expect(keyboardCommand({ ...plain, key: "0", metaKey: true })).toBeNull();
+  });
+
+  it("leaves Ctrl or Cmd with arrows, Home and Escape to the browser", () => {
+    for (const key of ["ArrowRight", "Home", "Escape"]) {
+      expect(keyboardCommand({ ...plain, key, ctrlKey: true })).toBeNull();
+      expect(keyboardCommand({ ...plain, key, metaKey: true })).toBeNull();
+    }
+  });
+
+  it("leaves every key with Alt alone", () => {
+    for (const key of ["ArrowRight", "+", "-", "0", "Escape"]) {
+      expect(keyboardCommand({ ...plain, key, altKey: true })).toBeNull();
+    }
+  });
+
+  it("ignores keys it does not own", () => {
+    for (const key of ["a", "Tab", "Enter", " ", "PageDown"]) {
+      expect(keyboardCommand({ ...plain, key })).toBeNull();
+    }
+  });
+});
+
+describe("regimeOutRatio", () => {
+  const defaults = { midAt: 2, nearAt: 6 };
+
+  it("does nothing at far", () => {
+    expect(regimeOutRatio("far", defaults)).toBeNull();
+  });
+
+  it("fits from mid", () => {
+    expect(regimeOutRatio("mid", defaults)).toBe(1);
+  });
+
+  it("goes from near to the geometric middle of the mid band", () => {
+    expect(regimeOutRatio("near", defaults)).toBeCloseTo(Math.sqrt(12), 12);
+  });
+
+  it("fits from near when the mid band is empty", () => {
+    expect(regimeOutRatio("near", { midAt: 6, nearAt: 6 })).toBe(1);
+  });
+
+  it("never zooms in when midAt is below the fitted ratio", () => {
+    const ratio = regimeOutRatio("near", { midAt: 0.5, nearAt: 6 });
+    expect(ratio).toBeCloseTo(Math.sqrt(6), 12);
+    expect(ratio).toBeLessThan(6);
+  });
+
+  it("fits from near when nearAt is at or below 1", () => {
+    expect(regimeOutRatio("near", { midAt: 0, nearAt: 1 })).toBe(1);
+    expect(regimeOutRatio("near", { midAt: 0, nearAt: 0 })).toBe(1);
+  });
+});
