@@ -407,6 +407,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const paintedNodeFocus = next === "near" ? focusedNode : null;
 
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
+  // Group names hold the far map below `groupNamesUntil` and cross-fade to
+  // territory names over `fadeBand` above it; outside far, never.
+  const groupAlpha = next === "far" ? 1 - fade(ratio, tuning.groupNamesUntil, tuning.fadeBand) : 0;
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
   // `onViewChange`'s node count: on-screen, uncapped — like the hover
@@ -482,6 +485,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         focusedTerritory: paintedTerritoryFocus,
         focusedNode: paintedNodeFocus,
         presentation,
+        groupAlpha,
       },
       theme,
     );
@@ -497,6 +501,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     paintedTerritoryFocus,
     paintedNodeFocus,
     presentation,
+    groupAlpha,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the

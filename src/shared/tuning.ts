@@ -20,6 +20,13 @@ export interface Tuning {
   labelClasses: { large: number; medium: number };
   /** Screen-pixel radius within which hovering picks the nearest point (a 24 px target, WCAG 2.5.8). */
   hoverRadius: number;
+  /**
+   * Below this zoom ratio (viewport scale over fit scale) the far map names
+   * groups, not territories; the swap cross-fades over `fadeBand` above it
+   * (spec categories §4). At or above `midAt`, group names hold through all
+   * of far.
+   */
+  groupNamesUntil: number;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -31,6 +38,7 @@ export const DEFAULT_TUNING: Tuning = {
   hullPadding: 2.5,
   labelClasses: { large: 0.8, medium: 0.4 },
   hoverRadius: 12,
+  groupNamesUntil: 1.4,
 };
 
 function validateTuning(tuning: Tuning): void {
@@ -48,6 +56,9 @@ function validateTuning(tuning: Tuning): void {
   }
   if (!Number.isFinite(tuning.fadeBand) || tuning.fadeBand < 0) {
     throw new RangeError(`tuning.fadeBand must be a finite number >= 0, got ${tuning.fadeBand}`);
+  }
+  if (!Number.isFinite(tuning.groupNamesUntil) || tuning.groupNamesUntil < 1) {
+    throw new RangeError(`tuning.groupNamesUntil must be a finite number >= 1, got ${tuning.groupNamesUntil}`);
   }
   if (!Number.isFinite(tuning.hullPadding) || tuning.hullPadding <= 0) {
     throw new RangeError(`tuning.hullPadding must be a finite number > 0, got ${tuning.hullPadding}`);

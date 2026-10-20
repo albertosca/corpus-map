@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { estimateText, LABEL_PADDING } from "../../src/labels/placement";
+import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
-import { regimeAt } from "../../src/lod/regime";
+import { fade, regimeAt } from "../../src/lod/regime";
 import { paint } from "../../src/shared/paint";
 import { buildScene, type Scene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
@@ -103,16 +103,24 @@ interface DrawnBox {
 }
 
 /** Every name `paint` draws for `viewport` into a `width` x `height` canvas, with its `estimateText` box. */
-function drawnBoxes(spec: MapSpec, scene: Scene, viewport: Viewport, width: number, height: number): DrawnBox[] {
+function drawnBoxes(
+  spec: MapSpec,
+  scene: Scene,
+  viewport: Viewport,
+  width: number,
+  height: number,
+  ratio: number,
+): DrawnBox[] {
   const regime = regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis);
+  // The group alpha `CorpusMap` computes for this ratio in far.
+  const groupAlpha = 1 - fade(ratio, DEFAULT_TUNING.groupNamesUntil, DEFAULT_TUNING.fadeBand);
   const surface = new RecordingSurface();
-  paint(surface, scene, spec, viewport, { regime, pointAlpha: 0, width, height }, DEFAULT_THEME);
-  return surface.texts.map((drawn) => ({
-    text: drawn.text,
-    x: drawn.x,
-    y: drawn.y,
-    ...estimateText(drawn.text, drawn.font),
-  }));
+  paint(surface, scene, spec, viewport, { regime, pointAlpha: 0, width, height, groupAlpha }, DEFAULT_THEME);
+  return surface.texts.map((drawn) => {
+    const measured = estimateText(drawn.text, drawn.font);
+    const spacing = drawn.letterSpacing === undefined ? 0 : Number.parseFloat(drawn.letterSpacing) * drawn.text.length;
+    return { text: drawn.text, x: drawn.x, y: drawn.y, width: measured.width + spacing, height: measured.height };
+  });
 }
 
 function overlappingPairs(boxes: readonly DrawnBox[]): string[] {
@@ -158,13 +166,25 @@ describe("acceptance 2: the fitted arXiv view", () => {
     expect(regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis)).toBe("far");
   });
 
+  it("derives 6 groups from the 38 categories, with the probe's contiguous pairs together", () => {
+    expect(scene.groups).toHaveLength(6);
+    const memberships = scene.groups.flatMap((group) => group.members);
+    expect([...memberships].sort()).toEqual(spec.territories.map((territory) => territory.id).sort());
+    const groupOf = (id: string) => scene.groups.find((group) => group.members.includes(id))?.id;
+    expect(groupOf("cs.RO")).toBe(groupOf("cs.CV"));
+    expect(groupOf("cs.GR")).toBe(groupOf("cs.CV"));
+    expect(groupOf("cs.MM")).toBe(groupOf("cs.SD"));
+  });
+
   for (const [width, height] of [
     [1440, 900],
     [375, 812],
   ] as const) {
     it(`at ${width}x${height}: names drawn, none overlapping, none crossing the canvas edge`, () => {
-      const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, width, height, 24), width, height);
+      const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, width, height, 24), width, height, 1);
       expect(boxes.length).toBeGreaterThan(0);
+      // The fitted view names groups.
+      expect(boxes.some((box) => scene.groupLabels.some((label) => label.name === box.text))).toBe(true);
       expect(boxes.filter((box) => crossesEdge(box, width, height)).map((box) => box.text)).toEqual([]);
       expect(overlappingPairs(boxes)).toEqual([]);
     });
@@ -192,9 +212,14 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
       ty: height / 2 - ((height / 2 - fit.ty) / fit.scale) * scale,
     };
   };
-  const anchorsOnScreen = (viewport: Viewport, width: number, height: number): Set<string> => {
+  const anchorsOnScreen = (
+    names: readonly PlacedLabel[],
+    viewport: Viewport,
+    width: number,
+    height: number,
+  ): Set<string> => {
     const out = new Set<string>();
-    for (const placed of scene.labels) {
+    for (const placed of names) {
       if (viewport.scale < placed.activeFromScale) continue;
       const [horizontal, vertical] = toScreen(viewport, placed.anchor[0], placed.anchor[1]);
       if (horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height) out.add(placed.name);
@@ -211,10 +236,19 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
       const pops: string[] = [];
       let compared = 0;
       let crossedEdge = 0;
-      const step = (label: string, before: DrawnBox[], viewport: Viewport): DrawnBox[] => {
-        const now = drawnBoxes(spec, scene, viewport, width, height);
+      // A pan never changes the ratio, so every name drawn counts, group names
+      // included; a zoom counts territory names only: a group name fading out
+      // above `groupNamesUntil` is the designed cross-fade, not a pop.
+      const step = (
+        label: string,
+        before: DrawnBox[],
+        viewport: Viewport,
+        ratio: number,
+        names: readonly PlacedLabel[],
+      ): DrawnBox[] => {
+        const now = drawnBoxes(spec, scene, viewport, width, height, ratio);
         const drawnNow = new Set(now.map((box) => box.text));
-        const anchored = anchorsOnScreen(viewport, width, height);
+        const anchored = anchorsOnScreen(names, viewport, width, height);
         for (const box of before) {
           if (!anchored.has(box.text)) continue;
           compared += 1;
@@ -226,14 +260,23 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
 
       for (const ratio of [1, 2, 4]) {
         const base = aboutCentre(fit, width, height, ratio);
-        let before = drawnBoxes(spec, scene, base, width, height);
+        let before = drawnBoxes(spec, scene, base, width, height, ratio);
         for (let offset = 2; offset <= width; offset += 2) {
-          before = step(`pan r${ratio} dx${offset}`, before, { ...base, tx: base.tx + offset });
+          before = step(`pan r${ratio} dx${offset}`, before, { ...base, tx: base.tx + offset }, ratio, [
+            ...scene.labels,
+            ...scene.groupLabels,
+          ]);
         }
       }
-      let before = drawnBoxes(spec, scene, fit, width, height);
+      let before = drawnBoxes(spec, scene, fit, width, height, 1);
       for (let power = 1; 1.1 ** power <= 64; power += 1) {
-        before = step(`zoom k${power}`, before, aboutCentre(fit, width, height, 1.1 ** power));
+        before = step(
+          `zoom k${power}`,
+          before,
+          aboutCentre(fit, width, height, 1.1 ** power),
+          1.1 ** power,
+          scene.labels,
+        );
       }
 
       expect(pops).toEqual([]);

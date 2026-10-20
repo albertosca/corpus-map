@@ -1,5 +1,5 @@
 import { DENSE_NAME_ALPHA, type Presentation } from "../shared/presentation";
-import type { Scene } from "../shared/scene";
+import { GROUP_LETTER_SPACING, type Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { toScreen, type Viewport } from "../viewport/viewport";
@@ -11,36 +11,69 @@ export interface LabelBox {
   height: number;
   /** Absent means guided. */
   presentation?: Presentation | undefined;
+  /** Group names' alpha (spec categories §4); territory names take the rest. Absent means 0. */
+  groupAlpha?: number | undefined;
+}
+
+interface Item {
+  name: string;
+  anchor: readonly [number, number];
+  font: string;
+  alpha: number;
+  letterSpacing?: string;
 }
 
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
  * scale has reached, except a name whose measured box is wider or taller
- * than the canvas: it could never be read whole anywhere on screen (a long
- * name on a phone-width view appears once the box is large enough).
- * Where a name sits never enters the decision, so pan and zoom cannot make
- * a name pop out: a name that fits slides off the edge, clipped by the
- * canvas, and a position-dependent skip would break map-feel metric 7.
- * In dense, large names keep full emphasis and the medium and small ones are
- * drawn at `DENSE_NAME_ALPHA`, after the large ones.
+ * than the canvas: it could never be read whole anywhere on screen. Where a
+ * name sits never enters the decision, so pan and zoom cannot make a name
+ * pop out (map-feel metric 7).
+ *
+ * With groups, group names are drawn at `groupAlpha` and territory names at
+ * the rest, so the two levels cross-fade; without groups `groupAlpha` is
+ * ignored. In dense, medium and small territory names are drawn at
+ * `DENSE_NAME_ALPHA`. Names are drawn brightest first (a stable sort keeps
+ * the placement order within an alpha), `globalAlpha` is set only when it
+ * changes and is left at 1, and a name at alpha 0 is not drawn at all.
  */
 export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void {
-  const drawn = scene.labels.filter(
-    (label) => viewport.scale >= label.activeFromScale && label.width <= box.width && label.height <= box.height,
-  );
-  const draw = (label: PlacedLabel) => {
-    const [horizontal, vertical] = toScreen(viewport, label.anchor[0], label.anchor[1]);
-    surface.text(label.name, horizontal, vertical, theme.territoryLabel, theme.territoryFonts[label.labelClass]);
-  };
-  if (box.presentation !== "dense") {
-    for (const label of drawn) draw(label);
-    return;
+  const hasGroups = scene.groups.length > 0;
+  const groupAlpha = hasGroups ? (box.groupAlpha ?? 0) : 0;
+  const territoryAlpha = 1 - groupAlpha;
+  const fits = (label: PlacedLabel) =>
+    viewport.scale >= label.activeFromScale && label.width <= box.width && label.height <= box.height;
+  const items: Item[] = [];
+  if (territoryAlpha > 0)
+    for (const label of scene.labels)
+      if (fits(label))
+        items.push({
+          name: label.name,
+          anchor: label.anchor,
+          font: theme.territoryFonts[label.labelClass],
+          alpha: territoryAlpha * (box.presentation === "dense" && label.labelClass !== "large" ? DENSE_NAME_ALPHA : 1),
+        });
+  if (groupAlpha > 0)
+    for (const label of scene.groupLabels)
+      if (fits(label))
+        items.push({
+          name: label.name,
+          anchor: label.anchor,
+          font: theme.territoryFonts.large,
+          alpha: groupAlpha,
+          letterSpacing: `${GROUP_LETTER_SPACING}px`,
+        });
+  items.sort((first, second) => second.alpha - first.alpha);
+  let current = 1;
+  for (const item of items) {
+    if (item.alpha !== current) {
+      surface.globalAlpha(item.alpha);
+      current = item.alpha;
+    }
+    const [horizontal, vertical] = toScreen(viewport, item.anchor[0], item.anchor[1]);
+    if (item.letterSpacing === undefined)
+      surface.text(item.name, horizontal, vertical, theme.territoryLabel, item.font);
+    else surface.text(item.name, horizontal, vertical, theme.territoryLabel, item.font, item.letterSpacing);
   }
-  // Dense: large names keep full emphasis; the rest step back (spec slice D §4).
-  const muted = drawn.filter((label) => label.labelClass !== "large");
-  for (const label of drawn) if (label.labelClass === "large") draw(label);
-  if (muted.length === 0) return;
-  surface.globalAlpha(DENSE_NAME_ALPHA);
-  for (const label of muted) draw(label);
-  surface.globalAlpha(1);
+  if (current !== 1) surface.globalAlpha(1);
 }

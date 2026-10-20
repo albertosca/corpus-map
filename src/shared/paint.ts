@@ -31,6 +31,8 @@ export interface Frame {
   focusedNode?: string | null | undefined;
   /** Guided or dense emphasis (spec slice D §4); absent means guided. */
   presentation?: Presentation | undefined;
+  /** Group names' alpha this frame (spec categories §4); absent means 0. */
+  groupAlpha?: number | undefined;
 }
 
 /**

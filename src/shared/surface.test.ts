@@ -3,17 +3,17 @@ import { canvasSurface, RecordingSurface } from "./surface";
 
 describe("canvasSurface", () => {
   it("calls clearRect with canvas dimensions on clear()", () => {
-    const ctx = {
+    const context = {
       clearRect: vi.fn(),
       canvas: { width: 300, height: 150 },
     } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+    const surface = canvasSurface(context);
     surface.clear();
-    expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 300, 150);
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 300, 150);
   });
 
   it("draws a 3-point polygon with correct path calls", () => {
-    const ctx = {
+    const context = {
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
@@ -23,7 +23,7 @@ describe("canvasSurface", () => {
       fillStyle: "",
       strokeStyle: "",
     } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+    const surface = canvasSurface(context);
     const pts: Array<[number, number]> = [
       [10, 20],
       [30, 40],
@@ -31,20 +31,20 @@ describe("canvasSurface", () => {
     ];
     surface.polygon(pts, "red", "blue");
 
-    expect(ctx.beginPath).toHaveBeenCalledOnce();
-    expect(ctx.moveTo).toHaveBeenCalledWith(10, 20);
-    expect(ctx.lineTo).toHaveBeenCalledWith(30, 40);
-    expect(ctx.lineTo).toHaveBeenCalledWith(50, 60);
-    expect(ctx.lineTo).toHaveBeenCalledTimes(2);
-    expect(ctx.closePath).toHaveBeenCalledOnce();
-    expect(ctx.fill).toHaveBeenCalledOnce();
-    expect(ctx.stroke).toHaveBeenCalledOnce();
-    expect(ctx.fillStyle).toBe("red");
-    expect(ctx.strokeStyle).toBe("blue");
+    expect(context.beginPath).toHaveBeenCalledOnce();
+    expect(context.moveTo).toHaveBeenCalledWith(10, 20);
+    expect(context.lineTo).toHaveBeenCalledWith(30, 40);
+    expect(context.lineTo).toHaveBeenCalledWith(50, 60);
+    expect(context.lineTo).toHaveBeenCalledTimes(2);
+    expect(context.closePath).toHaveBeenCalledOnce();
+    expect(context.fill).toHaveBeenCalledOnce();
+    expect(context.stroke).toHaveBeenCalledOnce();
+    expect(context.fillStyle).toBe("red");
+    expect(context.strokeStyle).toBe("blue");
   });
 
   it("skips path drawing for empty point array", () => {
-    const ctx = {
+    const context = {
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
@@ -54,53 +54,53 @@ describe("canvasSurface", () => {
       fillStyle: "",
       strokeStyle: "",
     } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+    const surface = canvasSurface(context);
     surface.polygon([], "red", "blue");
 
-    expect(ctx.beginPath).not.toHaveBeenCalled();
-    expect(ctx.moveTo).not.toHaveBeenCalled();
-    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(context.beginPath).not.toHaveBeenCalled();
+    expect(context.moveTo).not.toHaveBeenCalled();
+    expect(context.fill).not.toHaveBeenCalled();
   });
 
   it("draws a circle with arc and fill", () => {
-    const ctx = {
+    const context = {
       beginPath: vi.fn(),
       arc: vi.fn(),
       fill: vi.fn(),
       fillStyle: "",
     } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+    const surface = canvasSurface(context);
     surface.circle("node1", 100, 150, 5, "orange");
 
-    expect(ctx.beginPath).toHaveBeenCalledOnce();
-    expect(ctx.arc).toHaveBeenCalledWith(100, 150, 5, 0, Math.PI * 2);
-    expect(ctx.fill).toHaveBeenCalledOnce();
-    expect(ctx.fillStyle).toBe("orange");
+    expect(context.beginPath).toHaveBeenCalledOnce();
+    expect(context.arc).toHaveBeenCalledWith(100, 150, 5, 0, Math.PI * 2);
+    expect(context.fill).toHaveBeenCalledOnce();
+    expect(context.fillStyle).toBe("orange");
   });
 
   it("renders text with fillStyle, font, and fillText, centred on (x, y)", () => {
-    const ctx = {
+    const context = {
       fillStyle: "",
       font: "",
       textAlign: "",
       textBaseline: "",
       fillText: vi.fn(),
     } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+    const surface = canvasSurface(context);
     surface.text("Hello", 50, 75, "green", "bold 16px Arial");
 
-    expect(ctx.fillStyle).toBe("green");
-    expect(ctx.font).toBe("bold 16px Arial");
-    expect(ctx.textAlign).toBe("center");
-    expect(ctx.textBaseline).toBe("middle");
-    expect(ctx.fillText).toHaveBeenCalledWith("Hello", 50, 75);
+    expect(context.fillStyle).toBe("green");
+    expect(context.font).toBe("bold 16px Arial");
+    expect(context.textAlign).toBe("center");
+    expect(context.textBaseline).toBe("middle");
+    expect(context.fillText).toHaveBeenCalledWith("Hello", 50, 75);
   });
 
-  it("sets ctx.globalAlpha", () => {
-    const ctx = { globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
-    const surface = canvasSurface(ctx);
+  it("sets context.globalAlpha", () => {
+    const context = { globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
+    const surface = canvasSurface(context);
     surface.globalAlpha(0.5);
-    expect(ctx.globalAlpha).toBe(0.5);
+    expect(context.globalAlpha).toBe(0.5);
   });
 
   function strokeCtx() {
@@ -120,8 +120,8 @@ describe("canvasSurface", () => {
   }
 
   it("strokes an outline ring without filling it, inside save/restore", () => {
-    const ctx = strokeCtx();
-    canvasSurface(ctx as unknown as CanvasRenderingContext2D).outline(
+    const context = strokeCtx();
+    canvasSurface(context as unknown as CanvasRenderingContext2D).outline(
       [
         [0, 0],
         [4, 0],
@@ -130,31 +130,50 @@ describe("canvasSurface", () => {
       "#123456",
       3,
     );
-    expect(ctx.moveTo).toHaveBeenCalledWith(0, 0);
-    expect(ctx.lineTo).toHaveBeenCalledTimes(2);
-    expect(ctx.stroke).toHaveBeenCalledOnce();
-    expect(ctx.fill).not.toHaveBeenCalled();
-    expect(ctx.strokeStyle).toBe("#123456");
-    expect(ctx.lineWidth).toBe(3);
-    expect(ctx.save).toHaveBeenCalledOnce();
-    expect(ctx.restore).toHaveBeenCalledOnce();
+    expect(context.moveTo).toHaveBeenCalledWith(0, 0);
+    expect(context.lineTo).toHaveBeenCalledTimes(2);
+    expect(context.stroke).toHaveBeenCalledOnce();
+    expect(context.fill).not.toHaveBeenCalled();
+    expect(context.strokeStyle).toBe("#123456");
+    expect(context.lineWidth).toBe(3);
+    expect(context.save).toHaveBeenCalledOnce();
+    expect(context.restore).toHaveBeenCalledOnce();
   });
 
   it("draws nothing for an empty outline", () => {
-    const ctx = strokeCtx();
-    canvasSurface(ctx as unknown as CanvasRenderingContext2D).outline([], "#123456", 3);
-    expect(ctx.beginPath).not.toHaveBeenCalled();
-    expect(ctx.stroke).not.toHaveBeenCalled();
+    const context = strokeCtx();
+    canvasSurface(context as unknown as CanvasRenderingContext2D).outline([], "#123456", 3);
+    expect(context.beginPath).not.toHaveBeenCalled();
+    expect(context.stroke).not.toHaveBeenCalled();
   });
 
   it("strokes a ring as a full circle without filling it", () => {
-    const ctx = strokeCtx();
-    canvasSurface(ctx as unknown as CanvasRenderingContext2D).ring(10, 20, 6, "#123456", 3);
-    expect(ctx.arc).toHaveBeenCalledWith(10, 20, 6, 0, Math.PI * 2);
-    expect(ctx.stroke).toHaveBeenCalledOnce();
-    expect(ctx.fill).not.toHaveBeenCalled();
-    expect(ctx.lineWidth).toBe(3);
-    expect(ctx.restore).toHaveBeenCalledOnce();
+    const context = strokeCtx();
+    canvasSurface(context as unknown as CanvasRenderingContext2D).ring(10, 20, 6, "#123456", 3);
+    expect(context.arc).toHaveBeenCalledWith(10, 20, 6, 0, Math.PI * 2);
+    expect(context.stroke).toHaveBeenCalledOnce();
+    expect(context.fill).not.toHaveBeenCalled();
+    expect(context.lineWidth).toBe(3);
+    expect(context.restore).toHaveBeenCalledOnce();
+  });
+
+  it("draws with the letter spacing and restores the previous one", () => {
+    const seen: string[] = [];
+    const fake = {
+      letterSpacing: "0px",
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      fillText(text: string) {
+        seen.push(`${text}@${fake.letterSpacing}`);
+      },
+    };
+    const surface = canvasSurface(fake as unknown as CanvasRenderingContext2D);
+    surface.text("spaced", 0, 0, "#000", "12px a", "1px");
+    surface.text("plain", 0, 0, "#000", "12px a");
+    expect(seen).toEqual(["spaced@1px", "plain@0px"]);
+    expect(fake.letterSpacing).toBe("0px");
   });
 });
 
@@ -172,5 +191,15 @@ describe("RecordingSurface", () => {
     surface.globalAlpha(1);
     expect(surface.calls).toEqual(["alpha", "alpha"]);
     expect(surface.alphas).toEqual([0.5, 1]);
+  });
+
+  it("records letterSpacing only when given", () => {
+    const surface = new RecordingSurface();
+    surface.text("plain", 0, 0, "#000", "12px a");
+    surface.text("spaced", 0, 0, "#000", "12px a", "1px");
+    expect(surface.texts).toEqual([
+      { text: "plain", x: 0, y: 0, color: "#000", font: "12px a" },
+      { text: "spaced", x: 0, y: 0, color: "#000", font: "12px a", letterSpacing: "1px" },
+    ]);
   });
 });

@@ -2,8 +2,8 @@ export interface Surface {
   clear(): void;
   polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
   circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
-  /** Draws `text` centred on (horizontal, vertical). */
-  text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
+  /** Draws `text` centred on (horizontal, vertical); `letterSpacing` (a CSS length) applies to this call only. */
+  text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
   /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
   globalAlpha(alpha: number): void;
   /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
@@ -25,7 +25,7 @@ export class RecordingSurface implements Surface {
   cleared = 0;
   polygons: Array<{ points: Array<[number, number]>; fill: string; stroke: string }> = [];
   circles: Array<{ id: string; x: number; y: number; r: number; fill: string }> = [];
-  texts: Array<{ text: string; x: number; y: number; color: string; font: string }> = [];
+  texts: Array<{ text: string; x: number; y: number; color: string; font: string; letterSpacing?: string }> = [];
   alphas: number[] = [];
   outlines: Array<{ points: Array<[number, number]>; color: string; width: number }> = [];
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
@@ -51,9 +51,13 @@ export class RecordingSurface implements Surface {
     this.calls.push("hollowCircle");
     this.hollowCircles.push({ id, x: horizontal, y: vertical, r: radius, colour, width });
   }
-  text(text: string, horizontal: number, vertical: number, color: string, font: string) {
+  text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string) {
     this.calls.push("text");
-    this.texts.push({ text, x: horizontal, y: vertical, color, font });
+    this.texts.push(
+      letterSpacing === undefined
+        ? { text, x: horizontal, y: vertical, color, font }
+        : { text, x: horizontal, y: vertical, color, font, letterSpacing },
+    );
   }
   globalAlpha(alpha: number) {
     this.calls.push("alpha");
@@ -120,12 +124,19 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.stroke();
       context.restore();
     },
-    text(text, horizontal, vertical, color, font) {
+    text(text, horizontal, vertical, color, font, letterSpacing) {
       context.fillStyle = color;
       context.font = font;
       context.textAlign = "center";
       context.textBaseline = "middle";
+      if (letterSpacing === undefined) {
+        context.fillText(text, horizontal, vertical);
+        return;
+      }
+      const previous = context.letterSpacing;
+      context.letterSpacing = letterSpacing;
       context.fillText(text, horizontal, vertical);
+      context.letterSpacing = previous;
     },
     globalAlpha(alpha) {
       context.globalAlpha = alpha;
