@@ -116,10 +116,19 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
   const remember = (element: HTMLElement) => {
     lastFocused.current = element;
   };
-  const forget = (relatedTarget: EventTarget | null) => {
+  const forget = (element: HTMLElement, relatedTarget: EventTarget | null) => {
     // Focus moving elsewhere inside the tree keeps the rule armed via the next `remember`.
     if (relatedTarget instanceof Node && rootReference.current?.contains(relatedTarget)) return;
-    if (relatedTarget !== null) lastFocused.current = null;
+    if (relatedTarget !== null) {
+      lastFocused.current = null;
+      return;
+    }
+    // No related target: either the element is being unmounted (the rule's
+    // case) or the reader clicked plain page content (focus to `body`, the
+    // element still mounted). Tell them apart once the current commit is over.
+    queueMicrotask(() => {
+      if (element.isConnected && lastFocused.current === element) lastFocused.current = null;
+    });
   };
   const territoryFocus = (id: string | null) => {
     reported.current = id !== null;
@@ -162,7 +171,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
           territoryFocus(territory.id);
         }}
         onBlur={(event) => {
-          forget(event.relatedTarget);
+          forget(event.currentTarget, event.relatedTarget);
           territoryFocus(null);
         }}
       >
@@ -181,7 +190,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
           nodeFocus(node.id);
         }}
         onBlur={(event) => {
-          forget(event.relatedTarget);
+          forget(event.currentTarget, event.relatedTarget);
           nodeFocus(null);
         }}
       >
@@ -202,7 +211,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
         setFocusedControl(kind);
       }}
       onBlur={(event) => {
-        forget(event.relatedTarget);
+        forget(event.currentTarget, event.relatedTarget);
         setFocusedControl(null);
       }}
     >

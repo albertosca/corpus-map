@@ -244,6 +244,18 @@ describe("AccessibleTree", () => {
     outside.remove();
   });
 
+  it("does not take focus back after a click on plain page content sent focus to body", async () => {
+    const { rerender } = render(
+      <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
+    );
+    const button = screen.getByRole("button", { name: "North, 2 items" });
+    act(() => button.focus());
+    // A click on non-focusable text blurs with no relatedTarget while the button stays mounted.
+    await act(async () => button.blur());
+    rerender(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("calls the fallback when the new tree has nothing to focus", () => {
     const onFocusFallback = vi.fn();
     const territoriesOnly: MapSpec = { ...spec, nodes: spec.nodes.filter((node) => node.territory !== null) };
