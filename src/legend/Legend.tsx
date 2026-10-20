@@ -26,6 +26,16 @@ export interface LegendProps {
 const SWATCH = 12;
 
 const plainButton = { minHeight: 24, background: "none", border: "none", padding: 0, cursor: "pointer" } as const;
+/** The native checkbox is 13 px; its label carries the 24 px touch target. */
+const checkboxTarget = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "none",
+  minWidth: 24,
+  minHeight: 24,
+  cursor: "pointer",
+} as const;
 
 function stop(event: SyntheticEvent): void {
   event.stopPropagation();
@@ -132,15 +142,18 @@ export function LegendView(properties: LegendProps): ReactElement {
               <div key={group.id}>
                 {model.flat ? null : (
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Show ${group.name}`}
-                      checked={group.shown === "all"}
-                      ref={(element) => {
-                        if (element) element.indeterminate = group.shown === "mixed";
-                      }}
-                      onChange={() => toggleGroup(group.memberIds, group.shown)}
-                    />
+                    <label style={checkboxTarget}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Show ${group.name}`}
+                        checked={group.shown === "all"}
+                        ref={(element) => {
+                          if (element) element.indeterminate = group.shown === "mixed";
+                        }}
+                        onChange={() => toggleGroup(group.memberIds, group.shown)}
+                        style={{ margin: 0 }}
+                      />
+                    </label>
                     <button
                       type="button"
                       aria-expanded={open}
@@ -163,12 +176,15 @@ export function LegendView(properties: LegendProps): ReactElement {
                           opacity: row.onScreen ? 1 : OFF_SCREEN_OPACITY,
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          aria-label={`Show ${row.name}`}
-                          checked={!row.hidden}
-                          onChange={() => toggleRow(row.id)}
-                        />
+                        <label style={checkboxTarget}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Show ${row.name}`}
+                            checked={!row.hidden}
+                            onChange={() => toggleRow(row.id)}
+                            style={{ margin: 0 }}
+                          />
+                        </label>
                         <button
                           type="button"
                           onClick={() => {

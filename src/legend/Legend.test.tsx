@@ -75,6 +75,17 @@ describe("Legend", () => {
     render(<Legend {...props()} />);
     expect(screen.getByRole("button", { name: "North" }).style.minHeight).toBe("24px");
   });
+
+  it("gives every checkbox a 24 px hit area through its label, not just the native 13 px box", () => {
+    render(<Legend {...props()} />);
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      const label = box.closest("label");
+      expect(label?.style.minWidth).toBe("24px");
+      expect(label?.style.minHeight).toBe("24px");
+    }
+  });
 });
 
 describe("full legend", () => {
