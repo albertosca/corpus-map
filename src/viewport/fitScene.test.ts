@@ -39,21 +39,25 @@ describe("fitScene", () => {
         ],
       ],
     ]);
-    const viewport = fitScene(spec, { shapes, labels: [] }, 400, 300, 24);
+    const viewport = fitScene(spec, { shapes, labels: [], groupLabels: [] }, 400, 300, 24);
     expect(viewport).toEqual(fitBounds(sceneBounds(spec, shapes), 400, 300, 24));
   });
 
   it("keeps a name anchored near the edge whole inside the box", () => {
     const placed = label([0, 5], 160);
-    const viewport = fitScene(spec, { shapes: new Map(), labels: [placed] }, 400, 300, 24);
+    const viewport = fitScene(spec, { shapes: new Map(), labels: [placed], groupLabels: [] }, 400, 300, 24);
     const [horizontal] = toScreen(viewport, placed.anchor[0], placed.anchor[1]);
     expect(horizontal - placed.width / 2).toBeGreaterThanOrEqual(0);
   });
 
   it("ignores a name wider than the box and a name not yet active", () => {
-    const plain = fitScene(spec, { shapes: new Map(), labels: [] }, 400, 300, 24);
-    expect(fitScene(spec, { shapes: new Map(), labels: [label([0, 5], 500)] }, 400, 300, 24)).toEqual(plain);
-    expect(fitScene(spec, { shapes: new Map(), labels: [label([0, 5], 160, 1e9)] }, 400, 300, 24)).toEqual(plain);
+    const plain = fitScene(spec, { shapes: new Map(), labels: [], groupLabels: [] }, 400, 300, 24);
+    expect(fitScene(spec, { shapes: new Map(), labels: [label([0, 5], 500)], groupLabels: [] }, 400, 300, 24)).toEqual(
+      plain,
+    );
+    expect(
+      fitScene(spec, { shapes: new Map(), labels: [label([0, 5], 160, 1e9)], groupLabels: [] }, 400, 300, 24),
+    ).toEqual(plain);
   });
 
   it("frames boundary rings when there are no nodes, and the unit box for an empty spec", () => {
@@ -70,11 +74,42 @@ describe("fitScene", () => {
         ],
       ],
     ]);
-    expect(fitScene(empty, { shapes, labels: [] }, 400, 300, 24)).toEqual(
+    expect(fitScene(empty, { shapes, labels: [], groupLabels: [] }, 400, 300, 24)).toEqual(
       fitBounds({ minX: 0, minY: 0, maxX: 8, maxY: 4 }, 400, 300, 24),
     );
-    expect(fitScene(empty, { shapes: new Map(), labels: [] }, 400, 300, 24)).toEqual(
+    expect(fitScene(empty, { shapes: new Map(), labels: [], groupLabels: [] }, 400, 300, 24)).toEqual(
       fitBounds({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, 400, 300, 24),
     );
   });
+});
+
+it("counts the group names, not the territory names, when the scene has groups", () => {
+  const base = {
+    shapes: new Map([
+      [
+        "t",
+        [
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+          ] as Array<[number, number]>,
+        ],
+      ],
+    ]),
+  };
+  const emptySpec: MapSpec = { version: "1", territories: [], nodes: [] };
+  const wide: PlacedLabel = {
+    id: "g",
+    name: "G",
+    anchor: [10, 5],
+    labelClass: "large",
+    width: 300,
+    height: 20,
+    activeFromScale: 0,
+  };
+  const withGroups = fitScene(emptySpec, { ...base, labels: [], groupLabels: [wide] }, 400, 400, 0);
+  const withoutGroups = fitScene(emptySpec, { ...base, labels: [], groupLabels: [] }, 400, 400, 0);
+  expect(withGroups.scale).toBeLessThan(withoutGroups.scale);
 });

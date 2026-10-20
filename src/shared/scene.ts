@@ -1,8 +1,10 @@
 import { type Measure, type PlacedLabel, placeLabels } from "../labels/placement";
 import { poleOfInaccessibility } from "../labels/pole";
 import { assignTerritoryColours, largestFirst } from "../territories/colour";
-import { disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
-import type { MapNode, MapSpec } from "./spec";
+import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
+import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
+import { type Bounds, ringBounds } from "../viewport/fit";
+import type { MapNode, MapSpec, Territory } from "./spec";
 import type { Theme } from "./theme";
 import type { Tuning } from "./tuning";
 
@@ -15,12 +17,48 @@ export interface Scene {
   colours: ReadonlyMap<string, string>;
   /** Territory ids, largest total ring area first: the fill layer's paint order. */
   paintOrder: readonly string[];
+  /** The spec's groups (`deriveTerritoryGroups`); empty when it has none. */
+  groups: readonly TerritoryGroup[];
+  /** One placed name per group, measured in the large font plus its letter spacing; `id` is the group's id. */
+  groupLabels: readonly PlacedLabel[];
+  /** Each territory's world-space bounding box; a territory without rings is absent. */
+  bounds: ReadonlyMap<string, Bounds>;
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
   let best: Ring | undefined;
   for (const ring of rings) if (!best || ringArea(ring) > ringArea(best)) best = ring;
   return best;
+}
+
+/** Extra space between a group name's letters, in CSS pixels; the painter draws with the same value. */
+export const GROUP_LETTER_SPACING = 1;
+
+/**
+ * The member-count-weighted mean of the members' centroids, unless it lies
+ * outside every member ring (a group of two distant regions): then the
+ * largest member's own name anchor, which always sits inside that member.
+ */
+function groupAnchor(
+  group: TerritoryGroup,
+  territories: ReadonlyMap<string, Territory>,
+  shapes: ReadonlyMap<string, Ring[]>,
+  anchors: ReadonlyMap<string, Point>,
+): Point {
+  const largestAnchor = anchors.get(group.members[0] as string) as Point;
+  let weight = 0;
+  let horizontal = 0;
+  let vertical = 0;
+  for (const id of group.members) {
+    const territory = territories.get(id) as Territory;
+    weight += territory.members.length;
+    horizontal += territory.members.length * territory.centroid[0];
+    vertical += territory.members.length * territory.centroid[1];
+  }
+  if (weight === 0) return largestAnchor;
+  const mean: Point = [horizontal / weight, vertical / weight];
+  const inside = group.members.some((id) => (shapes.get(id) ?? []).some((ring) => contains(ring, mean)));
+  return inside ? mean : largestAnchor;
 }
 
 /**
@@ -63,11 +101,38 @@ export function buildScene(
         : [territory.centroid[0], territory.centroid[1]];
     return { id: territory.id, name: territory.name, anchor, members: territory.members.length };
   });
+  const anchors = new Map(inputs.map((input) => [input.id, input.anchor]));
+  const territoriesById = new Map(spec.territories.map((territory) => [territory.id, territory]));
+  const groups = deriveTerritoryGroups(spec);
+  const groupFont = theme.territoryFonts.large;
+  const spaced: Measure = (text, font) => {
+    const measured = measure(text, font);
+    return { width: measured.width + GROUP_LETTER_SPACING * text.length, height: measured.height };
+  };
+  const groupInputs = groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    anchor: groupAnchor(group, territoriesById, shapes, anchors),
+    members: group.members.reduce((total, id) => total + (territoriesById.get(id) as Territory).members.length, 0),
+  }));
+  const bounds = new Map<string, Bounds>();
+  for (const [id, rings] of shapes) {
+    const box = ringBounds(rings);
+    if (box) bounds.set(id, box);
+  }
   return {
     byId,
     shapes,
     labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure),
     colours: assignTerritoryColours(shapes, spec.territories, theme.palette),
     paintOrder: largestFirst(shapes),
+    groups,
+    groupLabels: placeLabels(
+      groupInputs,
+      { large: groupFont, medium: groupFont, small: groupFont },
+      tuning.labelClasses,
+      spaced,
+    ),
+    bounds,
   };
 }

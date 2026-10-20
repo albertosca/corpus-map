@@ -8,7 +8,8 @@ export const LABEL_FIT_PASSES = 3;
 
 /**
  * The first view: every territory outline whole, and every name that is
- * active and fits the box whole too (closes the BACKLOG item about names cut
+ * active at the fit (group names when the scene has groups) and fits the box
+ * whole too (closes the BACKLOG item about names cut
  * at the fitted phone view). A name's box is in screen pixels, so its extent
  * in world units depends on the scale being chosen; each pass widens the
  * shape bounds by the names at the previous pass's scale and refits.
@@ -21,27 +22,33 @@ export const LABEL_FIT_PASSES = 3;
  */
 export function fitScene(
   spec: MapSpec,
-  scene: Pick<Scene, "shapes" | "labels">,
+  scene: Pick<Scene, "shapes" | "labels" | "groupLabels">,
   width: number,
   height: number,
   padding: number,
 ): Viewport {
   const base = sceneBounds(spec, scene.shapes);
   let viewport = fitBounds(base, width, height, padding);
-  const counted = scene.labels.filter(
+  // With groups, the fitted view (ratio 1, below `groupNamesUntil`) shows
+  // group names, not territory names: those are the ones to keep whole.
+  const names = scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
+  const counted = names.filter(
     (label) => viewport.scale >= label.activeFromScale && label.width <= width && label.height <= height,
   );
   for (let pass = 0; pass < LABEL_FIT_PASSES; pass += 1) {
-    let { minX, minY, maxX, maxY } = base;
+    let left = base.minX;
+    let top = base.minY;
+    let right = base.maxX;
+    let bottom = base.maxY;
     for (const label of counted) {
       const halfWidth = label.width / 2 / viewport.scale;
       const halfHeight = label.height / 2 / viewport.scale;
-      minX = Math.min(minX, label.anchor[0] - halfWidth);
-      maxX = Math.max(maxX, label.anchor[0] + halfWidth);
-      minY = Math.min(minY, label.anchor[1] - halfHeight);
-      maxY = Math.max(maxY, label.anchor[1] + halfHeight);
+      left = Math.min(left, label.anchor[0] - halfWidth);
+      right = Math.max(right, label.anchor[0] + halfWidth);
+      top = Math.min(top, label.anchor[1] - halfHeight);
+      bottom = Math.max(bottom, label.anchor[1] + halfHeight);
     }
-    viewport = fitBounds({ minX, minY, maxX, maxY }, width, height, padding);
+    viewport = fitBounds({ minX: left, minY: top, maxX: right, maxY: bottom }, width, height, padding);
   }
   return viewport;
 }
