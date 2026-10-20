@@ -33,7 +33,7 @@ import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
-import { boundsOf, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
+import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import { useElementSize } from "./viewport/useElementSize";
@@ -579,13 +579,25 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     );
   };
   // Lands in near by construction (spec slice B §5, amended): the loose
-  // nodes' box at no less than the scale a territory button zooms to.
+  // nodes' box at no less than the scale a territory button zooms to. A box
+  // too wide for that scale would centre on its middle, which may hold no
+  // loose node at all; then the view centres on the loose node nearest that
+  // middle instead, so the reader always lands on one.
   const onUnassigned = () => {
     const loose = liveSpec.nodes.filter((node) => node.territory === null);
     if (loose.length === 0) return;
     const bounds = boundsOf(loose.map((node) => [node.x, node.y] as const));
     const nearScale = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
-    setViewport(fitClamped(bounds, width, height, FIT_PADDING, nearScale, fitScale * MAXIMUM_ZOOM_IN));
+    const view = fitClamped(bounds, width, height, FIT_PADDING, nearScale, fitScale * MAXIMUM_ZOOM_IN);
+    if (fitBounds(bounds, width, height, FIT_PADDING).scale >= nearScale) {
+      setViewport(view);
+      return;
+    }
+    const middleHorizontal = (bounds.minX + bounds.maxX) / 2;
+    const middleVertical = (bounds.minY + bounds.maxY) / 2;
+    const distance = (node: (typeof loose)[number]) => Math.hypot(node.x - middleHorizontal, node.y - middleVertical);
+    const nearest = loose.reduce((best, node) => (distance(node) < distance(best) ? node : best));
+    setViewport({ scale: view.scale, tx: width / 2 - nearest.x * view.scale, ty: height / 2 - nearest.y * view.scale });
   };
   const onLegendEntryReference = useRef(onLegendEntry);
   useEffect(() => {

@@ -85,6 +85,31 @@ describe("keyboard-only traversal (spec slice B §9)", () => {
     expect(regimes[regimes.length - 1]).toBe("near");
   });
 
+  it("lands Unassigned on a loose item when the loose items are too far apart for one near view", () => {
+    const spread: MapSpec = {
+      ...spec,
+      nodes: [
+        ...spec.nodes.filter((node) => node.territory !== null),
+        { id: "west", label: "Far west", x: -200, y: 200, territory: null },
+        { id: "east", label: "Far east", x: 220, y: 200, territory: null },
+      ],
+    };
+    const views: Array<{ regime: string; visibleCount: number }> = [];
+    render(
+      <CorpusMap
+        spec={spread}
+        renderCard={() => null}
+        width={400}
+        height={300}
+        onViewChange={(view) => views.push(view)}
+      />,
+    );
+    act(() => screen.getByRole("button", { name: "Unassigned, 2 items" }).click());
+    const last = views[views.length - 1];
+    expect(last?.regime).toBe("near");
+    expect(last?.visibleCount).toBeGreaterThan(0);
+  });
+
   it("sends focus to the surface when every territory is dimmed under a focused button", () => {
     const territoriesOnly: MapSpec = { ...spec, nodes: spec.nodes.filter((node) => node.territory !== null) };
     const properties = { spec: territoriesOnly, renderCard: () => null, width: 400, height: 300 };
