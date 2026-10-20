@@ -1,6 +1,7 @@
 import {
   type PointerEvent,
   type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type Ref,
   useCallback,
@@ -33,6 +34,7 @@ import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
+import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import { useElementSize } from "./viewport/useElementSize";
 import {
   panBy,
@@ -156,6 +158,9 @@ const FIT_PADDING = 24;
  */
 const MAXIMUM_ZOOM_OUT = 8;
 const MAXIMUM_ZOOM_IN = 64;
+
+/** How long keyboard movement must rest before the on-screen count is announced (spec slice B §4). */
+const COUNT_ANNOUNCEMENT_DELAY = 500;
 
 /** A press released within this many pixels of where it started is a click, not a drag. */
 const CLICK_SLOP = 4;
@@ -690,45 +695,89 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     onViewChangeReference.current?.({ regime: next, ratio, visibleCount, presentation });
   }, [next, ratio, visibleCount, ready, refits, presentation]);
 
+  const zoomStep = (direction: "in" | "out") => {
+    const factor = wheelZoomFactor({ deltaY: direction === "in" ? -120 : 120, deltaMode: 0, ctrlKey: false }, tuning);
+    setViewport((previous) => {
+      const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
+      return zoomTo(previous, width / 2, height / 2, target);
+    });
+  };
+  // Resets the regime hysteresis the same way a `spec` change does (the
+  // `fitBasis` branch above): a fit is an explicit "back to the
+  // overview" action, landing the ratio back at exactly 1, and a regime
+  // that merely carried its hysteresis band over from wherever the user
+  // had zoomed to could stay "near"/"mid" even though the view is back
+  // at the fitted one — the same staleness the `fitBasis` comment
+  // documents for a corpus swap, reproduced here by an explicit fit
+  // instead of a new spec (see this file's `.handle.test.tsx`).
+  const fitView = () => {
+    setViewport(fitted);
+    setRefits((count) => count + 1);
+    setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+  };
+
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
   // rebuilt every commit and its closures — `viewport`/`fitScale`/`fitted`/
   // `tuning`/`width`/`height`/`thresholds` — are always the ones from the
   // render that just committed, never a stale render from before a spec or
-  // box change. `zoomIn`/`zoomOut` use `setViewport`'s functional-update form
+  // box change. `zoomStep` uses `setViewport`'s functional-update form
   // (not the closed-over `viewport` directly) so a burst of calls made between
   // renders — the showcase's zoom button held down, or this file's own
   // 200-calls test — each sees the previous call's result, not the same
   // pre-burst `viewport` 200 times over.
   useImperativeHandle(handleReference, () => ({
-    zoomIn: () => {
-      const factor = wheelZoomFactor({ deltaY: -120, deltaMode: 0, ctrlKey: false }, tuning);
-      setViewport((previous) => {
-        const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
-        return zoomTo(previous, width / 2, height / 2, target);
-      });
-    },
-    zoomOut: () => {
-      const factor = wheelZoomFactor({ deltaY: 120, deltaMode: 0, ctrlKey: false }, tuning);
-      setViewport((previous) => {
-        const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
-        return zoomTo(previous, width / 2, height / 2, target);
-      });
-    },
-    // Resets the regime hysteresis the same way a `spec` change does (the
-    // `fitBasis` branch above): `fit()` is an explicit "back to the
-    // overview" action, landing the ratio back at exactly 1, and a regime
-    // that merely carried its hysteresis band over from wherever the user
-    // had zoomed to could stay "near"/"mid" even though the view is back
-    // at the fitted one — the same staleness the `fitBasis` comment
-    // documents for a corpus swap, reproduced here by an explicit fit
-    // instead of a new spec (see this file's `.handle.test.tsx`).
-    fit: () => {
-      setViewport(fitted);
-      setRefits((count) => count + 1);
-      setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
-    },
+    zoomIn: () => zoomStep("in"),
+    zoomOut: () => zoomStep("out"),
+    fit: fitView,
     focus: () => rootReference.current?.focus(),
   }));
+
+  // Spoken once keyboard movement settles, so a held arrow key does not
+  // speak on every step; `visibleCountReference` is read when the timer
+  // fires, i.e. after the last movement's commit.
+  const [countAnnouncement, setCountAnnouncement] = useState("");
+  const countTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visibleCountReference = useRef(0);
+  useEffect(() => {
+    visibleCountReference.current = visibleCount;
+  });
+  useEffect(
+    () => () => {
+      if (countTimer.current !== null) clearTimeout(countTimer.current);
+    },
+    [],
+  );
+  const scheduleCountAnnouncement = () => {
+    if (countTimer.current !== null) clearTimeout(countTimer.current);
+    setCountAnnouncement("");
+    countTimer.current = setTimeout(() => {
+      countTimer.current = null;
+      const count = visibleCountReference.current;
+      setCountAnnouncement(`${count} ${count === 1 ? "item" : "items"} in view`);
+    }, COUNT_ANNOUNCEMENT_DELAY);
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // Only the surface's own keys: the tree, legend and minimap inside it keep theirs.
+    if (event.target !== event.currentTarget) return;
+    const command = keyboardCommand(event);
+    if (command === null) return;
+    if (command.kind === "regimeOut") {
+      const ratio = regimeOutRatio(next, thresholds);
+      if (ratio === null) return;
+      if (ratio === 1) fitView();
+      else {
+        setViewport((previous) => zoomTo(previous, width / 2, height / 2, fitScale * ratio));
+        setRegime(regimeAt(ratio, thresholds, "far", tuning.hysteresis));
+      }
+    } else if (command.kind === "fit") fitView();
+    else if (command.kind === "zoom") zoomStep(command.direction);
+    else setViewport((previous) => panBy(previous, -command.horizontal * width, -command.vertical * height));
+    event.preventDefault();
+    setSurfaceFocusVisible(true);
+    if (hoverReference.current !== null) setHover(null);
+    scheduleCountAnnouncement();
+  };
 
   // Native, non-passive listener: React's `onWheel` is registered passive, so
   // `preventDefault` there cannot stop the page from scrolling under the map.
@@ -990,6 +1039,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         pointerFocus.current = false;
         setSurfaceFocusVisible(false);
       }}
+      onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -1133,6 +1183,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             onTerritoryFocusChange={setFocusedTerritory}
             onNodeFocusChange={setFocusedNode}
           />
+          <div
+            role="status"
+            data-count-announcement=""
+            style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}
+          >
+            {countAnnouncement}
+          </div>
           {minimapCorner ? (
             <Minimap
               scene={scene}

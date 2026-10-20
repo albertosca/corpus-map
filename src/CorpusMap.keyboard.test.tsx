@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
 import type { MapSpec } from "./shared/spec";
 
@@ -76,5 +76,171 @@ describe("CorpusMap surface focus (spec slice B §4)", () => {
     await userEvent.tab();
     expect(root.hasAttribute("data-focus-visible")).toBe(true);
     expect(root.style.outline).toContain("3px solid");
+  });
+});
+
+interface View {
+  regime: string;
+  ratio: number;
+  visibleCount: number;
+}
+
+function renderTracked(properties: Partial<Parameters<typeof CorpusMap>[0]> = {}) {
+  const calls: View[] = [];
+  const result = renderMap({ onViewChange: (view) => calls.push(view), ...properties });
+  const last = () => {
+    const view = calls[calls.length - 1];
+    if (!view) throw new Error("expected onViewChange");
+    return view;
+  };
+  return { ...result, calls, last, root: surface(result.container) };
+}
+
+describe("CorpusMap surface keys (spec slice B §4)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("zooms in and out around the centre with + and -", () => {
+    const { root, last } = renderTracked();
+    fireEvent.keyDown(root, { key: "+" });
+    expect(last().ratio).toBeGreaterThan(1);
+    fireEvent.keyDown(root, { key: "-" });
+    expect(last().ratio).toBeCloseTo(1, 9);
+  });
+
+  it("captures Ctrl/Cmd + and - while focused", () => {
+    const { root, last } = renderTracked();
+    const event = new KeyboardEvent("keydown", { key: "=", ctrlKey: true, bubbles: true, cancelable: true });
+    act(() => {
+      root.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    expect(last().ratio).toBeGreaterThan(1);
+  });
+
+  it("pans so the view travels right on ArrowRight and back on ArrowLeft", () => {
+    const { root, last } = renderTracked();
+    for (let step = 0; step < 6; step += 1) fireEvent.keyDown(root, { key: "+" });
+    const before = last().visibleCount;
+    for (let step = 0; step < 5; step += 1) fireEvent.keyDown(root, { key: "ArrowRight", shiftKey: true });
+    const after = last().visibleCount;
+    expect(after).toBeLessThan(before);
+    for (let step = 0; step < 5; step += 1) fireEvent.keyDown(root, { key: "ArrowLeft", shiftKey: true });
+    expect(last().visibleCount).toBe(before);
+  });
+
+  it("fits on 0 and on Home", () => {
+    const { root, last } = renderTracked();
+    for (const key of ["0", "Home"]) {
+      fireEvent.keyDown(root, { key: "+" });
+      fireEvent.keyDown(root, { key: "+" });
+      fireEvent.keyDown(root, { key });
+      expect(last().ratio).toBe(1);
+      expect(last().regime).toBe("far");
+    }
+  });
+
+  it("zooms out one regime on Escape: near to mid, mid to far, nothing at far", () => {
+    const { root, last } = renderTracked();
+    for (let step = 0; step < 40 && last().regime !== "near"; step += 1) fireEvent.keyDown(root, { key: "+" });
+    expect(last().regime).toBe("near");
+    fireEvent.keyDown(root, { key: "Escape" });
+    expect(last().regime).toBe("mid");
+    expect(last().ratio).toBeCloseTo(Math.sqrt(12), 9);
+    fireEvent.keyDown(root, { key: "Escape" });
+    expect(last().regime).toBe("far");
+    expect(last().ratio).toBe(1);
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => {
+      root.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("leaves outside a mid band of zero width on Escape from near", () => {
+    const { root, last } = renderTracked({ thresholds: { midAt: 6, nearAt: 6 } });
+    for (let step = 0; step < 40 && last().regime !== "near"; step += 1) fireEvent.keyDown(root, { key: "+" });
+    expect(last().regime).toBe("near");
+    fireEvent.keyDown(root, { key: "Escape" });
+    expect(last().ratio).toBe(1);
+    expect(last().regime).toBe("far");
+  });
+
+  it("prevents the default only for keys it handles", () => {
+    const { root } = renderTracked();
+    const handled = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    const ignored = new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true });
+    act(() => {
+      root.dispatchEvent(handled);
+      root.dispatchEvent(ignored);
+    });
+    expect(handled.defaultPrevented).toBe(true);
+    expect(ignored.defaultPrevented).toBe(false);
+  });
+
+  it("handles no key whose target is inside the surface (tree, legend, minimap)", () => {
+    const { container, last } = renderTracked({
+      spec: {
+        ...lineSpec,
+        territories: [{ id: "t", name: "T", members: ["n0", "n1"], centroid: [5, 0] }],
+        nodes: lineSpec.nodes.map((node) =>
+          node.id === "n0" || node.id === "n1" ? { ...node, territory: "t" } : node,
+        ),
+      },
+    });
+    const treeButton = container.querySelector("[data-map-surface] button");
+    if (!(treeButton instanceof HTMLElement)) throw new Error("expected a tree button");
+    const before = last().ratio;
+    const event = new KeyboardEvent("keydown", { key: "+", bubbles: true, cancelable: true });
+    act(() => {
+      treeButton.dispatchEvent(event);
+    });
+    expect(last().ratio).toBe(before);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("shows the focus ring once a key is handled, even after a press", () => {
+    const { root } = renderTracked();
+    fireEvent.pointerDown(root, { clientX: 10, clientY: 10, pointerId: 1, button: 0, isPrimary: true });
+    act(() => root.focus());
+    expect(root.hasAttribute("data-focus-visible")).toBe(false);
+    fireEvent.keyDown(root, { key: "ArrowUp" });
+    expect(root.hasAttribute("data-focus-visible")).toBe(true);
+  });
+
+  it("announces the count once, 500 ms after a held arrow key stops", () => {
+    vi.useFakeTimers();
+    const { root, container, last } = renderTracked();
+    const region = () => container.querySelector("[data-count-announcement]")?.textContent ?? "";
+    for (let step = 0; step < 30; step += 1) {
+      act(() => {
+        vi.advanceTimersByTime(30);
+      });
+      fireEvent.keyDown(root, { key: "ArrowRight" });
+      expect(region()).toBe("");
+    }
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(region()).toBe("");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    const count = last().visibleCount;
+    expect(region()).toBe(`${count} ${count === 1 ? "item" : "items"} in view`);
+  });
+
+  it("clears the announcement when movement starts again", () => {
+    vi.useFakeTimers();
+    const { root, container } = renderTracked();
+    const region = () => container.querySelector("[data-count-announcement]")?.textContent ?? "";
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(region()).not.toBe("");
+    fireEvent.keyDown(root, { key: "ArrowLeft" });
+    expect(region()).toBe("");
   });
 });
