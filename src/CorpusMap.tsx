@@ -1230,6 +1230,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               corner={legendPlacement}
               theme={legendTheme}
               narrow={width < 480}
+              heading={headingTag}
               onEntry={stableOnLegendEntry}
               onHiddenChange={onHiddenChange}
             />

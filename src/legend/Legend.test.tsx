@@ -161,3 +161,25 @@ describe("full legend", () => {
     }
   });
 });
+
+describe("legend headings", () => {
+  it("wraps each group's disclosure in a heading at the given level, checkbox outside it", () => {
+    render(<Legend {...props({ groups, heading: "h4" })} />);
+    const headings = screen.getAllByRole("heading", { level: 4 });
+    expect(headings.length).toBe(2);
+    for (const heading of headings) {
+      expect(heading.querySelector("button[aria-expanded]")).not.toBeNull();
+      expect(heading.querySelector("input[type=checkbox]")).toBeNull();
+    }
+  });
+
+  it("defaults the group headings to h3", () => {
+    render(<Legend {...props({ groups })} />);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(2);
+  });
+
+  it("renders no headings for a flat legend", () => {
+    render(<Legend {...props()} />);
+    expect(screen.queryAllByRole("heading")).toHaveLength(0);
+  });
+});

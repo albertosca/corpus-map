@@ -1,4 +1,5 @@
 import { memo, type ReactElement, type SyntheticEvent, useId, useState } from "react";
+import type { HeadingTag } from "../a11y/headingLevel";
 import { CORNER_POSITION, type Corner } from "../shared/corner";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
@@ -19,6 +20,8 @@ export interface LegendProps {
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
   /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
   narrow: boolean;
+  /** The element group disclosures sit in, so a screen reader can jump between groups (spec slice B §6). */
+  heading?: HeadingTag | undefined;
   onEntry: (id: string) => void;
   onHiddenChange: (ids: string[]) => void;
 }
@@ -56,6 +59,7 @@ function stop(event: SyntheticEvent): void {
 export function LegendView(properties: LegendProps): ReactElement {
   const { entries, groups, onScreen, hidden, presentation, corner, theme, narrow, onEntry, onHiddenChange } =
     properties;
+  const Heading = properties.heading ?? "h3";
   const listId = useId();
   // A toggle the reader pressed holds until the presentation changes; the
   // reset happens during render (React's "adjust state on a prop change"
@@ -154,14 +158,16 @@ export function LegendView(properties: LegendProps): ReactElement {
                         style={{ margin: 0 }}
                       />
                     </label>
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      onClick={() => setManual((previous) => ({ ...previous, [group.id]: !open }))}
-                      style={{ ...text, ...plainButton, fontWeight: 600, flex: 1, textAlign: "left" }}
-                    >
-                      {group.name} <span style={{ fontWeight: 400 }}>{`${group.onScreenCount} on screen`}</span>
-                    </button>
+                    <Heading style={{ margin: 0, font: "inherit", flex: 1, display: "flex" }}>
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setManual((previous) => ({ ...previous, [group.id]: !open }))}
+                        style={{ ...text, ...plainButton, fontWeight: 600, flex: 1, textAlign: "left" }}
+                      >
+                        {group.name} <span style={{ fontWeight: 400 }}>{`${group.onScreenCount} on screen`}</span>
+                      </button>
+                    </Heading>
                   </div>
                 )}
                 {open ? (
