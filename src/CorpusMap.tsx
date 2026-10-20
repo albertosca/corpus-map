@@ -198,8 +198,8 @@ function placeTooltip(
     mapWidth,
     mapHeight,
   );
-  element.style.left = `${left}px`;
-  element.style.top = `${top}px`;
+  // A transform, never left/top: moving a box through layout is a layout shift on every frame.
+  element.style.transform = `translate(${left}px, ${top}px)`;
 }
 
 interface Press {
@@ -983,9 +983,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               aria-hidden="true"
               style={{
                 position: "absolute",
-                left: hover.x,
-                top: hover.y - 8,
-                transform: "translate(-50%, -100%)",
+                left: 0,
+                top: 0,
+                transform: `translate(${hover.x}px, ${hover.y - 8}px) translate(-50%, -100%)`,
                 background: theme.hoverBackground,
                 color: theme.hoverText,
                 padding: "2px 6px",
@@ -1012,13 +1012,16 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
           ) : null}
           {hover?.kind === "territories" ? (
             <div
+              // A new set mounts a new balloon: rows re-laid out under a moving transform count as layout shifts.
+              key={hover.ids.join(" ")}
               ref={tooltipReference}
               data-hover-territories={hover.ids.join(" ")}
               aria-hidden="true"
               style={{
                 position: "absolute",
-                left: hover.x + TOOLTIP_OFFSET,
-                top: hover.y + TOOLTIP_OFFSET,
+                left: 0,
+                top: 0,
+                transform: `translate(${hover.x + TOOLTIP_OFFSET}px, ${hover.y + TOOLTIP_OFFSET}px)`,
                 background: theme.hoverBackground,
                 color: theme.hoverText,
                 padding: "4px 8px",

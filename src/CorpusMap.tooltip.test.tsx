@@ -215,12 +215,49 @@ describe("territory tooltip", () => {
     const point = insideNorth();
     hoverAt(surface, point);
     const tooltip = container.querySelector("[data-hover-territories]") as HTMLElement;
-    const before = tooltip.style.left;
+    const before = tooltip.style.transform;
     commits = 0;
     hoverAt(surface, { clientX: point.clientX + 3, clientY: point.clientY });
     hoverAt(surface, { clientX: point.clientX + 6, clientY: point.clientY + 1 });
     expect(commits).toBe(0);
-    expect(tooltip.style.left).not.toBe(before);
+    expect(tooltip.style.transform).not.toBe(before);
+  });
+
+  // Moving a box through left/top is a layout shift on every frame (CLS), and pointermove is not
+  // "recent input" that excuses it; a transform never is a layout shift.
+  // Rows re-laid out inside a balloon whose transform changed in the same frame count as layout
+  // shifts in Chrome; a freshly mounted node never does, so a new territory set gets a new balloon.
+  it("a different territory set mounts a fresh balloon, the same set keeps it", () => {
+    const { container, surface } = mount();
+    const north = insideNorth();
+    hoverAt(surface, north);
+    const first = container.querySelector("[data-hover-territories]");
+    hoverAt(surface, { clientX: north.clientX + 2, clientY: north.clientY });
+    expect(container.querySelector("[data-hover-territories]")).toBe(first);
+    hoverAt(surface, screenAt(spec, [25, 5]));
+    const second = container.querySelector("[data-hover-territories]");
+    expect(second?.getAttribute("data-hover-territories")).toBe("south");
+    expect(second).not.toBe(first);
+  });
+
+  it("both balloons move by transform only, never by left/top", () => {
+    const { container, surface } = mount({ thresholds: { midAt: 0, nearAt: 64 } });
+    const north = insideNorth();
+    hoverAt(surface, north);
+    const territories = container.querySelector("[data-hover-territories]") as HTMLElement;
+    expect(territories.style.left).toBe("0px");
+    expect(territories.style.top).toBe("0px");
+    expect(territories.style.transform).toMatch(/^translate\(\d+(\.\d+)?px, \d+(\.\d+)?px\)$/);
+    hoverAt(surface, { clientX: north.clientX + 5, clientY: north.clientY + 2 });
+    expect(territories.style.left).toBe("0px");
+    const point = screenAt(spec, [2, 2]);
+    hoverAt(surface, { clientX: point.clientX + 4, clientY: point.clientY });
+    const pointBalloon = container.querySelector('[data-hover="north0"]') as HTMLElement;
+    expect(pointBalloon.style.left).toBe("0px");
+    expect(pointBalloon.style.top).toBe("0px");
+    expect(pointBalloon.style.transform).toMatch(
+      /^translate\(-?\d+(\.\d+)?px, -?\d+(\.\d+)?px\) translate\(-50%, -100%\)$/,
+    );
   });
 });
 
