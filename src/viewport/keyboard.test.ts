@@ -70,29 +70,39 @@ describe("regimeOutRatio", () => {
   const defaults = { midAt: 2, nearAt: 6 };
 
   it("does nothing at far", () => {
-    expect(regimeOutRatio("far", defaults)).toBeNull();
+    expect(regimeOutRatio("far", 1, defaults)).toBeNull();
   });
 
   it("fits from mid", () => {
-    expect(regimeOutRatio("mid", defaults)).toBe(1);
+    expect(regimeOutRatio("mid", 3, defaults)).toBe(1);
   });
 
   it("goes from near to the geometric middle of the mid band", () => {
-    expect(regimeOutRatio("near", defaults)).toBeCloseTo(Math.sqrt(12), 12);
+    expect(regimeOutRatio("near", 8, defaults)).toBeCloseTo(Math.sqrt(12), 12);
   });
 
   it("fits from near when the mid band is empty", () => {
-    expect(regimeOutRatio("near", { midAt: 6, nearAt: 6 })).toBe(1);
+    expect(regimeOutRatio("near", 8, { midAt: 6, nearAt: 6 })).toBe(1);
   });
 
   it("never zooms in when midAt is below the fitted ratio", () => {
-    const ratio = regimeOutRatio("near", { midAt: 0.5, nearAt: 6 });
+    const ratio = regimeOutRatio("near", 8, { midAt: 0.5, nearAt: 6 });
     expect(ratio).toBeCloseTo(Math.sqrt(6), 12);
     expect(ratio).toBeLessThan(6);
   });
 
   it("fits from near when nearAt is at or below 1", () => {
-    expect(regimeOutRatio("near", { midAt: 0, nearAt: 1 })).toBe(1);
-    expect(regimeOutRatio("near", { midAt: 0, nearAt: 0 })).toBe(1);
+    expect(regimeOutRatio("near", 2, { midAt: 0, nearAt: 1 })).toBe(1);
+    expect(regimeOutRatio("near", 2, { midAt: 0, nearAt: 0 })).toBe(1);
+  });
+
+  it("falls back to the fit when hysteresis holds near below the mid band's middle", () => {
+    expect(regimeOutRatio("near", 5.75, { midAt: 5.9, nearAt: 6 })).toBe(1);
+  });
+
+  it("does nothing when no target lies below the current ratio", () => {
+    expect(regimeOutRatio("mid", 0.6, { midAt: 0.5, nearAt: 6 })).toBeNull();
+    expect(regimeOutRatio("mid", 1, defaults)).toBeNull();
+    expect(regimeOutRatio("near", 0.9, { midAt: 0.5, nearAt: 0.8 })).toBeNull();
   });
 });

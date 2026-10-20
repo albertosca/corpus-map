@@ -1184,10 +1184,12 @@ export declare function keyboardCommand(input: KeyInput): KeyboardCommand | null
 /**
  * Where `Esc` zooms to, as a ratio of the fitted scale: from near, the
  * geometric middle of the mid band (its lower edge floored at the fitted
- * ratio 1, so a `midAt` below 1 never makes `Esc` zoom in); from mid, or
- * when the mid band is empty, the fit itself. Nothing at far.
+ * ratio 1); from mid, or when the mid band is empty, the fit itself. Only a
+ * target strictly below the current `ratio` counts — hysteresis can hold a
+ * regime below its threshold, and `Esc` never zooms in — so the first one
+ * below wins, and nothing when none is (or at far).
  */
-export declare function regimeOutRatio(regime: Regime, thresholds: LodThresholds): number | null;
+export declare function regimeOutRatio(regime: Regime, ratio: number, thresholds: LodThresholds): number | null;
 
 // viewport/useElementSize.d.ts
 import { type RefObject } from "react";

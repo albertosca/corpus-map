@@ -167,6 +167,32 @@ describe("CorpusMap surface keys (spec slice B §4)", () => {
     expect(last().regime).toBe("far");
   });
 
+  it("never zooms in on Escape from near held below the mid band's middle by hysteresis", () => {
+    // Hysteresis 0.45 keeps near alive down to ratio 3.3, below the mid band's middle (sqrt(24) ~ 4.9).
+    const { root, last } = renderTracked({ thresholds: { midAt: 4, nearAt: 6 }, tuning: { hysteresis: 0.45 } });
+    for (let step = 0; step < 40 && last().regime !== "near"; step += 1) fireEvent.keyDown(root, { key: "+" });
+    for (let step = 0; step < 40 && last().ratio >= Math.sqrt(24); step += 1) fireEvent.keyDown(root, { key: "-" });
+    expect(last().regime).toBe("near");
+    const before = last().ratio;
+    fireEvent.keyDown(root, { key: "Escape" });
+    expect(last().ratio).toBeLessThan(before);
+    expect(last().ratio).toBe(1);
+  });
+
+  it("never zooms in on Escape from mid when the fitted view is itself mid", () => {
+    const { root, last } = renderTracked({ thresholds: { midAt: 0.5, nearAt: 6 } });
+    fireEvent.keyDown(root, { key: "-" });
+    expect(last().regime).toBe("mid");
+    const before = last().ratio;
+    expect(before).toBeLessThan(1);
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => {
+      root.dispatchEvent(event);
+    });
+    expect(last().ratio).toBe(before);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("prevents the default only for keys it handles", () => {
     const { root } = renderTracked();
     const handled = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });

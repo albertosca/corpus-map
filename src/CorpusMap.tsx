@@ -776,12 +776,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const command = keyboardCommand(event);
     if (command === null) return;
     if (command.kind === "regimeOut") {
-      const ratio = regimeOutRatio(next, thresholds);
-      if (ratio === null) return;
-      if (ratio === 1) fitView();
+      const target = regimeOutRatio(next, ratio, thresholds);
+      if (target === null) return;
+      if (target === 1) fitView();
       else {
-        setViewport((previous) => zoomTo(previous, width / 2, height / 2, fitScale * ratio));
-        setRegime(regimeAt(ratio, thresholds, "far", tuning.hysteresis));
+        setViewport((previous) => zoomTo(previous, width / 2, height / 2, fitScale * target));
+        setRegime(regimeAt(target, thresholds, "far", tuning.hysteresis));
       }
     } else if (command.kind === "fit") fitView();
     else if (command.kind === "zoom") zoomStep(command.direction);
