@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,7 +29,8 @@ import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
-import { onScreenTerritories } from "./territories/hitTest";
+import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
+import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, tooltipPosition } from "./territories/tooltipPosition";
 import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { useElementSize } from "./viewport/useElementSize";
@@ -176,11 +178,43 @@ function cardIdAt(root: HTMLElement | null, horizontal: number, vertical: number
   return null;
 }
 
+/**
+ * Moves the territory balloon beside the cursor without a React commit (see
+ * `tooltipPosition`). Both callers run only while a territory hover is
+ * committed, so the balloon is always mounted.
+ */
+function placeTooltip(
+  element: HTMLElement,
+  cursorHorizontal: number,
+  cursorVertical: number,
+  mapWidth: number,
+  mapHeight: number,
+): void {
+  const { left, top } = tooltipPosition(
+    cursorHorizontal,
+    cursorVertical,
+    element.offsetWidth,
+    element.offsetHeight,
+    mapWidth,
+    mapHeight,
+  );
+  element.style.left = `${left}px`;
+  element.style.top = `${top}px`;
+}
+
 interface Press {
   x: number;
   y: number;
   startX: number;
   startY: number;
+}
+
+/** A pointer position, surface-relative (`x`, `y`) and in client coordinates for the card hit-test. */
+interface HoverPosition {
+  x: number;
+  y: number;
+  clientX: number;
+  clientY: number;
 }
 
 /** Accumulated, not-yet-applied drag delta, flushed once per animation frame. */
@@ -189,13 +223,14 @@ interface Pending {
   dy: number;
 }
 
-/** The nearest node to the pointer, resolved and rendered as a small label above its point. */
-interface HoverState {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-}
+/**
+ * What the pointer names: the nearest node, rendered as a small label above
+ * its point, or the territories under it, rendered as a balloon beside the
+ * cursor (spec categories §7).
+ */
+type HoverState =
+  | { kind: "point"; id: string; label: string; x: number; y: number }
+  | { kind: "territories"; ids: string[]; x: number; y: number };
 
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -218,6 +253,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node])), [spec]);
+  const territoriesById = useMemo(
+    () => new Map(spec.territories.map((territory) => [territory.id, territory])),
+    [spec],
+  );
 
   const rootReference = useRef<HTMLDivElement>(null);
   // Always called (rules of hooks): a consumer that never removes/adds
@@ -289,6 +328,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       paletteKey,
     ],
   );
+
+  // Each territory's group name, for the territory balloon's last line.
+  const groupOf = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const group of scene.groups) for (const member of group.members) names.set(member, group.name);
+    return names;
+  }, [scene.groups]);
 
   const [viewport, setViewport] = useState<Viewport>(() => fitScene(spec, scene, width, height, FIT_PADDING));
   // A theme or font change rebuilds the scene and so moves `fitted` (and
@@ -369,7 +415,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // awaiting resolution in the same animation-frame flush as a drag's
   // accumulated pan (metric 13: resolving it synchronously in the move
   // handler instead would cost one commit per move).
-  const hoverPoint = useRef<{ x: number; y: number } | null>(null);
+  const hoverPoint = useRef<HoverPosition | null>(null);
   // Mirrors `hover` for the frame-flush closure below, which is created at
   // schedule time (the first move of a burst) and so cannot see a `hover`
   // update from a *later* frame in the same burst via its own closed-over
@@ -408,7 +454,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // render, so a stale hover name never has a frame where it is visibly
   // shown at the wrong regime, and never lingers to reappear untested for
   // proximity if the ratio zooms back in without a fresh move.
-  if (next !== "mid" && next !== "near" && hover !== null) setHover(null);
+  // Only a point name: a territory balloon is valid in every regime.
+  if (next !== "mid" && next !== "near" && hover?.kind === "point") setHover(null);
 
   // Keyboard focus in the accessible tree, drawn on the canvas (its buttons
   // are visually hidden). Territory buttons are listed only below the near
@@ -709,6 +756,80 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     if (hover !== null) setHover(null);
   };
 
+  // The topmost card under a client position, or null; a card below opacity
+  // 0.1 is invisible but still mounted (the hysteresis fade band keeps it in
+  // the DOM at opacity 0), so it neither takes a click on what the user sees
+  // as empty map (C2) nor hides the territory balloon there.
+  const visibleCardAt = (clientHorizontal: number, clientVertical: number): string | null =>
+    cardOpacity < 0.1 ? null : cardIdAt(rootReference.current, clientHorizontal, clientVertical);
+
+  const tooltipReference = useRef<HTMLDivElement | null>(null);
+  // A layout effect, so the first paint of a new balloon is already placed;
+  // keyed on `hover` so an unrelated commit never snaps a balloon that
+  // `resolveHover` moved imperatively back to where it was first shown.
+  useLayoutEffect(() => {
+    if (hover?.kind === "territories")
+      placeTooltip(tooltipReference.current as HTMLDivElement, hover.x, hover.y, width, height);
+  }, [hover, width, height]);
+
+  // What the pointer names at `position` (spec categories §7): in mid and
+  // near, the nearest visible point within the hover radius; otherwise —
+  // in every regime — the undimmed territories under it, unless a card
+  // covers that spot. Called by the frame flush for a mouse and directly by
+  // a touch tap. Every branch compares against `hoverReference` and skips
+  // `setHover` when nothing changed: a steady hover costs no commit
+  // (metric 13), and a balloon over the same territories only moves.
+  const resolveHover = (position: HoverPosition) => {
+    const previousHover = hoverReference.current;
+    if ((next === "mid" || next === "near") && pointAlpha >= 0.1) {
+      // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
+      // calls: the canvas paints every on-screen point regardless of the
+      // card cap, so hover must be resolvable against all of them, not
+      // just the first `cardCap` in spec order (C1) — otherwise most
+      // on-screen points past the cap are silently unhoverable.
+      const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
+        const [left, top] = toScreen(viewport, node.x, node.y);
+        return { id: node.id, x: left, y: top };
+      });
+      const nearest = nearestWithin(points, position.x, position.y, tuning.hoverRadius);
+      if (nearest) {
+        // Same node, same screen position as the currently shown hover:
+        // skip the call rather than dispatch a freshly-allocated (but
+        // deeply equal) object every frame the pointer holds still —
+        // `Object.is` would never consider two such objects equal, so
+        // React would never bail out and a steady hover would cost a
+        // commit on every frame (see the `hoverReference` comment above).
+        const same =
+          previousHover?.kind === "point" &&
+          previousHover.id === nearest.id &&
+          previousHover.x === nearest.x &&
+          previousHover.y === nearest.y;
+        if (!same) {
+          // `nearest.id` is always a key of `nodesById`: `points` was
+          // built from `visibleNodes(liveSpec, ...)`, which only ever
+          // returns `spec`'s own nodes.
+          const label = (nodesById.get(nearest.id) as MapNode).label;
+          setHover({ kind: "point", id: nearest.id, label, x: nearest.x, y: nearest.y });
+        }
+        return;
+      }
+    }
+    const ids =
+      visibleCardAt(position.clientX, position.clientY) === null
+        ? territoriesAt(scene, spec, toWorld(viewport, position.x, position.y), dimmed)
+        : [];
+    if (ids.length === 0) {
+      if (previousHover !== null) setHover(null);
+      return;
+    }
+    if (previousHover?.kind === "territories" && previousHover.ids.join(" ") === ids.join(" ")) {
+      hoverReference.current = { ...previousHover, x: position.x, y: position.y };
+      placeTooltip(tooltipReference.current as HTMLDivElement, position.x, position.y, width, height);
+      return;
+    }
+    setHover({ kind: "territories", ids, x: position.x, y: position.y });
+  };
+
   // Schedules the one rAF flush a burst of pointer moves, or a minimap
   // press/drag, coalesces into (metric 13) — both routes share this single
   // `rafId`, so a move and a minimap press arriving in the same frame still
@@ -736,50 +857,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         }));
       }
       const hoverPosition = hoverPoint.current;
-      // Not the applicable-regime/not-dragging/has-a-point condition's
-      // `else`: a press, a `pointerleave`, or leaving the mid/near
-      // regimes already clears `hover` synchronously at its own call
-      // site (`onPointerDown`, `onPointerLeave`, the render-phase check
-      // above) — including that update's effect, since each of those
-      // runs to completion, effects included, strictly before any
-      // already-scheduled flush like this one can run. So by the time
-      // this condition is false, `hoverReference.current` is already null;
-      // there is nothing left here to clear.
-      if (drag.current === null && hoverPosition && (next === "mid" || next === "near") && pointAlpha >= 0.1) {
-        // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
-        // calls: the canvas paints every on-screen point regardless of the
-        // card cap, so hover must be resolvable against all of them, not
-        // just the first `cardCap` in spec order (C1) — otherwise most
-        // on-screen points past the cap are silently unhoverable.
-        const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
-          const [left, top] = toScreen(viewport, node.x, node.y);
-          return { id: node.id, x: left, y: top };
-        });
-        const nearest = nearestWithin(points, hoverPosition.x, hoverPosition.y, tuning.hoverRadius);
-        const previousHover = hoverReference.current;
-        if (nearest) {
-          // Same node, same screen position as the currently shown hover:
-          // skip the call rather than dispatch a freshly-allocated (but
-          // deeply equal) object every frame the pointer holds still —
-          // `Object.is` would never consider two such objects equal, so
-          // React would never bail out and a steady hover would cost a
-          // commit on every frame (see the `hoverReference` comment above).
-          const same =
-            previousHover &&
-            previousHover.id === nearest.id &&
-            previousHover.x === nearest.x &&
-            previousHover.y === nearest.y;
-          if (!same) {
-            // `nearest.id` is always a key of `nodesById`: `points` was
-            // built from `visibleNodes(spec, ...)`, which only ever
-            // returns `spec`'s own nodes.
-            const label = (nodesById.get(nearest.id) as MapNode).label;
-            setHover({ id: nearest.id, label, x: nearest.x, y: nearest.y });
-          }
-        } else if (previousHover !== null) {
-          setHover(null);
-        }
-      }
+      // A press or a `pointerleave` already cleared `hover` synchronously at
+      // its own call site, effects included, strictly before any
+      // already-scheduled flush like this one can run; a drag never names.
+      if (drag.current === null && hoverPosition) resolveHover(hoverPosition);
     });
   };
 
@@ -801,7 +882,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         : { dx: horizontalDelta, dy: verticalDelta };
     } else {
       const rect = rootReference.current?.getBoundingClientRect();
-      hoverPoint.current = rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;
+      hoverPoint.current = rect
+        ? { x: event.clientX - rect.left, y: event.clientY - rect.top, clientX: event.clientX, clientY: event.clientY }
+        : null;
     }
     scheduleFrame();
   };
@@ -819,7 +902,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     drag.current = null;
   };
 
-  const onPointerLeave = () => {
+  // A touch fires `pointerleave` right after `pointerup`, which would close
+  // the balloon the tap just opened; a later press closes it instead.
+  const onPointerLeave = (event: PointerEvent) => {
+    if (event.pointerType === "touch") return;
     hoverPoint.current = null;
     if (hover !== null) setHover(null);
   };
@@ -831,17 +917,27 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     if (event.button !== 0 || !event.isPrimary) return;
     const press = drag.current;
     drag.current = null;
-    if (!press || !onSelect || Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > CLICK_SLOP)
+    if (!press || Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > CLICK_SLOP) return;
+    const id = visibleCardAt(event.clientX, event.clientY);
+    // A touch has no hover: a tap off a card names what is under it, the
+    // way a mouse resting there would (spec categories §7).
+    if (event.pointerType === "touch" && id === null) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      resolveHover({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
       return;
-    // Below opacity 0.1 a card is invisible but still mounted (the
-    // hysteresis fade band keeps it in the DOM at opacity 0 rather than
-    // unmounting it) — hit-testing it there would let a click on what the
-    // user sees as empty map select an item they never saw (C2).
-    if (cardOpacity < 0.1) return;
-    const id = cardIdAt(rootReference.current, event.clientX, event.clientY);
+    }
     const node = id === null ? undefined : nodesById.get(id);
-    if (node) onSelect(node);
+    if (node && onSelect) onSelect(node);
   };
+
+  // The hovered point's territory, named beside its label (spec categories §7).
+  const pointNode = hover?.kind === "point" ? nodesById.get(hover.id) : undefined;
+  const pointTerritory = pointNode?.territory ? territoriesById.get(pointNode.territory) : undefined;
 
   return (
     <div
@@ -881,7 +977,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             colours={scene.colours}
             renderCard={renderCard}
           />
-          {hover ? (
+          {hover?.kind === "point" ? (
             <div
               data-hover={hover.id}
               aria-hidden="true"
@@ -899,7 +995,57 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                 font: "12px system-ui, sans-serif",
               }}
             >
-              {hover.label}
+              {pointTerritory ? (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 8,
+                    height: 8,
+                    borderRadius: 2,
+                    marginRight: 4,
+                    background: scene.colours.get(pointTerritory.id) ?? theme.pointNeutral,
+                  }}
+                />
+              ) : null}
+              {pointTerritory ? `${hover.label} · ${pointTerritory.name}` : hover.label}
+            </div>
+          ) : null}
+          {hover?.kind === "territories" ? (
+            <div
+              ref={tooltipReference}
+              data-hover-territories={hover.ids.join(" ")}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: hover.x + TOOLTIP_OFFSET,
+                top: hover.y + TOOLTIP_OFFSET,
+                background: theme.hoverBackground,
+                color: theme.hoverText,
+                padding: "4px 8px",
+                borderRadius: 4,
+                pointerEvents: "none",
+                font: "12px system-ui, sans-serif",
+                maxWidth: 260,
+              }}
+            >
+              {hover.ids.map((id) => (
+                <div key={id}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        flex: "none",
+                        borderRadius: 2,
+                        background: scene.colours.get(id) ?? theme.pointNeutral,
+                      }}
+                    />
+                    <span>{territoriesById.get(id)?.name}</span>
+                  </div>
+                  {hover.ids.length === 1 ? <div>{`${territoriesById.get(id)?.members.length} papers`}</div> : null}
+                  {groupOf.has(id) ? <div style={{ opacity: GROUP_LINE_OPACITY }}>{groupOf.get(id)}</div> : null}
+                </div>
+              ))}
             </div>
           ) : null}
           <AccessibleTree
