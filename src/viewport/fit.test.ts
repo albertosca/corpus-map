@@ -148,3 +148,29 @@ describe("scene bounds", () => {
     expect(viewport.ty + 0.5 * viewport.scale).toBe(50);
   });
 });
+
+describe("fitClamped as the loose nodes' near view (spec slice B §5)", () => {
+  it("keeps the box's own fit when that is already past the near scale", () => {
+    const view = fitClamped({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, 120, 120, 10, 2, 1000);
+    expect(view.scale).toBeCloseTo(10, 9);
+    expect(view.tx).toBeCloseTo(60 - 5 * 10, 9);
+  });
+
+  it("zooms to the near scale when the box's fit is wider than near", () => {
+    const view = fitClamped({ minX: 0, minY: 0, maxX: 1000, maxY: 1000 }, 120, 120, 10, 5, 1000);
+    expect(view.scale).toBe(5);
+    expect(view.tx).toBeCloseTo(60 - 500 * 5, 9);
+    expect(view.ty).toBeCloseTo(60 - 500 * 5, 9);
+  });
+
+  it("never passes the maximum scale", () => {
+    expect(fitClamped({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, 120, 120, 10, 5, 50).scale).toBe(50);
+  });
+
+  it("centres a single point with a finite scale", () => {
+    const view = fitClamped(boundsOf([[7, 3]]), 200, 100, 10, 5, 64);
+    expect(Number.isFinite(view.scale)).toBe(true);
+    expect(view.tx + 7 * view.scale).toBeCloseTo(100, 9);
+    expect(view.ty + 3 * view.scale).toBeCloseTo(50, 9);
+  });
+});
