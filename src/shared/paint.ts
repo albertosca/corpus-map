@@ -4,6 +4,7 @@ import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
 import { paintTerritories } from "../territories/paintTerritories";
 import type { Viewport } from "../viewport/viewport";
+import { NO_DIMMED } from "./dimmed";
 import { DENSE_FILL_FACTOR, type Presentation } from "./presentation";
 import type { Scene } from "./scene";
 import type { MapSpec } from "./spec";
@@ -33,6 +34,8 @@ export interface Frame {
   presentation?: Presentation | undefined;
   /** Group names' alpha this frame (spec categories §4); absent means 0. */
   groupAlpha?: number | undefined;
+  /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
+  dimmed?: ReadonlySet<string> | undefined;
 }
 
 /**
@@ -52,10 +55,11 @@ export function paint(
 ): void {
   surface.clear();
   const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
-  paintTerritories(surface, scene, viewport, theme, fillAlpha);
+  const dimmed = frame.dimmed ?? NO_DIMMED;
+  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
-    paintPoints(surface, scene, spec, viewport, theme);
+    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);
     surface.globalAlpha(1);
   }
   if (typeof frame.focusedTerritory === "string")

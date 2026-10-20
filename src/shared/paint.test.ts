@@ -5,6 +5,7 @@ import { DEFAULT_THRESHOLDS, type Regime } from "../lod/lod";
 import { UNVISITED_RING_WIDTH } from "../points/paintPoints";
 import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { fitSpec, worldBounds } from "../viewport/fit";
+import { DIMMED_ALPHA } from "./dimmed";
 import { type Frame, paint } from "./paint";
 import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { buildScene } from "./scene";
@@ -515,5 +516,80 @@ describe("presentation (slice D)", () => {
     paintSpec(crowded, onlyLarge, "far", { presentation: "dense" }, LABEL_VP);
     expect(onlyLarge.texts.map((text) => text.text)).toEqual(["Big"]);
     expect(onlyLarge.calls.slice(onlyLarge.calls.indexOf("text")).includes("alpha")).toBe(false);
+  });
+});
+
+/** Where in `surface.calls` each point mark was drawn, keyed by node id. */
+function markPositions(surface: RecordingSurface): Map<string, number> {
+  const positions = new Map<string, number>();
+  let circle = 0;
+  let hollow = 0;
+  surface.calls.forEach((call, position) => {
+    if (call === "circle") positions.set((surface.circles[circle++] as { id: string }).id, position);
+    if (call === "hollowCircle") positions.set((surface.hollowCircles[hollow++] as { id: string }).id, position);
+  });
+  return positions;
+}
+
+/** Where in `surface.calls` each `alpha` call sits, in order. */
+function alphaPositions(surface: RecordingSurface): Array<{ alpha: number; position: number }> {
+  const positions: Array<{ alpha: number; position: number }> = [];
+  surface.calls.forEach((call, position) => {
+    if (call === "alpha") positions.push({ alpha: surface.alphas[positions.length] as number, position });
+  });
+  return positions;
+}
+
+describe("dimmed territories", () => {
+  const territoryId = first(spec.territories).id;
+  const dimmed = new Set([territoryId]);
+
+  it("fills and outlines a dimmed territory at DIMMED_ALPHA, inside and outside the fill layer", () => {
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "far", { dimmed });
+    const layerStart = surface.calls.indexOf("layer");
+    const layerEnd = surface.calls.indexOf("layerEnd");
+    const dimmedAt = alphaPositions(surface).filter((entry) => entry.alpha === DIMMED_ALPHA);
+    expect(dimmedAt.some((entry) => entry.position > layerStart && entry.position < layerEnd)).toBe(true);
+    expect(dimmedAt.some((entry) => entry.position > layerEnd)).toBe(true);
+    expect(surface.alphas[surface.alphas.length - 1]).toBe(1);
+  });
+
+  it("paints a dimmed territory's points at pointAlpha x DIMMED_ALPHA, before the others, and leaves pointAlpha after", () => {
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid", { dimmed, pointAlpha: 0.5 });
+    const alphas = alphaPositions(surface);
+    const dimmedIndex = alphas.findIndex((entry) => entry.alpha === 0.5 * DIMMED_ALPHA);
+    expect(dimmedIndex).toBeGreaterThanOrEqual(0);
+    const restore = alphas[dimmedIndex + 1] as { alpha: number; position: number };
+    expect(restore.alpha).toBe(0.5);
+    const marks = markPositions(surface);
+    for (const id of first(spec.territories).members) {
+      const position = marks.get(id) as number;
+      expect(position).toBeGreaterThan((alphas[dimmedIndex] as { position: number }).position);
+      expect(position).toBeLessThan(restore.position);
+    }
+    expect(marks.get("loose") as number).toBeGreaterThan(restore.position);
+  });
+
+  it("never dims a point with no territory", () => {
+    const surface = new RecordingSurface();
+    const everyTerritory = new Set(spec.territories.map((territory) => territory.id));
+    paintSpec(spec, surface, "mid", { dimmed: everyTerritory, pointAlpha: 0.5 });
+    const alphas = alphaPositions(surface);
+    const dimmedIndex = alphas.findIndex((entry) => entry.alpha === 0.5 * DIMMED_ALPHA);
+    expect(dimmedIndex).toBeGreaterThanOrEqual(0);
+    const restore = alphas[dimmedIndex + 1] as { alpha: number; position: number };
+    expect(restore.alpha).toBe(0.5);
+    expect(markPositions(surface).get("loose") as number).toBeGreaterThan(restore.position);
+  });
+
+  it("paints exactly as before when nothing is dimmed", () => {
+    const before = new RecordingSurface();
+    const after = new RecordingSurface();
+    paintSpec(spec, before, "mid");
+    paintSpec(spec, after, "mid", { dimmed: new Set() });
+    expect(after.calls).toEqual(before.calls);
+    expect(after.alphas).toEqual(before.alphas);
   });
 });

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { DIMMED_ALPHA } from "../shared/dimmed";
 import { DENSE_NAME_ALPHA } from "../shared/presentation";
 import { buildScene, GROUP_LETTER_SPACING, type Scene } from "../shared/scene";
 import { type MapSpec, validateSpec } from "../shared/spec";
 import { RecordingSurface } from "../shared/surface";
 import { DEFAULT_THEME } from "../shared/theme";
 import { DEFAULT_TUNING } from "../shared/tuning";
+import type { TerritoryGroup } from "../territories/groups";
 import { paintLabels } from "./paintLabels";
-import { estimateText } from "./placement";
+import { estimateText, type PlacedLabel } from "./placement";
 
 const BOX = { width: 4000, height: 4000 };
 const VIEWPORT = { scale: 1000, tx: 0, ty: 0 };
@@ -82,5 +84,33 @@ describe("paintLabels with groups", () => {
     const surface = new RecordingSurface();
     paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, presentation: "dense" });
     expect(surface.alphas).toEqual([DENSE_NAME_ALPHA, 1]);
+  });
+});
+
+describe("paintLabels with dimmed territories", () => {
+  const { scene } = grouped();
+
+  it("draws a dimmed territory's name at DIMMED_ALPHA, after the others", () => {
+    const label = scene.labels[0] as PlacedLabel;
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, dimmed: new Set([label.id]) });
+    expect(surface.alphas).toEqual([DIMMED_ALPHA, 1]);
+    expect(surface.texts[surface.texts.length - 1]?.text).toBe(label.name);
+  });
+
+  it("dims a group name only when every member is dimmed", () => {
+    const group = scene.groups[0] as TerritoryGroup;
+    expect(group.members.length).toBeGreaterThan(1);
+    const partly = new RecordingSurface();
+    paintLabels(partly, scene, VIEWPORT, DEFAULT_THEME, {
+      ...BOX,
+      groupAlpha: 1,
+      dimmed: new Set(group.members.slice(1)),
+    });
+    expect(partly.alphas).toEqual([]);
+    const wholly = new RecordingSurface();
+    paintLabels(wholly, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1, dimmed: new Set(group.members) });
+    expect(wholly.alphas).toEqual([DIMMED_ALPHA, 1]);
+    expect(wholly.texts[wholly.texts.length - 1]?.text).toBe(group.name);
   });
 });

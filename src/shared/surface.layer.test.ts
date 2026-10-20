@@ -131,6 +131,20 @@ describe("canvasSurface layer", () => {
     expect(log).toEqual(["target.fill red alpha=0.2"]);
     expect(context.globalAlpha).toBe(0.7);
   });
+
+  it("without an offscreen canvas, an alpha set inside the layer is relative to the layer's alpha", () => {
+    const log: string[] = [];
+    const { context } = target(log, false);
+    const alphas: number[] = [];
+    canvasSurface(context as unknown as CanvasRenderingContext2D).layer(0.2, (layer) => {
+      layer.globalAlpha(0.5);
+      alphas.push(context.globalAlpha);
+      layer.globalAlpha(1);
+      alphas.push(context.globalAlpha);
+    });
+    expect(alphas).toEqual([0.1, 0.2]);
+    expect(context.globalAlpha).toBe(1);
+  });
 });
 
 describe("RecordingSurface layer", () => {

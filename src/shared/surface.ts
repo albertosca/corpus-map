@@ -166,9 +166,12 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
     layer(alpha, draw) {
       const offscreen = offscreenFor(context);
       if (!offscreen) {
+        // Straight onto the target: an alpha set inside is relative to the
+        // layer's, as it would be inside an offscreen layer composited at `alpha`.
         const previous = context.globalAlpha;
+        const relative: Surface = { ...surface, globalAlpha: (inner) => surface.globalAlpha(inner * alpha) };
         context.globalAlpha = alpha;
-        draw(surface);
+        draw(relative);
         context.globalAlpha = previous;
         return;
       }
