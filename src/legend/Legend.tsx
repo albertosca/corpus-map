@@ -22,7 +22,8 @@ function stop(event: SyntheticEvent): void {
 /**
  * The map's legend (spec slice D §4): real HTML, so a screen reader reads
  * it; expanded in guided, collapsed behind a "Legend" toggle in dense. A
- * toggle the reader pressed holds only until the presentation changes. Every
+ * toggle the reader pressed holds only until the presentation changes; an
+ * entry press keeps the list open through the change its zoom causes. Every
  * pointer event stops here so a press on the legend never pans the map or
  * resolves a card click underneath.
  */
@@ -31,11 +32,16 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
   // A toggle the reader pressed holds until the presentation changes; the
   // reset happens during render (React's "adjust state on a prop change"
   // pattern), so the first render in the new presentation is already right.
+  // An entry press zooms, which usually changes the presentation; the list
+  // the reader just used stays open through that one change, so the pressed
+  // button keeps focus and a second entry is one press away.
   const [override, setOverride] = useState<boolean | null>(null);
   const [overrideFor, setOverrideFor] = useState(presentation);
+  const [holdOpen, setHoldOpen] = useState(false);
   if (overrideFor !== presentation) {
     setOverrideFor(presentation);
-    setOverride(null);
+    setOverride(holdOpen ? true : null);
+    setHoldOpen(false);
   }
   const expanded = overrideFor === presentation && override !== null ? override : presentation === "guided";
   const text = { color: theme.territoryLabel, font: "500 13px system-ui, sans-serif" };
@@ -66,7 +72,10 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
         type="button"
         aria-expanded={expanded}
         aria-controls={listId}
-        onClick={() => setOverride(!expanded)}
+        onClick={() => {
+          setHoldOpen(false);
+          setOverride(!expanded);
+        }}
         style={{
           ...text,
           minHeight: 24,
@@ -86,7 +95,10 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
               <li key={entry.id}>
                 <button
                   type="button"
-                  onClick={() => onEntry(entry.id)}
+                  onClick={() => {
+                    setHoldOpen(true);
+                    onEntry(entry.id);
+                  }}
                   style={{
                     ...text,
                     display: "flex",

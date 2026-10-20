@@ -353,7 +353,8 @@ export interface LegendProps {
 /**
  * The map's legend (spec slice D §4): real HTML, so a screen reader reads
  * it; expanded in guided, collapsed behind a "Legend" toggle in dense. A
- * toggle the reader pressed holds only until the presentation changes. Every
+ * toggle the reader pressed holds only until the presentation changes; an
+ * entry press keeps the list open through the change its zoom causes. Every
  * pointer event stops here so a press on the legend never pans the map or
  * resolves a card click underneath.
  */

@@ -592,6 +592,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const element = rootReference.current;
     if (!element) return;
     const onWheel = (event: globalThis.WheelEvent) => {
+      // The legend scrolls its own list when it overflows a short map.
+      if (event.target instanceof Element && event.target.closest("[data-legend]")) return;
       event.preventDefault();
       const rect = element.getBoundingClientRect();
       const factor = wheelZoomFactor(

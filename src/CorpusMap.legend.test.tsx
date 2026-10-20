@@ -69,3 +69,25 @@ describe("legend prop", () => {
     expect(legend.style.right).toBe("12px");
   });
 });
+
+describe("legend review fixes (slice D final review)", () => {
+  it("a wheel over the legend scrolls the legend, never zooms the map", () => {
+    const views = mount({ legend: true });
+    const before = latest(views)?.ratio;
+    const region = screen.getByRole("region", { name: "Map legend" });
+    const allowed = fireEvent.wheel(region, { deltaY: -300 });
+    expect(allowed).toBe(true);
+    expect(latest(views)?.ratio).toBe(before);
+  });
+
+  it("pressing a legend entry from the far view keeps the legend open and focus inside it", () => {
+    const views = mount({ legend: true });
+    const north = screen.getByRole("button", { name: "North" });
+    north.focus();
+    fireEvent.click(north);
+    expect(latest(views)?.presentation).toBe("dense");
+    const region = screen.getByRole("region", { name: "Map legend" });
+    expect(region.contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole("button", { name: "South" })).toBeTruthy();
+  });
+});
