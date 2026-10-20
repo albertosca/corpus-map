@@ -94,6 +94,17 @@ export interface CorpusMapProps {
     legend?: boolean | {
         corner: MinimapCorner;
     };
+    /**
+     * Territory ids drawn faded (spec categories §5): their points take no
+     * hover, card or selection and leave the accessible tree. Present means
+     * controlled. Unknown ids are ignored, so a list saved against another
+     * corpus never breaks the map.
+     */
+    hiddenTerritories?: readonly string[] | undefined;
+    /** The initial faded ids when `hiddenTerritories` is absent. */
+    defaultHiddenTerritories?: readonly string[] | undefined;
+    /** Fired by every legend checkbox and "Show all", with the new sorted list. */
+    onHiddenTerritoriesChange?: ((ids: string[]) => void) | undefined;
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -224,6 +235,8 @@ export type { Theme } from "./shared/theme";
 export { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
+export type { TerritoryGroup } from "./territories/groups";
+export { deriveTerritoryGroups } from "./territories/groups";
 
 // labels/contrast.d.ts
 export type Rgba = [number, number, number, number];
@@ -243,7 +256,7 @@ export declare function contrastRatio(first: Rgba, second: Rgba): number;
 
 // labels/paintLabels.d.ts
 import { type Presentation } from "../shared/presentation";
-import type { Scene } from "../shared/scene";
+import { type Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
@@ -253,17 +266,26 @@ export interface LabelBox {
     height: number;
     /** Absent means guided. */
     presentation?: Presentation | undefined;
+    /** Group names' alpha (spec categories §4); territory names take the rest. Absent means 0. */
+    groupAlpha?: number | undefined;
+    /** Territory ids whose names are drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
+    dimmed?: ReadonlySet<string> | undefined;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
  * scale has reached, except a name whose measured box is wider or taller
- * than the canvas: it could never be read whole anywhere on screen (a long
- * name on a phone-width view appears once the box is large enough).
- * Where a name sits never enters the decision, so pan and zoom cannot make
- * a name pop out: a name that fits slides off the edge, clipped by the
- * canvas, and a position-dependent skip would break map-feel metric 7.
- * In dense, large names keep full emphasis and the medium and small ones are
- * drawn at `DENSE_NAME_ALPHA`, after the large ones.
+ * than the canvas: it could never be read whole anywhere on screen. Where a
+ * name sits never enters the decision, so pan and zoom cannot make a name
+ * pop out (map-feel metric 7).
+ *
+ * With groups, group names are drawn at `groupAlpha` and territory names at
+ * the rest, so the two levels cross-fade; without groups `groupAlpha` is
+ * ignored. In dense, medium and small territory names are drawn at
+ * `DENSE_NAME_ALPHA`. Names are drawn brightest first (a stable sort keeps
+ * the placement order within an alpha), `globalAlpha` is set only when it
+ * changes and is left at 1, and a name at alpha 0 is not drawn at all. A
+ * dimmed territory's name, and a group's name when every member is dimmed,
+ * are drawn at `DIMMED_ALPHA` of their alpha, so after the others.
  */
 export declare function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void;
 
@@ -341,43 +363,85 @@ import { type ReactElement } from "react";
 import { type Corner } from "../shared/corner";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
+import type { TerritoryGroup } from "../territories/groups";
 import type { LegendEntry } from "./entries";
+/** Opacity of a row whose territory is off screen; Legend.test.tsx pins 4.5:1 contrast in both themes. */
+export declare const OFF_SCREEN_OPACITY = 0.75;
 export interface LegendProps {
-    entries: LegendEntry[];
-    more: number;
+    entries: readonly LegendEntry[];
+    groups: readonly TerritoryGroup[];
+    onScreen: ReadonlySet<string>;
+    hidden: ReadonlySet<string>;
     presentation: Presentation;
     corner: Corner;
     theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
+    /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
+    narrow: boolean;
     onEntry: (id: string) => void;
+    onHiddenChange: (ids: string[]) => void;
 }
 /**
- * The map's legend (spec slice D §4): real HTML, so a screen reader reads
- * it; expanded in guided, collapsed behind a "Legend" toggle in dense. A
+ * The map's legend (spec slice D §4, spec categories §6): real HTML, so a
+ * screen reader reads it; expanded in guided, collapsed behind a "Legend"
+ * toggle in dense or in a narrow box. The list is complete and filterable:
+ * every territory, under its group when the scene has groups, on-screen rows
+ * first. A row's checkbox hides or shows its territory, a group's checkbox
+ * all of its members; a group with nothing on screen starts collapsed. A
  * toggle the reader pressed holds only until the presentation changes; an
  * entry press keeps the list open through the change its zoom causes. Every
  * pointer event stops here so a press on the legend never pans the map or
  * resolves a card click underneath.
  */
-export declare function Legend({ entries, more, presentation, corner, theme, onEntry }: LegendProps): ReactElement;
+export declare function LegendView(properties: LegendProps): ReactElement;
+export declare const Legend: import("react").MemoExoticComponent<typeof LegendView>;
 
 // legend/entries.d.ts
 import type { Corner } from "../shared/corner";
 import type { Territory } from "../shared/spec";
-/** Territories the legend lists before "+N more" (spec slice D §4). */
-export declare const LEGEND_ENTRY_LIMIT = 8;
 export interface LegendEntry {
     id: string;
     name: string;
     colour: string;
     members: number;
 }
-/** The largest territories by member count (ties by id), each with its painted colour, and how many were left out. */
-export declare function legendEntries(territories: readonly Territory[], colours: ReadonlyMap<string, string>, fallback: string, limit?: number): {
-    entries: LegendEntry[];
-    more: number;
-};
+/** Every territory, most members first (ties by id), each with its painted colour (spec categories §6). */
+export declare function legendEntries(territories: readonly Territory[], colours: ReadonlyMap<string, string>, fallback: string): LegendEntry[];
 /** The requested corner, or the next one clockwise when the minimap already sits there. */
 export declare function legendCorner(requested: Corner, minimap: Corner | null): Corner;
+
+// legend/model.d.ts
+import type { TerritoryGroup } from "../territories/groups";
+import type { LegendEntry } from "./entries";
+/** The id of the single headerless group a corpus without groups is shown as. */
+export declare const FLAT_GROUP_ID = "all";
+export interface LegendRow extends LegendEntry {
+    onScreen: boolean;
+    hidden: boolean;
+}
+export interface LegendGroupView {
+    id: string;
+    name: string;
+    /** The rows the filter lets through: on screen first, each part most members first. */
+    rows: LegendRow[];
+    /** Every member, filter or not: what the group checkbox acts on. */
+    memberIds: string[];
+    onScreenCount: number;
+    /** Shown state of every member: drives the three-state group checkbox. */
+    shown: "all" | "none" | "mixed";
+}
+/**
+ * The legend's content (spec categories §6): groups in the given order, a
+ * group kept only when a row survives the filter. The filter is a literal,
+ * case-insensitive substring of a territory's name, its id or its group's
+ * name; a match on the group's name keeps every member. Without groups the
+ * whole list is one headerless group.
+ */
+export declare function legendModel(entries: readonly LegendEntry[], groups: readonly TerritoryGroup[], onScreen: ReadonlySet<string>, hidden: ReadonlySet<string>, filter: string): {
+    flat: boolean;
+    groups: LegendGroupView[];
+};
+/** Whether a group is expanded: every match while filtering, else the reader's choice, else whether anything is on screen. */
+export declare function groupOpen(group: LegendGroupView, filter: string, manual: boolean | undefined): boolean;
 
 // lod/lod.d.ts
 export type Regime = "far" | "mid" | "near";
@@ -536,9 +600,12 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  * Each point in its territory's colour (`pointNeutral` without one), with
  * its state shown by shape, not by colour alone (WCAG 2.2 SC 1.4.1): a
  * visited point is a filled disc, any other a ring whose outer edge sits at
- * the same `pointRadius`, so both marks have the same footprint.
+ * the same `pointRadius`, so both marks have the same footprint. A dimmed
+ * territory's points are drawn first, underneath, at `alpha` times
+ * `DIMMED_ALPHA`; the surface is left at `alpha`. A point with no territory
+ * is never dimmed.
  */
-export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">): void;
+export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number): void;
 
 // shared/corner.d.ts
 /** A corner of the map's box, where an overlay (minimap, legend) sits. */
@@ -552,6 +619,12 @@ export declare const CORNER_POSITION: Record<Corner, {
     bottom?: number;
     left?: number;
 }>;
+
+// shared/dimmed.d.ts
+/** A dimmed territory's fill, outline, points and name are drawn at this fraction of their alpha (spec categories §5). */
+export declare const DIMMED_ALPHA = 0.15;
+/** The empty dimmed set, shared so a default argument never allocates. */
+export declare const NO_DIMMED: ReadonlySet<string>;
 
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";
@@ -582,6 +655,10 @@ export interface Frame {
     focusedNode?: string | null | undefined;
     /** Guided or dense emphasis (spec slice D §4); absent means guided. */
     presentation?: Presentation | undefined;
+    /** Group names' alpha this frame (spec categories §4); absent means 0. */
+    groupAlpha?: number | undefined;
+    /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
+    dimmed?: ReadonlySet<string> | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
@@ -615,7 +692,9 @@ export declare function resolvePresentation(requested: PresentationSetting, regi
 
 // shared/scene.d.ts
 import { type Measure, type PlacedLabel } from "../labels/placement";
+import { type TerritoryGroup } from "../territories/groups";
 import { type Ring } from "../territories/shape";
+import { type Bounds } from "../viewport/fit";
 import type { MapNode, MapSpec } from "./spec";
 import type { Theme } from "./theme";
 import type { Tuning } from "./tuning";
@@ -628,7 +707,15 @@ export interface Scene {
     colours: ReadonlyMap<string, string>;
     /** Territory ids, largest total ring area first: the fill layer's paint order. */
     paintOrder: readonly string[];
+    /** The spec's groups (`deriveTerritoryGroups`); empty when it has none. */
+    groups: readonly TerritoryGroup[];
+    /** One placed name per group, measured in the large font plus its letter spacing; `id` is the group's id. */
+    groupLabels: readonly PlacedLabel[];
+    /** Each territory's world-space bounding box; a territory without rings is absent. */
+    bounds: ReadonlyMap<string, Bounds>;
 }
+/** Extra space between a group name's letters, in CSS pixels; the painter draws with the same value. */
+export declare const GROUP_LETTER_SPACING = 1;
 /**
  * Only the fields this function actually reads, not the full `Tuning`/`Theme`
  * — so a caller can memoize its own call on just those primitive values
@@ -658,6 +745,12 @@ export interface Territory {
     boundary?: Array<[number, number]>;
     /** Overrides the palette for this territory; `#rrggbb`, `rgb()` or `rgba()`. */
     colour?: string;
+    /**
+     * The group this territory belongs to, by display name; territories with
+     * the same `group` share one. If any territory carries it, groups are not
+     * derived and the others fall under "Other" (spec categories §3).
+     */
+    group?: string;
 }
 export interface MapSpec {
     version: "1";
@@ -681,8 +774,8 @@ export interface Surface {
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
-    /** Draws `text` centred on (horizontal, vertical). */
-    text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
+    /** Draws `text` centred on (horizontal, vertical); `letterSpacing` (a CSS length) applies to this call only. */
+    text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
     globalAlpha(alpha: number): void;
     /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
@@ -719,6 +812,7 @@ export declare class RecordingSurface implements Surface {
         y: number;
         color: string;
         font: string;
+        letterSpacing?: string;
     }>;
     alphas: number[];
     outlines: Array<{
@@ -747,7 +841,7 @@ export declare class RecordingSurface implements Surface {
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
     hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
-    text(text: string, horizontal: number, vertical: number, color: string, font: string): void;
+    text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     globalAlpha(alpha: number): void;
     outline(points: Array<[number, number]>, color: string, width: number): void;
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
@@ -817,6 +911,13 @@ export interface Tuning {
     };
     /** Screen-pixel radius within which hovering picks the nearest point (a 24 px target, WCAG 2.5.8). */
     hoverRadius: number;
+    /**
+     * Below this zoom ratio (viewport scale over fit scale) the far map names
+     * groups, not territories; the swap cross-fades over `fadeBand` above it
+     * (spec categories §4). At or above `midAt`, group names hold through all
+     * of far.
+     */
+    groupNamesUntil: number;
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
@@ -854,6 +955,51 @@ export declare function visibleBorders(shapes: ReadonlyMap<string, readonly Ring
  */
 export declare function assignTerritoryColours(shapes: ReadonlyMap<string, readonly Ring[]>, territories: readonly Territory[], palette: readonly string[]): Map<string, string>;
 
+// territories/groups.d.ts
+import type { MapSpec } from "../shared/spec";
+/** Territories shown together in the legend and named together on the far map (spec categories §3). */
+export interface TerritoryGroup {
+    id: string;
+    name: string;
+    /** Territory ids, most members first, ties by id. */
+    members: string[];
+}
+/** Below this many territories nothing is derived: a short flat list needs no groups. */
+export declare const MINIMUM_DERIVED_TERRITORIES = 10;
+/**
+ * Above this many nothing is derived either: the clustering below is cubic
+ * in the territory count (400 already costs about ten million steps), and a
+ * consumer with that many categories can supply `group` instead.
+ */
+export declare const MAXIMUM_DERIVED_TERRITORIES = 400;
+/** Where a territory without `group` lands when another territory has one. */
+export declare const OTHER_GROUP = "Other";
+/** round(√n) clamped to [3, 8]: 6 for the 38 arXiv categories. */
+export declare function derivedGroupCount(territoryCount: number): number;
+/**
+ * The spec's groups: by `group` name when any territory carries one (the
+ * rest under "Other"), otherwise derived from the centroids for 10 to 400
+ * territories, otherwise none. A pipeline can run this, name the groups and
+ * write `group` back into its corpus: that is how derived groups get named.
+ */
+export declare function deriveTerritoryGroups(spec: MapSpec): TerritoryGroup[];
+
+// territories/hitTest.d.ts
+import type { Scene } from "../shared/scene";
+import type { MapSpec } from "../shared/spec";
+import type { Bounds } from "../viewport/fit";
+import { type Viewport } from "../viewport/viewport";
+import { type Point } from "./shape";
+/**
+ * The non-dimmed territories whose shape holds `point` (world units), most
+ * members first, ties by id (spec categories §7). The bounding box rejects
+ * almost every territory before any ring is walked, which keeps a pointer
+ * move cheap at hundreds of territories.
+ */
+export declare function territoriesAt(scene: Pick<Scene, "bounds" | "shapes">, spec: MapSpec, point: Point, dimmed: ReadonlySet<string>): string[];
+/** Ids of the territories whose bounding box meets the view, sorted; dimmed ones included (the legend shows them). */
+export declare function onScreenTerritories(bounds: ReadonlyMap<string, Bounds>, viewport: Viewport, width: number, height: number): string[];
+
 // territories/paintTerritories.d.ts
 import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
@@ -866,9 +1012,10 @@ export declare const TERRITORY_OUTLINE_WIDTH = 1.5;
  * `fillAlpha`, so each pixel shows the colour of the smallest territory
  * covering it and overlaps never darken; then outlines every ring in its
  * territory's full colour. A territory missing from `scene.colours` (an
- * empty palette) is painted in `theme.pointNeutral`.
+ * empty palette) is painted in `theme.pointNeutral`. A dimmed territory's
+ * fill and outline are drawn at `DIMMED_ALPHA`.
  */
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
@@ -900,6 +1047,17 @@ export declare function chaikin(ring: Ring): Ring;
 /** Even-odd point-in-polygon test. */
 export declare function contains(ring: Ring, [horizontal, vertical]: Point): boolean;
 export declare function ringArea(ring: Ring): number;
+
+// territories/tooltipPosition.d.ts
+/** Gap between the cursor and the tooltip, in CSS pixels (spec categories §7). */
+export declare const TOOLTIP_OFFSET = 12;
+/** Opacity of the group line in the territory balloon; CorpusMap.tooltip.test.tsx pins 4.5:1 contrast in both themes. */
+export declare const GROUP_LINE_OPACITY = 0.8;
+/** The tooltip's top-left corner: below-right of the cursor, flipped on an axis where it would leave the map, never above or left of it. */
+export declare function tooltipPosition(cursorHorizontal: number, cursorVertical: number, boxWidth: number, boxHeight: number, mapWidth: number, mapHeight: number, offset?: number): {
+    left: number;
+    top: number;
+};
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";
@@ -942,7 +1100,8 @@ import type { Viewport } from "./viewport";
 export declare const LABEL_FIT_PASSES = 3;
 /**
  * The first view: every territory outline whole, and every name that is
- * active and fits the box whole too (closes the BACKLOG item about names cut
+ * active at the fit (group names when the scene has groups) and fits the box
+ * whole too (closes the BACKLOG item about names cut
  * at the fitted phone view). A name's box is in screen pixels, so its extent
  * in world units depends on the scale being chosen; each pass widens the
  * shape bounds by the names at the previous pass's scale and refits.
@@ -953,7 +1112,7 @@ export declare const LABEL_FIT_PASSES = 3;
  * the set again on every pass lets a name whose `activeFromScale` sits near
  * the fitted scale flip in and out, and the result never settles.
  */
-export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels">, width: number, height: number, padding: number): Viewport;
+export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels" | "groupLabels">, width: number, height: number, padding: number): Viewport;
 
 // viewport/useElementSize.d.ts
 import { type RefObject } from "react";
