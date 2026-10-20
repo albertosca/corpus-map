@@ -9,7 +9,7 @@ import { SpecError, validateSpec } from "../../src/shared/spec";
 import { RecordingSurface } from "../../src/shared/surface";
 import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
-import { fitSpec } from "../../src/viewport/fit";
+import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen, type Viewport } from "../../src/viewport/viewport";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
@@ -30,9 +30,9 @@ function collectKeys(value: unknown, keys: Set<string>): void {
     return;
   }
   if (value !== null && typeof value === "object") {
-    for (const [key, val] of Object.entries(value)) {
+    for (const [key, child] of Object.entries(value)) {
       keys.add(key);
-      collectKeys(val, keys);
+      collectKeys(child, keys);
     }
   }
 }
@@ -102,45 +102,53 @@ interface DrawnBox {
   height: number;
 }
 
-/** Every name `paint` draws for `vp` into a `width` x `height` canvas, with its `estimateText` box. */
-function drawnBoxes(spec: MapSpec, scene: Scene, vp: Viewport, width: number, height: number): DrawnBox[] {
+/** Every name `paint` draws for `viewport` into a `width` x `height` canvas, with its `estimateText` box. */
+function drawnBoxes(spec: MapSpec, scene: Scene, viewport: Viewport, width: number, height: number): DrawnBox[] {
   const regime = regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis);
   const surface = new RecordingSurface();
-  paint(surface, scene, spec, vp, { regime, pointAlpha: 0, width, height }, DEFAULT_THEME);
-  return surface.texts.map((t) => ({ text: t.text, x: t.x, y: t.y, ...estimateText(t.text, t.font) }));
+  paint(surface, scene, spec, viewport, { regime, pointAlpha: 0, width, height }, DEFAULT_THEME);
+  return surface.texts.map((drawn) => ({
+    text: drawn.text,
+    x: drawn.x,
+    y: drawn.y,
+    ...estimateText(drawn.text, drawn.font),
+  }));
 }
 
 function overlappingPairs(boxes: readonly DrawnBox[]): string[] {
   const pairs: string[] = [];
-  for (let i = 0; i < boxes.length; i += 1) {
-    for (let j = i + 1; j < boxes.length; j += 1) {
-      const a = boxes[i];
-      const b = boxes[j];
-      if (!a || !b) continue;
-      const ox = Math.abs(a.x - b.x) < (a.width + b.width) / 2 + LABEL_PADDING;
-      const oy = Math.abs(a.y - b.y) < (a.height + b.height) / 2 + LABEL_PADDING;
-      if (ox && oy) pairs.push(`${a.text} / ${b.text}`);
+  for (let firstIndex = 0; firstIndex < boxes.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < boxes.length; secondIndex += 1) {
+      const first = boxes[firstIndex];
+      const second = boxes[secondIndex];
+      if (!first || !second) continue;
+      const overlapsHorizontally = Math.abs(first.x - second.x) < (first.width + second.width) / 2 + LABEL_PADDING;
+      const overlapsVertically = Math.abs(first.y - second.y) < (first.height + second.height) / 2 + LABEL_PADDING;
+      if (overlapsHorizontally && overlapsVertically) pairs.push(`${first.text} / ${second.text}`);
     }
   }
   return pairs;
 }
 
-function crossesEdge(b: DrawnBox, width: number, height: number): boolean {
-  return b.x - b.width / 2 < 0 || b.x + b.width / 2 > width || b.y - b.height / 2 < 0 || b.y + b.height / 2 > height;
+function crossesEdge(box: DrawnBox, width: number, height: number): boolean {
+  return (
+    box.x - box.width / 2 < 0 ||
+    box.x + box.width / 2 > width ||
+    box.y - box.height / 2 < 0 ||
+    box.y + box.height / 2 > height
+  );
 }
 
 /**
  * Acceptance 2 of the showcase spec, automated: the demo opens on the real
  * arXiv corpus at the fitted view, in the far regime, with names drawn and
  * no two of them overlapping. Built through the same pipeline `CorpusMap`
- * uses (`buildScene`, `fitSpec` with its 24 px padding, `paint`), with
+ * uses (`buildScene`, `fitScene` with its 24 px padding, `paint`), with
  * `estimateText` standing in for a real browser's text metrics.
  *
- * At desktop width no drawn name crosses the canvas edge. At phone width
- * `paintLabels` drops any name wider than the screen, but a name that fits
- * is drawn where placement put it, so two long names are cut by the left
- * edge at the fitted view (recorded in BACKLOG); what holds there is that
- * every drawn name could be read whole and is anchored on screen.
+ * `fitScene` fits the territory shapes and the names drawn at the fitted
+ * scale, so at both desktop and phone width every drawn name is whole on
+ * the canvas: none crosses its edge.
  */
 describe("acceptance 2: the fitted arXiv view", () => {
   const spec = validateSpec(rawSpec);
@@ -150,22 +158,17 @@ describe("acceptance 2: the fitted arXiv view", () => {
     expect(regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis)).toBe("far");
   });
 
-  it("at 1440x900: names drawn, none overlapping, none crossing the canvas edge", () => {
-    const [width, height] = [1440, 900];
-    const boxes = drawnBoxes(spec, scene, fitSpec(spec, width, height, 24), width, height);
-    expect(boxes.length).toBeGreaterThan(0);
-    expect(boxes.filter((b) => crossesEdge(b, width, height)).map((b) => b.text)).toEqual([]);
-    expect(overlappingPairs(boxes)).toEqual([]);
-  });
-
-  it("at 375x812: names drawn, none overlapping, none wider or taller than the screen, every anchor on screen", () => {
-    const [width, height] = [375, 812];
-    const boxes = drawnBoxes(spec, scene, fitSpec(spec, width, height, 24), width, height);
-    expect(boxes.length).toBeGreaterThan(0);
-    expect(boxes.filter((b) => b.width > width || b.height > height).map((b) => b.text)).toEqual([]);
-    expect(boxes.filter((b) => b.x < 0 || b.x > width || b.y < 0 || b.y > height).map((b) => b.text)).toEqual([]);
-    expect(overlappingPairs(boxes)).toEqual([]);
-  });
+  for (const [width, height] of [
+    [1440, 900],
+    [375, 812],
+  ] as const) {
+    it(`at ${width}x${height}: names drawn, none overlapping, none crossing the canvas edge`, () => {
+      const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, width, height, 24), width, height);
+      expect(boxes.length).toBeGreaterThan(0);
+      expect(boxes.filter((box) => crossesEdge(box, width, height)).map((box) => box.text)).toEqual([]);
+      expect(overlappingPairs(boxes)).toEqual([]);
+    });
+  }
 });
 
 /**
@@ -189,12 +192,12 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
       ty: height / 2 - ((height / 2 - fit.ty) / fit.scale) * scale,
     };
   };
-  const anchorsOnScreen = (vp: Viewport, width: number, height: number): Set<string> => {
+  const anchorsOnScreen = (viewport: Viewport, width: number, height: number): Set<string> => {
     const out = new Set<string>();
-    for (const l of scene.labels) {
-      if (vp.scale < l.activeFromScale) continue;
-      const [x, y] = toScreen(vp, l.anchor[0], l.anchor[1]);
-      if (x >= 0 && x <= width && y >= 0 && y <= height) out.add(l.name);
+    for (const placed of scene.labels) {
+      if (viewport.scale < placed.activeFromScale) continue;
+      const [horizontal, vertical] = toScreen(viewport, placed.anchor[0], placed.anchor[1]);
+      if (horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height) out.add(placed.name);
     }
     return out;
   };
@@ -204,33 +207,33 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
     [375, 812],
   ] as const) {
     it(`at ${width}x${height}: 0 pops over the pan and zoom sweeps`, () => {
-      const fit = fitSpec(spec, width, height, 24);
+      const fit = fitScene(spec, scene, width, height, 24);
       const pops: string[] = [];
       let compared = 0;
       let crossedEdge = 0;
-      const step = (label: string, before: DrawnBox[], vp: Viewport): DrawnBox[] => {
-        const now = drawnBoxes(spec, scene, vp, width, height);
-        const drawnNow = new Set(now.map((b) => b.text));
-        const anchored = anchorsOnScreen(vp, width, height);
-        for (const b of before) {
-          if (!anchored.has(b.text)) continue;
+      const step = (label: string, before: DrawnBox[], viewport: Viewport): DrawnBox[] => {
+        const now = drawnBoxes(spec, scene, viewport, width, height);
+        const drawnNow = new Set(now.map((box) => box.text));
+        const anchored = anchorsOnScreen(viewport, width, height);
+        for (const box of before) {
+          if (!anchored.has(box.text)) continue;
           compared += 1;
-          if (!drawnNow.has(b.text)) pops.push(`${label} ${b.text}`);
+          if (!drawnNow.has(box.text)) pops.push(`${label} ${box.text}`);
         }
-        crossedEdge += now.filter((b) => crossesEdge(b, width, height)).length;
+        crossedEdge += now.filter((box) => crossesEdge(box, width, height)).length;
         return now;
       };
 
       for (const ratio of [1, 2, 4]) {
         const base = aboutCentre(fit, width, height, ratio);
         let before = drawnBoxes(spec, scene, base, width, height);
-        for (let dx = 2; dx <= width; dx += 2) {
-          before = step(`pan r${ratio} dx${dx}`, before, { ...base, tx: base.tx + dx });
+        for (let offset = 2; offset <= width; offset += 2) {
+          before = step(`pan r${ratio} dx${offset}`, before, { ...base, tx: base.tx + offset });
         }
       }
       let before = drawnBoxes(spec, scene, fit, width, height);
-      for (let k = 1; 1.1 ** k <= 64; k += 1) {
-        before = step(`zoom k${k}`, before, aboutCentre(fit, width, height, 1.1 ** k));
+      for (let power = 1; 1.1 ** power <= 64; power += 1) {
+        before = step(`zoom k${power}`, before, aboutCentre(fit, width, height, 1.1 ** power));
       }
 
       expect(pops).toEqual([]);

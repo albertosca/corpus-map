@@ -23,7 +23,8 @@ import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
-import { fitSpec, worldBounds } from "./viewport/fit";
+import { sceneBounds } from "./viewport/fit";
+import { fitScene } from "./viewport/fitScene";
 import { useElementSize } from "./viewport/useElementSize";
 import {
   panBy,
@@ -211,8 +212,58 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const width = box?.width ?? 0;
   const height = box?.height ?? 0;
 
-  const [viewport, setViewport] = useState<Viewport>(() => fitSpec(spec, width, height, FIT_PADDING));
-  const fitted = useMemo(() => fitSpec(spec, width, height, FIT_PADDING), [spec, width, height]);
+  // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
+  // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
+  // the box a corpus is fitted into no longer belongs in this memo's key,
+  // and a resize (which only changes `fitScale`) costs no scene rebuild.
+  // Keyed on the primitive values `buildScene` actually reads — not on the
+  // `tuning`/`theme` objects themselves, which `resolveTuning` and
+  // `properties.theme ?? DEFAULT_THEME` both mint fresh on every render for an
+  // inline literal prop (spec 4's tuning panel does exactly that), which
+  // would rebuild the scene (70-135ms on 10k items) on every render. The
+  // literals below and the dependency list must both name every field
+  // `buildScene` reads — nothing more, nothing less — which is also why
+  // `buildScene` only asks for `Pick<Tuning, ...>` and `Pick<Theme, ...>`:
+  // passing the whole objects here would put the whole (unstable) objects
+  // back in the dependency list.
+  const measure = useMeasure();
+  // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
+  const paletteKey = theme.palette.join("|");
+  const scene = useMemo(
+    () =>
+      buildScene(
+        spec,
+        {
+          hullPadding: tuning.hullPadding,
+          labelClasses: { large: tuning.labelClasses.large, medium: tuning.labelClasses.medium },
+        },
+        {
+          territoryFonts: {
+            large: theme.territoryFonts.large,
+            medium: theme.territoryFonts.medium,
+            small: theme.territoryFonts.small,
+          },
+          palette: paletteKey === "" ? [] : paletteKey.split("|"),
+        },
+        measure,
+      ),
+    [
+      spec,
+      measure,
+      tuning.hullPadding,
+      tuning.labelClasses.large,
+      tuning.labelClasses.medium,
+      theme.territoryFonts.large,
+      theme.territoryFonts.medium,
+      theme.territoryFonts.small,
+      paletteKey,
+    ],
+  );
+
+  const [viewport, setViewport] = useState<Viewport>(() => fitScene(spec, scene, width, height, FIT_PADDING));
+  // A theme or font change rebuilds the scene and so moves `fitted` (and
+  // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
+  const fitted = useMemo(() => fitScene(spec, scene, width, height, FIT_PADDING), [spec, scene, width, height]);
   const fitScale = fitted.scale;
   // Hysteresis regime; declared before the refit below (rather than nearer
   // where `ratio`/`next` are computed) so a spec/box swap can reset it in
@@ -352,7 +403,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // one (spec 4 §1).
   const minimapCorner: MinimapCorner | null =
     properties.minimap === true ? "bottom-left" : properties.minimap ? properties.minimap.corner : null;
-  const world = useMemo(() => worldBounds(spec), [spec]);
+  const world = useMemo(() => sceneBounds(spec, scene.shapes), [spec, scene]);
   // The main view's own world-space bounding rectangle, in world units —
   // what the minimap draws its view rectangle from, and a dependency of its
   // paint effect (`Minimap.tsx`). The two `toWorld` calls are cheap, but the
@@ -371,54 +422,6 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const viewWorld = useMemo(
     () => ({ x: viewX0, y: viewY0, w: viewX1 - viewX0, h: viewY1 - viewY0 }),
     [viewX0, viewY0, viewX1, viewY1],
-  );
-
-  // Computed once per spec/tuning/theme/measure — not per fitScale/box size:
-  // placed names store an absolute `activeFromScale` (spec 4 "showcase"), so
-  // the box a corpus is fitted into no longer belongs in this memo's key,
-  // and a resize (which only changes `fitScale`) costs no scene rebuild.
-  // Keyed on the primitive values `buildScene` actually reads — not on the
-  // `tuning`/`theme` objects themselves, which `resolveTuning` and
-  // `properties.theme ?? DEFAULT_THEME` both mint fresh on every render for an
-  // inline literal prop (spec 4's tuning panel does exactly that), which
-  // would rebuild the scene (70-135ms on 10k items) on every render. The
-  // literals below and the dependency list must both name every field
-  // `buildScene` reads — nothing more, nothing less — which is also why
-  // `buildScene` only asks for `Pick<Tuning, ...>` and `Pick<Theme, ...>`:
-  // passing the whole objects here would put the whole (unstable) objects
-  // back in the dependency list.
-  const measure = useMeasure();
-  // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
-  const paletteKey = theme.palette.join("|");
-  const scene = useMemo(
-    () =>
-      buildScene(
-        spec,
-        {
-          hullPadding: tuning.hullPadding,
-          labelClasses: { large: tuning.labelClasses.large, medium: tuning.labelClasses.medium },
-        },
-        {
-          territoryFonts: {
-            large: theme.territoryFonts.large,
-            medium: theme.territoryFonts.medium,
-            small: theme.territoryFonts.small,
-          },
-          palette: paletteKey === "" ? [] : paletteKey.split("|"),
-        },
-        measure,
-      ),
-    [
-      spec,
-      measure,
-      tuning.hullPadding,
-      tuning.labelClasses.large,
-      tuning.labelClasses.medium,
-      theme.territoryFonts.large,
-      theme.territoryFonts.medium,
-      theme.territoryFonts.small,
-      paletteKey,
-    ],
   );
 
   useEffect(() => {

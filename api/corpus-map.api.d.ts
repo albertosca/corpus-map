@@ -811,6 +811,7 @@ export declare function ringArea(ring: Ring): number;
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";
+import type { Ring } from "../territories/shape";
 import type { Viewport } from "./viewport";
 export interface Bounds {
     minX: number;
@@ -818,7 +819,15 @@ export interface Bounds {
     maxX: number;
     maxY: number;
 }
+/** The box around `points`; the unit box when there are none, and a degenerate axis widened by 0.5 each way. */
+export declare function boundsOf(points: Iterable<readonly [number, number]>): Bounds;
 export declare function worldBounds(spec: MapSpec): Bounds;
+/** The nodes plus every drawable territory ring: what a fitted view must show whole (spec slice D §4). */
+export declare function sceneBounds(spec: MapSpec, shapes: ReadonlyMap<string, readonly Ring[]>): Bounds;
+/** One territory's box, or `null` when it has no drawable ring (nothing to zoom to). */
+export declare function ringBounds(rings: readonly Ring[]): Bounds | null;
+/** `fitBounds`, with the scale clamped to [minimumScale, maximumScale] and `bounds` kept centred. */
+export declare function fitClamped(bounds: Bounds, width: number, height: number, padding: number, minimumScale: number, maximumScale: number): Viewport;
 /**
  * The padded-fit transform: `bounds` centred and scaled (one scale for both
  * axes) to fill a `width` x `height` box minus `padding` on every side.
@@ -832,6 +841,27 @@ export declare function worldBounds(spec: MapSpec): Bounds;
  */
 export declare function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport;
 export declare function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport;
+
+// viewport/fitScene.d.ts
+import type { Scene } from "../shared/scene";
+import type { MapSpec } from "../shared/spec";
+import type { Viewport } from "./viewport";
+/** Refits after widening by the names; three passes settle every corpus in the gallery (demo/corpora/fit.test.ts). */
+export declare const LABEL_FIT_PASSES = 3;
+/**
+ * The first view: every territory outline whole, and every name that is
+ * active and fits the box whole too (closes the BACKLOG item about names cut
+ * at the fitted phone view). A name's box is in screen pixels, so its extent
+ * in world units depends on the scale being chosen; each pass widens the
+ * shape bounds by the names at the previous pass's scale and refits.
+ *
+ * The names counted are fixed at the shapes-only fit, the largest scale this
+ * function can return: widening only lowers the scale, and a lower scale only
+ * deactivates names, so no name becomes active after it was left out. Picking
+ * the set again on every pass lets a name whose `activeFromScale` sits near
+ * the fitted scale flip in and out, and the result never settles.
+ */
+export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels">, width: number, height: number, padding: number): Viewport;
 
 // viewport/useElementSize.d.ts
 import { type RefObject } from "react";

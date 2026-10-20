@@ -9,7 +9,7 @@ import { buildScene } from "./shared/scene";
 import type { MapSpec } from "./shared/spec";
 import { DEFAULT_THEME } from "./shared/theme";
 import { DEFAULT_TUNING } from "./shared/tuning";
-import { fitSpec } from "./viewport/fit";
+import { fitScene } from "./viewport/fitScene";
 import { toScreen } from "./viewport/viewport";
 
 const spec: MapSpec = {
@@ -606,8 +606,8 @@ describe("spec swap", () => {
       // same way CorpusMap does: build the scene against the NEW spec, then
       // project through the NEW spec's fitted viewport, never the stale one
       // from before the swap.
-      const largeVp = fitSpec(large, 400, 300, 24);
       const largeScene = buildScene(large, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+      const largeVp = fitScene(large, largeScene, 400, 300, 24);
       const label = largeScene.labels.find((placed) => placed.id === "u");
       if (!label) throw new Error("expected a placed label for territory 'u'");
       const [expectedLeft, expectedTop] = toScreen(largeVp, label.anchor[0], label.anchor[1]);

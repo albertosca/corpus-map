@@ -7,7 +7,7 @@ import type { MapSpec } from "./shared/spec";
 import { DEFAULT_THEME } from "./shared/theme";
 import { DEFAULT_TUNING } from "./shared/tuning";
 import { TERRITORY_OUTLINE_WIDTH } from "./territories/paintTerritories";
-import { fitSpec } from "./viewport/fit";
+import { fitScene } from "./viewport/fitScene";
 import { toScreen } from "./viewport/viewport";
 
 /**
@@ -121,7 +121,7 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
 
   /** The territory's rings as `CorpusMap` projects them at its fitted view. */
   function expectedRings(id: string): Array<Array<[number, number]>> {
-    const viewport = fitSpec(spec, WIDTH, HEIGHT, 24);
+    const viewport = fitScene(spec, buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText), WIDTH, HEIGHT, 24);
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     return (scene.shapes.get(id) ?? [])
       .filter((ring) => ring.length >= 3)
@@ -182,7 +182,11 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     act(() => epsilon.focus());
     const rings = lastFrameFocusStrokes();
     expect(rings).toHaveLength(1);
-    const [expectedHorizontal, expectedVertical] = toScreen(fitSpec(spec, WIDTH, HEIGHT, 24), 2, 10);
+    const [expectedHorizontal, expectedVertical] = toScreen(
+      fitScene(spec, buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText), WIDTH, HEIGHT, 24),
+      2,
+      10,
+    );
     expect(rings[0]?.arc?.x).toBeCloseTo(expectedHorizontal, 6);
     expect(rings[0]?.arc?.y).toBeCloseTo(expectedVertical, 6);
 

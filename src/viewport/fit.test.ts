@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { MapSpec } from "../shared/spec";
-import { fitBounds, fitSpec, worldBounds } from "./fit";
+import type { Ring } from "../territories/shape";
+import { boundsOf, fitBounds, fitClamped, fitSpec, ringBounds, sceneBounds, worldBounds } from "./fit";
 import { toScreen } from "./viewport";
 
-const spec = (pts: Array<[number, number]>): MapSpec => ({
+const spec = (points: Array<[number, number]>): MapSpec => ({
   version: "1",
   territories: [],
-  nodes: pts.map(([x, y], i) => ({ id: `n${i}`, label: `${i}`, x, y, territory: null })),
+  nodes: points.map(([horizontal, vertical], index) => ({
+    id: `n${index}`,
+    label: `${index}`,
+    x: horizontal,
+    y: vertical,
+    territory: null,
+  })),
 });
 
 describe("worldBounds", () => {
@@ -31,39 +38,39 @@ describe("worldBounds", () => {
   });
 
   it("returns a non-degenerate box for a single point", () => {
-    const b = worldBounds(spec([[7, 7]]));
-    expect(b.maxX).toBeGreaterThan(b.minX);
-    expect(b.maxY).toBeGreaterThan(b.minY);
+    const bounds = worldBounds(spec([[7, 7]]));
+    expect(bounds.maxX).toBeGreaterThan(bounds.minX);
+    expect(bounds.maxY).toBeGreaterThan(bounds.minY);
   });
 });
 
 describe("fitSpec", () => {
   it("places every node inside the viewport", () => {
-    const s = spec([
+    const mapSpec = spec([
       [-100, -100],
       [0, 0],
       [250, 80],
     ]);
-    const v = fitSpec(s, 800, 600, 20);
-    for (const n of s.nodes) {
-      const [sx, sy] = toScreen(v, n.x, n.y);
-      expect(sx).toBeGreaterThanOrEqual(0);
-      expect(sx).toBeLessThanOrEqual(800);
-      expect(sy).toBeGreaterThanOrEqual(0);
-      expect(sy).toBeLessThanOrEqual(600);
+    const fitted = fitSpec(mapSpec, 800, 600, 20);
+    for (const node of mapSpec.nodes) {
+      const [screenHorizontal, screenVertical] = toScreen(fitted, node.x, node.y);
+      expect(screenHorizontal).toBeGreaterThanOrEqual(0);
+      expect(screenHorizontal).toBeLessThanOrEqual(800);
+      expect(screenVertical).toBeGreaterThanOrEqual(0);
+      expect(screenVertical).toBeLessThanOrEqual(600);
     }
   });
 
   it("uses one scale for both axes so the map is not stretched", () => {
-    const s = spec([
+    const mapSpec = spec([
       [0, 0],
       [100, 1],
     ]);
-    const v = fitSpec(s, 800, 600, 0);
-    const [ax, ay] = toScreen(v, 0, 0);
-    const [bx] = toScreen(v, 1, 0);
-    const [, by] = toScreen(v, 0, 1);
-    expect(Math.abs(bx - ax)).toBeCloseTo(Math.abs(by - ay), 6);
+    const fitted = fitSpec(mapSpec, 800, 600, 0);
+    const [originHorizontal, originVertical] = toScreen(fitted, 0, 0);
+    const [unitHorizontal] = toScreen(fitted, 1, 0);
+    const [, unitVertical] = toScreen(fitted, 0, 1);
+    expect(Math.abs(unitHorizontal - originHorizontal)).toBeCloseTo(Math.abs(unitVertical - originVertical), 6);
   });
 
   it("is built on the exported fitBounds, not a private copy of the same arithmetic (fix round 1, finding 3)", () => {
@@ -72,11 +79,72 @@ describe("fitSpec", () => {
     // in this task's report breaks `fitBounds` itself and shows both this
     // assertion and `paintMinimap.test.ts`'s `minimapFit`-based ones fail
     // together, which a merely-equivalent duplicate could not.
-    const s = spec([
+    const mapSpec = spec([
       [-100, -100],
       [0, 0],
       [250, 80],
     ]);
-    expect(fitBounds(worldBounds(s), 800, 600, 20)).toEqual(fitSpec(s, 800, 600, 20));
+    expect(fitBounds(worldBounds(mapSpec), 800, 600, 20)).toEqual(fitSpec(mapSpec, 800, 600, 20));
+  });
+});
+
+describe("scene bounds", () => {
+  const spec = {
+    version: "1",
+    territories: [],
+    nodes: [{ id: "a", label: "A", x: 0, y: 0, territory: null }],
+  } as MapSpec;
+
+  it("widens the node extent by every drawable ring, and ignores rings shorter than 3 points", () => {
+    const shapes = new Map([
+      [
+        "t",
+        [
+          [
+            [-5, -5],
+            [5, -5],
+            [5, 5],
+          ] as Ring,
+          [
+            [-100, -100],
+            [100, 100],
+          ] as Ring,
+        ],
+      ],
+    ]);
+    expect(sceneBounds(spec, shapes)).toEqual({ minX: -5, minY: -5, maxX: 5, maxY: 5 });
+  });
+
+  it("keeps worldBounds' behaviour for nodes only, including the degenerate widening", () => {
+    expect(sceneBounds(spec, new Map())).toEqual(worldBounds(spec));
+    expect(boundsOf([])).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 });
+  });
+
+  it("returns null for a territory with no drawable ring", () => {
+    expect(ringBounds([])).toBeNull();
+    expect(
+      ringBounds([
+        [
+          [0, 0],
+          [1, 1],
+        ] as Ring,
+      ]),
+    ).toBeNull();
+    expect(
+      ringBounds([
+        [
+          [0, 0],
+          [2, 0],
+          [2, 4],
+        ] as Ring,
+      ]),
+    ).toEqual({ minX: 0, minY: 0, maxX: 2, maxY: 4 });
+  });
+
+  it("clamps a fit's scale and keeps the bounds centred", () => {
+    const viewport = fitClamped({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, 100, 100, 0, 1, 10);
+    expect(viewport.scale).toBe(10);
+    expect(viewport.tx + 0.5 * viewport.scale).toBe(50);
+    expect(viewport.ty + 0.5 * viewport.scale).toBe(50);
   });
 });
