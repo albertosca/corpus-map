@@ -159,6 +159,8 @@ export declare const DEFAULT_CARD_SIZE: {
     width: number;
     height: number;
 };
+/** The card frame's left edge in the node's territory colour, tying a card to its region (spec slice D §4). */
+export declare const CARD_STRIPE_WIDTH = 4;
 export interface CardOverlayProps {
     spec: MapSpec;
     viewport: Viewport;
@@ -173,10 +175,12 @@ export interface CardOverlayProps {
     } | undefined;
     /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
     opacity?: number | undefined;
-    theme?: Pick<Theme, "cardBackground" | "cardBorder"> | undefined;
+    theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
+    /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
+    colours?: ReadonlyMap<string, string> | undefined;
     renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, renderCard, }: CardOverlayProps): ReactElement | null;
+export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, colours, renderCard, }: CardOverlayProps): ReactElement | null;
 
 // cards/layout.d.ts
 export interface CardAnchor {

@@ -801,6 +801,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             cardSize={cardSize}
             opacity={cardOpacity}
             theme={theme}
+            colours={scene.colours}
             renderCard={renderCard}
           />
           {hover ? (

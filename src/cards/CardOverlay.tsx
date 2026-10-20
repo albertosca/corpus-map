@@ -9,6 +9,9 @@ import { type CardAnchor, layoutCards } from "./layout";
 /** The library's own default card frame size, also `CorpusMap`'s default for `cardSize`. */
 export const DEFAULT_CARD_SIZE = { width: 160, height: 56 };
 
+/** The card frame's left edge in the node's territory colour, tying a card to its region (spec slice D §4). */
+export const CARD_STRIPE_WIDTH = 4;
+
 export interface CardOverlayProps {
   spec: MapSpec;
   viewport: Viewport;
@@ -20,7 +23,9 @@ export interface CardOverlayProps {
   cardSize?: { width: number; height: number } | undefined;
   /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
   opacity?: number | undefined;
-  theme?: Pick<Theme, "cardBackground" | "cardBorder"> | undefined;
+  theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
+  /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
+  colours?: ReadonlyMap<string, string> | undefined;
   renderCard: (node: MapNode) => ReactNode;
 }
 
@@ -44,6 +49,7 @@ export function CardOverlay({
   cardSize = DEFAULT_CARD_SIZE,
   opacity = 1,
   theme = DEFAULT_THEME,
+  colours,
   renderCard,
 }: CardOverlayProps): ReactElement | null {
   if (regime !== "near") return null;
@@ -65,6 +71,7 @@ export function CardOverlay({
         // just built from.
         const firstId = card.ids[0] as string;
         const first = byId.get(firstId) as MapNode;
+        const stripe = (first.territory === null ? undefined : colours?.get(first.territory)) ?? theme.pointNeutral;
         return (
           <div
             key={firstId}
@@ -78,7 +85,10 @@ export function CardOverlay({
               height: cardSize.height,
               boxSizing: "border-box",
               background: theme.cardBackground,
-              border: `1px solid ${theme.cardBorder}`,
+              borderTop: `1px solid ${theme.cardBorder}`,
+              borderRight: `1px solid ${theme.cardBorder}`,
+              borderBottom: `1px solid ${theme.cardBorder}`,
+              borderLeft: `${CARD_STRIPE_WIDTH}px solid ${stripe}`,
               borderRadius: 6,
               overflow: "hidden",
             }}
