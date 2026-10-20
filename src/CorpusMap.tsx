@@ -19,6 +19,7 @@ import { fade, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
 import { Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
+import { NO_DIMMED } from "./shared/dimmed";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildScene } from "./shared/scene";
@@ -426,9 +427,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const legendRequest: MinimapCorner | null =
     properties.legend === true ? "top-left" : properties.legend ? properties.legend.corner : null;
   const legendPlacement = legendRequest === null ? null : legendCorner(legendRequest, minimapCorner);
-  const legend = useMemo(
-    // Task 7 replaces the Legend props; "more" no longer exists.
-    () => ({ entries: legendEntries(spec.territories, scene.colours, theme.pointNeutral), more: 0 }),
+  const legendList = useMemo(
+    () => legendEntries(spec.territories, scene.colours, theme.pointNeutral),
     [spec, scene, theme.pointNeutral],
   );
   // Same zoom band as a manual zoom; a territory with no drawable ring has nothing to zoom to.
@@ -874,8 +874,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
           ) : null}
           {legendPlacement ? (
             <Legend
-              entries={legend.entries}
-              more={legend.more}
+              entries={legendList}
+              // Wired in Task 8.
+              groups={scene.groups}
+              onScreen={NO_DIMMED}
+              hidden={NO_DIMMED}
+              narrow={false}
+              onHiddenChange={() => {}}
               presentation={presentation}
               corner={legendPlacement}
               theme={theme}

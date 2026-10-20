@@ -1,33 +1,51 @@
-import { type ReactElement, type SyntheticEvent, useId, useState } from "react";
+import { memo, type ReactElement, type SyntheticEvent, useId, useState } from "react";
 import { CORNER_POSITION, type Corner } from "../shared/corner";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
+import type { TerritoryGroup } from "../territories/groups";
 import type { LegendEntry } from "./entries";
+import { groupOpen, legendModel } from "./model";
+
+/** Opacity of a row whose territory is off screen; Legend.test.tsx pins 4.5:1 contrast in both themes. */
+export const OFF_SCREEN_OPACITY = 0.75;
 
 export interface LegendProps {
-  entries: LegendEntry[];
-  more: number;
+  entries: readonly LegendEntry[];
+  groups: readonly TerritoryGroup[];
+  onScreen: ReadonlySet<string>;
+  hidden: ReadonlySet<string>;
   presentation: Presentation;
   corner: Corner;
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
+  /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
+  narrow: boolean;
   onEntry: (id: string) => void;
+  onHiddenChange: (ids: string[]) => void;
 }
 
 const SWATCH = 12;
+
+const plainButton = { minHeight: 24, background: "none", border: "none", padding: 0, cursor: "pointer" } as const;
 
 function stop(event: SyntheticEvent): void {
   event.stopPropagation();
 }
 
 /**
- * The map's legend (spec slice D §4): real HTML, so a screen reader reads
- * it; expanded in guided, collapsed behind a "Legend" toggle in dense. A
+ * The map's legend (spec slice D §4, spec categories §6): real HTML, so a
+ * screen reader reads it; expanded in guided, collapsed behind a "Legend"
+ * toggle in dense or in a narrow box. The list is complete and filterable:
+ * every territory, under its group when the scene has groups, on-screen rows
+ * first. A row's checkbox hides or shows its territory, a group's checkbox
+ * all of its members; a group with nothing on screen starts collapsed. A
  * toggle the reader pressed holds only until the presentation changes; an
  * entry press keeps the list open through the change its zoom causes. Every
  * pointer event stops here so a press on the legend never pans the map or
  * resolves a card click underneath.
  */
-export function Legend({ entries, more, presentation, corner, theme, onEntry }: LegendProps): ReactElement {
+export function LegendView(properties: LegendProps): ReactElement {
+  const { entries, groups, onScreen, hidden, presentation, corner, theme, narrow, onEntry, onHiddenChange } =
+    properties;
   const listId = useId();
   // A toggle the reader pressed holds until the presentation changes; the
   // reset happens during render (React's "adjust state on a prop change"
@@ -43,7 +61,16 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
     setOverride(holdOpen ? true : null);
     setHoldOpen(false);
   }
-  const expanded = overrideFor === presentation && override !== null ? override : presentation === "guided";
+  const expanded = overrideFor === presentation && override !== null ? override : presentation === "guided" && !narrow;
+  const [filter, setFilter] = useState("");
+  // The reader's open/closed choice per group, forgotten when the filter changes.
+  const [manual, setManual] = useState<Record<string, boolean>>({});
+  const model = legendModel(entries, groups, onScreen, hidden, filter);
+  const setHidden = (next: Iterable<string>) => onHiddenChange([...new Set(next)].sort());
+  const toggleRow = (id: string) =>
+    setHidden(hidden.has(id) ? [...hidden].filter((other) => other !== id) : [...hidden, id]);
+  const toggleGroup = (memberIds: readonly string[], shown: "all" | "none" | "mixed") =>
+    setHidden(shown === "all" ? [...hidden, ...memberIds] : [...hidden].filter((other) => !memberIds.includes(other)));
   const text = { color: theme.territoryLabel, font: "500 13px system-ui, sans-serif" };
   return (
     <section
@@ -57,7 +84,7 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
       style={{
         position: "absolute",
         ...CORNER_POSITION[corner],
-        maxWidth: 240,
+        maxWidth: 280,
         maxHeight: "calc(100% - 24px)",
         overflowY: "auto",
         boxSizing: "border-box",
@@ -76,53 +103,108 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
           setHoldOpen(false);
           setOverride(!expanded);
         }}
-        style={{
-          ...text,
-          minHeight: 24,
-          background: "none",
-          border: "none",
-          padding: 0,
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
+        style={{ ...text, ...plainButton, fontWeight: 600 }}
       >
         Legend
       </button>
       {expanded ? (
         <div id={listId}>
-          <ul style={{ listStyle: "none", margin: "4px 0", padding: 0 }}>
-            {entries.map((entry) => (
-              <li key={entry.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHoldOpen(true);
-                    onEntry(entry.id);
-                  }}
-                  style={{
-                    ...text,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    minHeight: 24,
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    textAlign: "left",
-                    cursor: "pointer",
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{ width: SWATCH, height: SWATCH, flex: "none", borderRadius: 2, background: entry.colour }}
-                  />
-                  {entry.name}
-                </button>
-              </li>
-            ))}
-            {more > 0 ? <li>{`+${more} more`}</li> : null}
-          </ul>
+          {hidden.size > 0 ? (
+            <button type="button" onClick={() => onHiddenChange([])} style={{ ...text, ...plainButton }}>
+              {`Show all (${hidden.size} hidden)`}
+            </button>
+          ) : null}
+          <input
+            type="search"
+            aria-label="Filter categories"
+            placeholder="Filter categories"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setManual({});
+            }}
+            style={{ ...text, width: "100%", boxSizing: "border-box", minHeight: 24, margin: "4px 0" }}
+          />
+          {model.groups.length === 0 ? <p style={{ margin: "4px 0" }}>No category matches</p> : null}
+          {model.groups.map((group) => {
+            const open = model.flat || groupOpen(group, filter, manual[group.id]);
+            return (
+              <div key={group.id}>
+                {model.flat ? null : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Show ${group.name}`}
+                      checked={group.shown === "all"}
+                      ref={(element) => {
+                        if (element) element.indeterminate = group.shown === "mixed";
+                      }}
+                      onChange={() => toggleGroup(group.memberIds, group.shown)}
+                    />
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setManual((previous) => ({ ...previous, [group.id]: !open }))}
+                      style={{ ...text, ...plainButton, fontWeight: 600, flex: 1, textAlign: "left" }}
+                    >
+                      {group.name} <span style={{ fontWeight: 400 }}>{`${group.onScreenCount} on screen`}</span>
+                    </button>
+                  </div>
+                )}
+                {open ? (
+                  <ul style={{ listStyle: "none", margin: "2px 0", padding: model.flat ? 0 : "0 0 0 18px" }}>
+                    {group.rows.map((row) => (
+                      <li
+                        key={row.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          opacity: row.onScreen ? 1 : OFF_SCREEN_OPACITY,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`Show ${row.name}`}
+                          checked={!row.hidden}
+                          onChange={() => toggleRow(row.id)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHoldOpen(true);
+                            onEntry(row.id);
+                          }}
+                          style={{
+                            ...text,
+                            ...plainButton,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            flex: 1,
+                            textAlign: "left",
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: SWATCH,
+                              height: SWATCH,
+                              flex: "none",
+                              borderRadius: 2,
+                              background: row.colour,
+                            }}
+                          />
+                          {row.name}
+                        </button>
+                        <span>{row.members}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
           <ul style={{ listStyle: "none", margin: "4px 0", padding: 0 }}>
             <li style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <svg aria-hidden="true" width={SWATCH} height={SWATCH} viewBox="0 0 12 12">
@@ -143,3 +225,5 @@ export function Legend({ entries, more, presentation, corner, theme, onEntry }: 
     </section>
   );
 }
+
+export const Legend = memo(LegendView);
