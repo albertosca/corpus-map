@@ -12,12 +12,20 @@ describe("TopBar (showcase Task 5)", () => {
     expect(screen.getByText("corpus-map")).not.toBeNull();
     const select = screen.getByLabelText("Corpus") as HTMLSelectElement;
     expect(select.value).toBe("arxiv");
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
       "Computer-science papers (arXiv metadata)",
       "Chemical elements",
       "Constellations",
       "Synthetic (5,000 items)",
     ]);
+  });
+
+  it("names the page with the only level-1 heading, so the map's h2 sections sit under it", () => {
+    render(
+      <TopBar corpora={gallery} activeId="arxiv" onChange={() => {}} tuningOpen={false} onToggleTuning={() => {}} />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("corpus-map");
   });
 
   it("calls onChange with the newly selected corpus id", () => {

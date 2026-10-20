@@ -95,7 +95,7 @@ export function TopBar({
 
   return (
     <header ref={barReference} data-topbar data-floating-control style={barStyle}>
-      <strong style={{ fontSize: 15 }}>corpus-map</strong>
+      <h1 style={{ fontSize: 15, margin: 0 }}>corpus-map</h1>
       <label htmlFor="corpus-select" style={labelStyle}>
         Corpus
       </label>
