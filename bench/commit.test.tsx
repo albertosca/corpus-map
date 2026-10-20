@@ -106,7 +106,10 @@ describe("commit cost", () => {
     // At the fitted far view every node stays on screen while panning, so the
     // indicator's count never changes and `App` never re-renders: zooming in
     // first makes points enter and leave, which is the case the rule is about.
-    const zoomSteps = 6;
+    // Twelve steps since slice D fits the first view to territory shapes and
+    // names (a wider frame than the points alone): at six, every point stayed
+    // on screen and the App never re-rendered.
+    const zoomSteps = 12;
 
     const app = frameRecorder();
     const appRender = render(

@@ -1014,7 +1014,7 @@ export declare function zoomStepScale(scale: number, factor: number, fit: number
 /**
  * A box resize (showcase Task 2): keeps `scale` and keeps the world point
  * formerly at the old box's centre at the new box's centre, instead of
- * refitting — a spec change refits (via `fitSpec`); a box change alone does
+ * refitting — a spec change refits (via `fitScene`); a box change alone does
  * not.
  */
 export declare function recenterOnBoxChange(viewport: Viewport, oldWidth: number, oldHeight: number, newWidth: number, newHeight: number): Viewport;
