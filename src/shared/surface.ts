@@ -10,6 +10,13 @@ export interface Surface {
   outline(points: Array<[number, number]>, color: string, width: number): void;
   /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+  /**
+   * Draws `draw`'s calls into one offscreen layer and composites it once at
+   * `alpha`, so shapes drawn inside never darken where they overlap (spec
+   * slice D §3). Without an offscreen canvas it draws straight onto the
+   * target at `alpha`: overlaps then darken, but the map still renders.
+   */
+  layer(alpha: number, draw: (surface: Surface) => void): void;
 }
 
 export class RecordingSurface implements Surface {
@@ -20,7 +27,8 @@ export class RecordingSurface implements Surface {
   alphas: number[] = [];
   outlines: Array<{ points: Array<[number, number]>; color: string; width: number }> = [];
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
-  calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring"> = [];
+  layers: number[] = [];
+  calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd"> = [];
 
   clear() {
     this.calls.push("clear");
@@ -50,10 +58,29 @@ export class RecordingSurface implements Surface {
     this.calls.push("ring");
     this.rings.push({ x: horizontal, y: vertical, r: radius, color, width });
   }
+  layer(alpha: number, draw: (surface: Surface) => void) {
+    this.calls.push("layer");
+    this.layers.push(alpha);
+    draw(this);
+    this.calls.push("layerEnd");
+  }
+}
+
+// One offscreen context per target context, made on first use; `null` when
+// the target's canvas has no document to make one with (an OffscreenCanvas,
+// a test fake), so the lookup is not retried every frame.
+const offscreenContexts = new WeakMap<CanvasRenderingContext2D, CanvasRenderingContext2D | null>();
+
+function offscreenFor(target: CanvasRenderingContext2D): CanvasRenderingContext2D | null {
+  if (!offscreenContexts.has(target)) {
+    const canvas = target.canvas.ownerDocument?.createElement("canvas");
+    offscreenContexts.set(target, canvas?.getContext("2d") ?? null);
+  }
+  return offscreenContexts.get(target) ?? null;
 }
 
 export function canvasSurface(context: CanvasRenderingContext2D): Surface {
-  return {
+  const surface: Surface = {
     clear() {
       context.clearRect(0, 0, context.canvas.width, context.canvas.height);
     },
@@ -107,5 +134,28 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.stroke();
       context.restore();
     },
+    layer(alpha, draw) {
+      const offscreen = offscreenFor(context);
+      if (!offscreen) {
+        const previous = context.globalAlpha;
+        context.globalAlpha = alpha;
+        draw(surface);
+        context.globalAlpha = previous;
+        return;
+      }
+      const layerCanvas = offscreen.canvas;
+      if (layerCanvas.width !== context.canvas.width) layerCanvas.width = context.canvas.width;
+      if (layerCanvas.height !== context.canvas.height) layerCanvas.height = context.canvas.height;
+      offscreen.setTransform(1, 0, 0, 1, 0, 0);
+      offscreen.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
+      offscreen.setTransform(context.getTransform());
+      draw(canvasSurface(offscreen));
+      context.save();
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.globalAlpha = alpha;
+      context.drawImage(layerCanvas, 0, 0);
+      context.restore();
+    },
   };
+  return surface;
 }

@@ -1,6 +1,7 @@
 import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
+import { paintTerritories } from "../territories/paintTerritories";
 import { type Bounds, fitBounds } from "../viewport/fit";
 import { toScreen, type Viewport } from "../viewport/viewport";
 
@@ -34,11 +35,12 @@ function clamp(value: number, upper: number): number {
  * (`Minimap.tsx`'s DPR guard deliberately skips reassigning `canvas.width`
  * when the byte size hasn't changed, precisely to avoid the implicit clear
  * that would trigger, so nothing else erases the bitmap between paints);
- * then every territory ring — one polygon per ring, summed across
- * territories, not one per territory — fitted to `size` from `world` and
- * left unclipped (a ring padded slightly past the node extent still reads
- * fine a few pixels past the fitted box); then the current view's world
- * rectangle as a stroked polygon, clamped to `size`'s edges *as a rectangle*
+ * then the territories, fitted to `size` from `world` and painted by the
+ * same `paintTerritories` as the main map (one fill layer, then one outline
+ * per ring), left unclipped (a ring padded slightly past the node extent
+ * still reads fine a few pixels past the fitted box); then the current
+ * view's world rectangle as a polygon stroked in the name colour — the one
+ * colour guaranteed to contrast with every fill (metric 16) — clamped to `size`'s edges *as a rectangle*
  * — the screen-space box's two diagonal corners are each clamped once, and
  * all four drawn corners are built from those two clamped points, rather
  * than clamping each of the four corners independently (fix round 1,
@@ -57,16 +59,7 @@ export function paintMinimap(
 ): void {
   surface.clear();
   const fitted = minimapFit(world, size);
-  for (const rings of scene.shapes.values()) {
-    for (const ring of rings) {
-      if (ring.length < 3) continue;
-      surface.polygon(
-        ring.map(([horizontal, vertical]) => toScreen(fitted, horizontal, vertical)),
-        theme.territoryFill,
-        theme.territoryStroke,
-      );
-    }
-  }
+  paintTerritories(surface, scene, fitted, theme, theme.territoryFillAlpha);
   const [firstHorizontal, firstVertical] = toScreen(fitted, view.x, view.y);
   const [secondHorizontal, secondVertical] = toScreen(fitted, view.x + view.w, view.y + view.h);
   const left = clamp(Math.min(firstHorizontal, secondHorizontal), size.width);
@@ -81,6 +74,6 @@ export function paintMinimap(
       [left, bottom],
     ],
     "transparent",
-    theme.visited,
+    theme.territoryLabel,
   );
 }

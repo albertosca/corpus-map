@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateCorpus } from "../../fixtures/synthetic/generate";
 import { estimateText } from "../labels/placement";
 import { DEFAULT_THRESHOLDS, type Regime } from "../lod/lod";
+import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { fitSpec, worldBounds } from "../viewport/fit";
 import { type Frame, paint } from "./paint";
 import { buildScene } from "./scene";
@@ -141,6 +142,12 @@ describe("paint", () => {
       [30, 0],
       [0, 30],
     ]);
+    // Slice D: the boundary is a fill polygon inside the layer, in the
+    // territory's colour (the only territory takes the palette's first),
+    // plus an outline of the same ring in the same colour.
+    const territoryColour = DEFAULT_THEME.palette[0];
+    expect(first(surface.polygons)).toMatchObject({ fill: territoryColour, stroke: "transparent" });
+    expect(first(surface.outlines)).toEqual({ points: ring, color: territoryColour, width: TERRITORY_OUTLINE_WIDTH });
   });
 
   it("paints points at the frame's pointAlpha, and the alpha is reset to 1 afterwards", () => {
@@ -228,8 +235,12 @@ describe("paint order", () => {
     paintSpec(two, surface, "mid", undefined, LABEL_VP);
     expect(surface.calls).toEqual([
       "clear",
+      "layer",
       "polygon",
       "polygon",
+      "layerEnd",
+      "outline",
+      "outline",
       "alpha",
       ...Array(6).fill("circle"),
       "alpha",
@@ -241,7 +252,7 @@ describe("paint order", () => {
   it("paints boundaries then names, and no points, at the far regime", () => {
     const surface = new RecordingSurface();
     paintSpec(spec, surface, "far", undefined, LABEL_VP);
-    expect(surface.calls).toEqual(["clear", "polygon", "text"]);
+    expect(surface.calls).toEqual(["clear", "layer", "polygon", "layerEnd", "outline", "text"]);
   });
 });
 
@@ -365,26 +376,34 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
     paint(surface, scene, two, LABEL_VP, frameFor(regime, extra), DEFAULT_THEME);
     return surface;
   };
+  // Since slice D every territory is outlined in its own colour; the focus
+  // outline is the one stroked in the theme's focus colour.
+  const focusOutlines = (surface: RecordingSurface) =>
+    surface.outlines.filter((outline) => outline.color === DEFAULT_THEME.focusOutline);
 
   it("outlines every ring of the focused territory, and only that one, in the theme's focus style", () => {
     const surface = paintWith("far", { focusedTerritory: "t2" });
     expect(screenRings("t2").length).toBeGreaterThan(0);
-    expect(surface.outlines.map((outline) => outline.points)).toEqual(screenRings("t2"));
-    for (const outline of surface.outlines) {
+    expect(focusOutlines(surface).map((outline) => outline.points)).toEqual(screenRings("t2"));
+    for (const outline of focusOutlines(surface)) {
       expect(outline.color).toBe(DEFAULT_THEME.focusOutline);
       expect(outline.width).toBe(DEFAULT_THEME.focusOutlineWidth);
     }
   });
 
   it("draws no outline without a focused territory, or for an id the scene does not have", () => {
-    expect(paintWith("far", {}).outlines).toEqual([]);
-    expect(paintWith("far", { focusedTerritory: null }).outlines).toEqual([]);
-    expect(paintWith("far", { focusedTerritory: "nope" }).outlines).toEqual([]);
+    expect(focusOutlines(paintWith("far", {}))).toEqual([]);
+    expect(focusOutlines(paintWith("far", { focusedTerritory: null }))).toEqual([]);
+    expect(focusOutlines(paintWith("far", { focusedTerritory: "nope" }))).toEqual([]);
   });
 
   it("draws the outline above boundaries and points, below names", () => {
     const surface = paintWith("mid", { focusedTerritory: "t1" });
-    const firstOutline = surface.calls.indexOf("outline");
+    // The n-th "outline" call records the n-th entry of `outlines`.
+    const outlineCalls = surface.calls.flatMap((call, index) => (call === "outline" ? [index] : []));
+    const firstFocus = surface.outlines.findIndex((outline) => outline.color === DEFAULT_THEME.focusOutline);
+    expect(firstFocus).toBeGreaterThanOrEqual(0);
+    const firstOutline = outlineCalls[firstFocus] ?? -1;
     expect(firstOutline).toBeGreaterThan(surface.calls.lastIndexOf("polygon"));
     expect(firstOutline).toBeGreaterThan(surface.calls.lastIndexOf("alpha"));
     expect(firstOutline).toBeLessThan(surface.calls.indexOf("text"));

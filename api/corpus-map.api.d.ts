@@ -420,11 +420,12 @@ export declare function minimapFit(world: Bounds, size: {
  * (`Minimap.tsx`'s DPR guard deliberately skips reassigning `canvas.width`
  * when the byte size hasn't changed, precisely to avoid the implicit clear
  * that would trigger, so nothing else erases the bitmap between paints);
- * then every territory ring — one polygon per ring, summed across
- * territories, not one per territory — fitted to `size` from `world` and
- * left unclipped (a ring padded slightly past the node extent still reads
- * fine a few pixels past the fitted box); then the current view's world
- * rectangle as a stroked polygon, clamped to `size`'s edges *as a rectangle*
+ * then the territories, fitted to `size` from `world` and painted by the
+ * same `paintTerritories` as the main map (one fill layer, then one outline
+ * per ring), left unclipped (a ring padded slightly past the node extent
+ * still reads fine a few pixels past the fitted box); then the current
+ * view's world rectangle as a polygon stroked in the name colour — the one
+ * colour guaranteed to contrast with every fill (metric 16) — clamped to `size`'s edges *as a rectangle*
  * — the screen-space box's two diagonal corners are each clamped once, and
  * all four drawn corners are built from those two clamped points, rather
  * than clamping each of the four corners independently (fix round 1,
@@ -487,10 +488,11 @@ export interface Frame {
     focusedNode?: string | null | undefined;
 }
 /**
- * The single place that decides paint order: boundaries, then points, then
- * the keyboard-focus outline, then names, so a name is never covered by a
- * mark, by a later territory's fill or by the focus outline, and the focus
- * outline is never covered by a boundary or a point.
+ * The single place that decides paint order: the territory fill layer
+ * (largest first), territory outlines, points, the keyboard-focus outline,
+ * then names, so a name is never covered by a mark, by a territory's fill or
+ * by the focus outline, and the focus outline is never covered by a
+ * boundary or a point.
  */
 export declare function paint(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, frame: Frame, theme: Theme): void;
 
@@ -586,6 +588,13 @@ export interface Surface {
     outline(points: Array<[number, number]>, color: string, width: number): void;
     /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+    /**
+     * Draws `draw`'s calls into one offscreen layer and composites it once at
+     * `alpha`, so shapes drawn inside never darken where they overlap (spec
+     * slice D §3). Without an offscreen canvas it draws straight onto the
+     * target at `alpha`: overlaps then darken, but the map still renders.
+     */
+    layer(alpha: number, draw: (surface: Surface) => void): void;
 }
 export declare class RecordingSurface implements Surface {
     cleared: number;
@@ -621,7 +630,8 @@ export declare class RecordingSurface implements Surface {
         color: string;
         width: number;
     }>;
-    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring">;
+    layers: number[];
+    calls: Array<"clear" | "polygon" | "circle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
@@ -629,6 +639,7 @@ export declare class RecordingSurface implements Surface {
     globalAlpha(alpha: number): void;
     outline(points: Array<[number, number]>, color: string, width: number): void;
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+    layer(alpha: number, draw: (surface: Surface) => void): void;
 }
 export declare function canvasSurface(context: CanvasRenderingContext2D): Surface;
 
@@ -740,7 +751,16 @@ import type { Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme): void;
+/** Territory outline width in CSS pixels (spec slice D §3). */
+export declare const TERRITORY_OUTLINE_WIDTH = 1.5;
+/**
+ * Fills every territory opaque, largest first, into one layer composited at
+ * `fillAlpha`, so each pixel shows the colour of the smallest territory
+ * covering it and overlaps never darken; then outlines every ring in its
+ * territory's full colour. A territory missing from `scene.colours` (an
+ * empty palette) is painted in `theme.pointNeutral`.
+ */
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];

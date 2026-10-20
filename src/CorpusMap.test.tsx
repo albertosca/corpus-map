@@ -556,6 +556,10 @@ function recordingContext(texts: Array<{ text: string; x: number; y: number }>):
     fill: noop,
     stroke: noop,
     arc: noop,
+    // Every territory is outlined since slice D, and `outline` brackets its
+    // stroke in save/restore.
+    save: noop,
+    restore: noop,
     fillText: (text: string, left: number, top: number) => texts.push({ text, x: left, y: top }),
     // `useMeasure` creates its own offscreen canvas; this override replaces
     // `HTMLCanvasElement.prototype.getContext` globally for the test, so

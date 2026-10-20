@@ -5,6 +5,7 @@ import type { MapSpec } from "../shared/spec";
 import { RecordingSurface } from "../shared/surface";
 import { DEFAULT_THEME } from "../shared/theme";
 import { DEFAULT_TUNING } from "../shared/tuning";
+import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import type { Bounds } from "../viewport/fit";
 import { toScreen } from "../viewport/viewport";
 import { minimapFit, paintMinimap } from "./paintMinimap";
@@ -58,8 +59,14 @@ describe("paintMinimap", () => {
       expect(vertical).toBeGreaterThan(0);
       expect(vertical).toBeLessThan(SIZE.height);
     }
-    expect(ring.fill).toBe(DEFAULT_THEME.territoryFill);
-    expect(ring.stroke).toBe(DEFAULT_THEME.territoryStroke);
+    // Slice D: the ring is filled opaque inside one layer composited at the
+    // fill alpha, then outlined in the territory's own colour.
+    const territoryColour = DEFAULT_THEME.palette[0];
+    expect(ring.fill).toBe(territoryColour);
+    expect(ring.stroke).toBe("transparent");
+    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
+    expect(surface.calls).toEqual(["clear", "layer", "polygon", "layerEnd", "outline", "polygon"]);
+    expect(surface.outlines).toEqual([{ points: ring.points, color: territoryColour, width: TERRITORY_OUTLINE_WIDTH }]);
 
     // The view rectangle matches the same fitted transform, corner for corner.
     const viewport = minimapFit(world, SIZE);
@@ -70,7 +77,7 @@ describe("paintMinimap", () => {
       toScreen(viewport, view.x, view.y + view.h),
     ];
     expect(rect.points).toEqual(expectedCorners);
-    expect(rect.stroke).toBe(DEFAULT_THEME.visited);
+    expect(rect.stroke).toBe(DEFAULT_THEME.territoryLabel);
     for (const [horizontal, vertical] of rect.points) {
       expect(horizontal).toBeGreaterThan(0);
       expect(horizontal).toBeLessThan(SIZE.width);

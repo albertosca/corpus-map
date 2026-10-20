@@ -6,6 +6,7 @@ import { buildScene } from "./shared/scene";
 import type { MapSpec } from "./shared/spec";
 import { DEFAULT_THEME } from "./shared/theme";
 import { DEFAULT_TUNING } from "./shared/tuning";
+import { TERRITORY_OUTLINE_WIDTH } from "./territories/paintTerritories";
 import { fitSpec } from "./viewport/fit";
 import { toScreen } from "./viewport/viewport";
 
@@ -154,9 +155,17 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     // frame's outline, so a leaked line width would show on them.
     act(() => screen.getByRole("button", { name: /South/ }).focus());
     expect(lastFrameFocusStrokes().length).toBeGreaterThan(0);
-    const boundaries = (frames[frames.length - 1] ?? []).filter((stroke) => !isFocusStyle(stroke));
+    // Since slice D the boundaries are outlines in a palette colour at their
+    // own width; the fill layer's polygons still stroke (transparent) at the
+    // context's width, which is where a leaked focus width would show. This
+    // fake canvas has no document, so the layer takes its fallback path.
+    const lastFrame = frames[frames.length - 1] ?? [];
+    const boundaries = lastFrame.filter((stroke) => DEFAULT_THEME.palette.includes(stroke.style));
     expect(boundaries.length).toBeGreaterThan(0);
-    for (const boundary of boundaries) expect(boundary.width).toBe(1);
+    for (const boundary of boundaries) expect(boundary.width).toBe(TERRITORY_OUTLINE_WIDTH);
+    const fillEdges = lastFrame.filter((stroke) => stroke.style === "transparent");
+    expect(fillEdges.length).toBeGreaterThan(0);
+    for (const edge of fillEdges) expect(edge.width).toBe(1);
   });
 
   it("rings the focused item's point at the near regime, and removes it on blur", () => {

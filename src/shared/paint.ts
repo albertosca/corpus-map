@@ -31,10 +31,11 @@ export interface Frame {
 }
 
 /**
- * The single place that decides paint order: boundaries, then points, then
- * the keyboard-focus outline, then names, so a name is never covered by a
- * mark, by a later territory's fill or by the focus outline, and the focus
- * outline is never covered by a boundary or a point.
+ * The single place that decides paint order: the territory fill layer
+ * (largest first), territory outlines, points, the keyboard-focus outline,
+ * then names, so a name is never covered by a mark, by a territory's fill or
+ * by the focus outline, and the focus outline is never covered by a
+ * boundary or a point.
  */
 export function paint(
   surface: Surface,
@@ -45,7 +46,7 @@ export function paint(
   theme: Theme,
 ): void {
   surface.clear();
-  paintTerritories(surface, scene, viewport, theme);
+  paintTerritories(surface, scene, viewport, theme, theme.territoryFillAlpha);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, spec, viewport, theme);
