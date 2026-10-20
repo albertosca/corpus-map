@@ -12,6 +12,8 @@ import {
 import { AccessibleTree } from "./a11y/AccessibleTree";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
+import { legendCorner, legendEntries } from "./legend/entries";
+import { Legend } from "./legend/Legend";
 import { type LodThresholds, type Regime, resolveThresholds } from "./lod/lod";
 import { fade, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
@@ -24,7 +26,7 @@ import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
-import { sceneBounds } from "./viewport/fit";
+import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { useElementSize } from "./viewport/useElementSize";
 import {
@@ -115,6 +117,12 @@ export interface CorpusMapProps {
    * default corner, `"bottom-left"`.
    */
   minimap?: boolean | { corner: "top-left" | "top-right" | "bottom-left" | "bottom-right" } | undefined;
+  /**
+   * Off by default; `true` puts it top-left. A DOM overlay listing the
+   * largest territories, the point key and the gesture hint; it moves
+   * clockwise when the minimap holds its corner.
+   */
+  legend?: boolean | { corner: MinimapCorner };
 }
 
 const FIT_PADDING = 24;
@@ -412,6 +420,21 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // one (spec 4 §1).
   const minimapCorner: MinimapCorner | null =
     properties.minimap === true ? "bottom-left" : properties.minimap ? properties.minimap.corner : null;
+  const legendRequest: MinimapCorner | null =
+    properties.legend === true ? "top-left" : properties.legend ? properties.legend.corner : null;
+  const legendPlacement = legendRequest === null ? null : legendCorner(legendRequest, minimapCorner);
+  const legend = useMemo(
+    () => legendEntries(spec.territories, scene.colours, theme.pointNeutral),
+    [spec, scene, theme.pointNeutral],
+  );
+  // Same zoom band as a manual zoom; a territory with no drawable ring has nothing to zoom to.
+  const onLegendEntry = (id: string) => {
+    const bounds = ringBounds(scene.shapes.get(id) ?? []);
+    if (bounds === null) return;
+    setViewport(
+      fitClamped(bounds, width, height, FIT_PADDING, fitScale / MAXIMUM_ZOOM_OUT, fitScale * MAXIMUM_ZOOM_IN),
+    );
+  };
   const world = useMemo(() => sceneBounds(spec, scene.shapes), [spec, scene]);
   // The main view's own world-space bounding rectangle, in world units —
   // what the minimap draws its view rectangle from, and a dependency of its
@@ -838,6 +861,16 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               corner={minimapCorner}
               theme={theme}
               onPoint={onMinimapPoint}
+            />
+          ) : null}
+          {legendPlacement ? (
+            <Legend
+              entries={legend.entries}
+              more={legend.more}
+              presentation={presentation}
+              corner={legendPlacement}
+              theme={theme}
+              onEntry={onLegendEntry}
             />
           ) : null}
         </>

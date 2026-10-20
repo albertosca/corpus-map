@@ -1,6 +1,7 @@
 // CorpusMap.d.ts
 import { type ReactElement, type ReactNode, type Ref } from "react";
 import { type LodThresholds, type Regime } from "./lod/lod";
+import { type MinimapCorner } from "./minimap/Minimap";
 import { type Presentation, type PresentationSetting } from "./shared/presentation";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
@@ -85,6 +86,14 @@ export interface CorpusMapProps {
     minimap?: boolean | {
         corner: "top-left" | "top-right" | "bottom-left" | "bottom-right";
     } | undefined;
+    /**
+     * Off by default; `true` puts it top-left. A DOM overlay listing the
+     * largest territories, the point key and the gesture hint; it moves
+     * clockwise when the minimap holds its corner.
+     */
+    legend?: boolean | {
+        corner: MinimapCorner;
+    };
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -323,6 +332,48 @@ import { type Measure } from "./placement";
 /** Text measurement from an offscreen 2D canvas; the deterministic estimate where there is none (jsdom). */
 export declare function useMeasure(): Measure;
 
+// legend/Legend.d.ts
+import { type ReactElement } from "react";
+import { type Corner } from "../shared/corner";
+import type { Presentation } from "../shared/presentation";
+import type { Theme } from "../shared/theme";
+import type { LegendEntry } from "./entries";
+export interface LegendProps {
+    entries: LegendEntry[];
+    more: number;
+    presentation: Presentation;
+    corner: Corner;
+    theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
+    onEntry: (id: string) => void;
+}
+/**
+ * The map's legend (spec slice D §4): real HTML, so a screen reader reads
+ * it; expanded in guided, collapsed behind a "Legend" toggle in dense. A
+ * toggle the reader pressed holds only until the presentation changes. Every
+ * pointer event stops here so a press on the legend never pans the map or
+ * resolves a card click underneath.
+ */
+export declare function Legend({ entries, more, presentation, corner, theme, onEntry }: LegendProps): ReactElement;
+
+// legend/entries.d.ts
+import type { Corner } from "../shared/corner";
+import type { Territory } from "../shared/spec";
+/** Territories the legend lists before "+N more" (spec slice D §4). */
+export declare const LEGEND_ENTRY_LIMIT = 8;
+export interface LegendEntry {
+    id: string;
+    name: string;
+    colour: string;
+    members: number;
+}
+/** The largest territories by member count (ties by id), each with its painted colour, and how many were left out. */
+export declare function legendEntries(territories: readonly Territory[], colours: ReadonlyMap<string, string>, fallback: string, limit?: number): {
+    entries: LegendEntry[];
+    more: number;
+};
+/** The requested corner, or the next one clockwise when the minimap already sits there. */
+export declare function legendCorner(requested: Corner, minimap: Corner | null): Corner;
+
 // lod/lod.d.ts
 export type Regime = "far" | "mid" | "near";
 export interface LodThresholds {
@@ -373,6 +424,7 @@ export declare function visibleNodes(spec: MapSpec, viewport: Viewport, width: n
 
 // minimap/Minimap.d.ts
 import { type ReactElement } from "react";
+import { type Corner } from "../shared/corner";
 import type { Scene } from "../shared/scene";
 import type { Theme } from "../shared/theme";
 import type { Bounds } from "../viewport/fit";
@@ -382,7 +434,7 @@ export declare const MINIMAP_SIZE: {
     height: number;
 };
 /** Where the minimap sits inside the map's box; `minimap={true}` picks the default, `"bottom-left"`. */
-export type MinimapCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type MinimapCorner = Corner;
 interface MinimapProps {
     scene: Scene;
     world: Bounds;
@@ -482,6 +534,19 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  * the same `pointRadius`, so both marks have the same footprint.
  */
 export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">): void;
+
+// shared/corner.d.ts
+/** A corner of the map's box, where an overlay (minimap, legend) sits. */
+export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+/** Gap between a corner overlay and the box's edges, in CSS pixels. */
+export declare const CORNER_MARGIN = 12;
+/** Absolute-position offsets for each corner; plain numbers so this module stays free of React. */
+export declare const CORNER_POSITION: Record<Corner, {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+}>;
 
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";

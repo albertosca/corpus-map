@@ -1,10 +1,5 @@
-import {
-  type CSSProperties,
-  type ReactElement,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useRef,
-} from "react";
+import { type ReactElement, type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import { CORNER_POSITION, type Corner } from "../shared/corner";
 import type { Scene } from "../shared/scene";
 import { canvasSurface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
@@ -16,16 +11,7 @@ import { minimapFit, paintMinimap } from "./paintMinimap";
 export const MINIMAP_SIZE = { width: 160, height: 110 };
 
 /** Where the minimap sits inside the map's box; `minimap={true}` picks the default, `"bottom-left"`. */
-export type MinimapCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
-
-const MARGIN = 12;
-
-const CORNER_STYLE: Record<MinimapCorner, CSSProperties> = {
-  "top-left": { top: MARGIN, left: MARGIN },
-  "top-right": { top: MARGIN, right: MARGIN },
-  "bottom-left": { bottom: MARGIN, left: MARGIN },
-  "bottom-right": { bottom: MARGIN, right: MARGIN },
-};
+export type MinimapCorner = Corner;
 
 interface MinimapProps {
   scene: Scene;
@@ -107,7 +93,7 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
       onPointerCancel={onPointerCancel}
       style={{
         position: "absolute",
-        ...CORNER_STYLE[corner],
+        ...CORNER_POSITION[corner],
         width: MINIMAP_SIZE.width,
         height: MINIMAP_SIZE.height,
         touchAction: "none",
