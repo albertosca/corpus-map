@@ -53,6 +53,8 @@ export interface CorpusMapHandle {
   zoomOut(): void;
   /** Resets the viewport to the fitted view, the same reset a `spec` change applies. */
   fit(): void;
+  /** Focuses the map surface, so a consumer has an element to return focus to after a dialog (spec slice B §4). */
+  focus(): void;
 }
 
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
@@ -109,6 +111,8 @@ export interface CorpusMapProps {
    * one commit per frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
+  /** The map surface's accessible name. Defaults to "Map of N items". */
+  label?: string | undefined;
   /**
    * `"auto"` (default) is guided at far and dense at mid and near; a fixed
    * value locks it. Never changes the LOD regimes, only emphasis (spec
@@ -259,6 +263,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   );
 
   const rootReference = useRef<HTMLDivElement>(null);
+  // `:focus-visible` by hand: a press focuses the surface (it is a tab stop),
+  // but a ring after a mouse press is noise; keyboard focus and any handled
+  // key show it (spec slice B §4).
+  const [surfaceFocusVisible, setSurfaceFocusVisible] = useState(false);
+  const pointerFocus = useRef(false);
+  const surfaceLabel = properties.label ?? `Map of ${spec.nodes.length} ${spec.nodes.length === 1 ? "item" : "items"}`;
   // Always called (rules of hooks): a consumer that never removes/adds
   // `width`/`height` across an instance's lifetime never sees it matter, and
   // one that does gets a `measured` value that has been tracking the parent
@@ -717,6 +727,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       setRefits((count) => count + 1);
       setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
     },
+    focus: () => rootReference.current?.focus(),
   }));
 
   // Native, non-passive listener: React's `onWheel` is registered passive, so
@@ -752,6 +763,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   }, []);
 
   const onPointerDown = (event: PointerEvent) => {
+    pointerFocus.current = true;
     if (event.button !== 0 || !event.isPrimary) return;
     drag.current = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
     (event.target as Element).setPointerCapture?.(event.pointerId);
@@ -959,9 +971,25 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const pointTerritory = pointNode?.territory ? territoriesById.get(pointNode.territory) : undefined;
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: the root stays a div, its tag and ref type are public; a section would change both.
     <div
       ref={rootReference}
       data-map-surface=""
+      data-focus-visible={surfaceFocusVisible ? "" : undefined}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the map region is the keyboard target for pan and zoom (spec slice B §4).
+      tabIndex={0}
+      role="region"
+      aria-roledescription="map"
+      aria-label={surfaceLabel}
+      onFocus={(event) => {
+        if (event.target !== event.currentTarget) return;
+        setSurfaceFocusVisible(!pointerFocus.current);
+      }}
+      onBlur={(event) => {
+        if (event.target !== event.currentTarget) return;
+        pointerFocus.current = false;
+        setSurfaceFocusVisible(false);
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -978,6 +1006,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         width: explicitBox ? width : "100%",
         height: explicitBox ? height : "100%",
         touchAction: "none",
+        outline: surfaceFocusVisible ? `${theme.focusOutlineWidth}px solid ${theme.focusOutline}` : "none",
+        outlineOffset: -theme.focusOutlineWidth,
       }}
     >
       {ready ? (

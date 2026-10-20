@@ -7,7 +7,7 @@ import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
 import { BUTTON_WIDTH, ZoomControls } from "./ZoomControls";
 
 function fakeHandleRef(): { reference: RefObject<CorpusMapHandle | null>; handle: CorpusMapHandle } {
-  const handle: CorpusMapHandle = { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn() };
+  const handle: CorpusMapHandle = { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn(), focus: vi.fn() };
   return { reference: { current: handle }, handle };
 }
 
