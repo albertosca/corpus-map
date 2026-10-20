@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { MapSpec } from "corpus-map";
-import { DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
+import { DARK_THEME, DEFAULT_THEME, DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Type-only: safe to import statically even though every test imports the
@@ -633,6 +633,22 @@ describe("App (showcase Task 5)", () => {
   it("renders the indicator from onViewChange's own values on mount", async () => {
     await renderApp();
     await screen.findByText("far · 1.0× · 2 items");
+  });
+
+  it.each([
+    [true, DARK_THEME],
+    [false, DEFAULT_THEME],
+  ])("shows the map legend in the theme that matches prefers-color-scheme (dark: %s)", async (dark, theme) => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: dark,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    await renderApp();
+    const legend = await screen.findByRole("region", { name: "Map legend" });
+    const probe = document.createElement("div");
+    probe.style.background = theme.cardBackground;
+    expect(legend.style.background).toBe(probe.style.background);
   });
 
   it("keeps every floating control out of document flow and bounded to the viewport (style checks, not pixels)", async () => {
@@ -1363,8 +1379,8 @@ describe("App (showcase Task 5)", () => {
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("77");
 
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("160");
-      expect((screen.getByLabelText(/Card height/) as HTMLInputElement).value).toBe("56");
+      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("200");
+      expect((screen.getByLabelText(/Card height/) as HTMLInputElement).value).toBe("96");
       expect((screen.getByLabelText(/Synthetic size/) as HTMLInputElement).value).toBe("5000");
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("1");
     });

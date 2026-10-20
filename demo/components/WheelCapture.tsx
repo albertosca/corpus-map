@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
+import { token } from "../tokens";
 
 export interface WheelEventSample {
   /** A per-capture counter, unique across the session — never the array index, so React's list keys survive the newest-first reorder. */
@@ -34,9 +35,9 @@ const copyButtonStyle: CSSProperties = {
   alignSelf: "flex-start",
   padding: "4px 10px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "rgba(255,255,255,0.92)",
-  color: "#1a1d23",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surface"),
+  color: token("text"),
   fontSize: 12,
   // This button lives inside `TuningPanel`'s `data-floating-control`
   // (`WheelCapture` has no floating container of its own), so a
@@ -49,7 +50,7 @@ const copyButtonStyle: CSSProperties = {
 const statusStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: "#555b66",
+  color: token("textMuted"),
 };
 
 const tableWrapStyle: CSSProperties = {
@@ -67,17 +68,17 @@ const tableStyle: CSSProperties = {
 const thStyle: CSSProperties = {
   textAlign: "right",
   padding: "2px 6px",
-  borderBottom: "1px solid rgba(0,0,0,0.15)",
+  borderBottom: `1px solid ${token("borderMedium")}`,
   fontWeight: 600,
   position: "sticky",
   top: 0,
-  background: "#ffffff",
+  background: token("surfaceSolid"),
 };
 
 const tdStyle: CSSProperties = {
   textAlign: "right",
   padding: "2px 6px",
-  borderBottom: "1px solid rgba(0,0,0,0.06)",
+  borderBottom: `1px solid ${token("divider")}`,
 };
 
 /** What the "Copy" button writes — the samples without the internal `id`, oldest capture concerns aside. */

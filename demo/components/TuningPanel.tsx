@@ -1,6 +1,7 @@
 import type { LodThresholds, Tuning } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { WheelCapture } from "./WheelCapture";
 
@@ -39,13 +40,13 @@ export interface TuningPanelProps {
 }
 
 /** Neutral colours, reused (not reinvented) from the rest of the demo shell — see `visual restraint`, spec 4 §2. */
-export const PANEL_TEXT_COLOR = "#1a1d23";
-export const PANEL_MUTED_TEXT_COLOR = "#555b66";
-export const PANEL_BACKGROUND_COLOR = "#ffffff";
-export const PANEL_ALERT_COLOR = "#8a1f1f";
-const PANEL_BORDER_COLOR = "rgba(0,0,0,0.10)";
-const CONTROL_BORDER_COLOR = "rgba(0,0,0,0.2)";
-const BUTTON_BACKGROUND_COLOR = "rgba(255,255,255,0.92)";
+export const PANEL_TEXT_COLOR = token("text");
+export const PANEL_MUTED_TEXT_COLOR = token("textMuted");
+export const PANEL_BACKGROUND_COLOR = token("surfaceSolid");
+export const PANEL_ALERT_COLOR = token("danger");
+const PANEL_BORDER_COLOR = token("border");
+const CONTROL_BORDER_COLOR = token("borderStrong");
+const BUTTON_BACKGROUND_COLOR = token("surface");
 
 const panelStyle: CSSProperties = {
   position: "fixed",
@@ -62,7 +63,7 @@ const panelStyle: CSSProperties = {
   padding: "16px 18px",
   background: PANEL_BACKGROUND_COLOR,
   borderLeft: `1px solid ${PANEL_BORDER_COLOR}`,
-  boxShadow: "-2px 0 10px rgba(0,0,0,0.08)",
+  boxShadow: `-2px 0 10px ${token("shadow")}`,
   color: PANEL_TEXT_COLOR,
   fontSize: 13,
 };
@@ -110,7 +111,7 @@ const alertStyle: CSSProperties = {
   margin: 0,
   padding: "6px 8px",
   borderRadius: 4,
-  background: "rgba(138,31,31,0.08)",
+  background: token("dangerSurface"),
   color: PANEL_ALERT_COLOR,
   fontSize: 12,
 };

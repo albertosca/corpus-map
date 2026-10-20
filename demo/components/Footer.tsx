@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from "react";
 import type { CorpusId } from "../corpora";
+import { token } from "../tokens";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
   BOTTOM_ROW_HEIGHT,
@@ -63,9 +64,9 @@ const style: CSSProperties = {
   whiteSpace: "normal",
   padding: "4px 14px",
   borderRadius: 4,
-  background: "rgba(255,255,255,0.92)",
-  border: "1px solid rgba(0,0,0,0.10)",
-  color: "#1a1d23",
+  background: token("surface"),
+  border: `1px solid ${token("border")}`,
+  color: token("text"),
   fontSize: 12,
 };
 

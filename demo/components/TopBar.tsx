@@ -1,5 +1,6 @@
 import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
 import type { GalleryEntry } from "../corpora";
+import { token } from "../tokens";
 
 interface TopBarProps {
   corpora: GalleryEntry[];
@@ -30,9 +31,9 @@ const barStyle: CSSProperties = {
   alignItems: "center",
   gap: "8px 12px",
   padding: "10px 16px",
-  background: "rgba(255,255,255,0.92)",
-  borderBottom: "1px solid rgba(0,0,0,0.10)",
-  color: "#1a1d23",
+  background: token("surface"),
+  borderBottom: `1px solid ${token("border")}`,
+  color: token("text"),
 };
 
 const labelStyle: CSSProperties = {
@@ -43,8 +44,8 @@ const labelStyle: CSSProperties = {
 const selectStyle: CSSProperties = {
   padding: "4px 8px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "#ffffff",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surfaceSolid"),
   color: "inherit",
   maxWidth: "70vw",
 };
@@ -52,9 +53,9 @@ const selectStyle: CSSProperties = {
 const gearButtonStyle: CSSProperties = {
   padding: "4px 10px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "rgba(255,255,255,0.92)",
-  color: "#1a1d23",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surface"),
+  color: token("text"),
   fontSize: 13,
   // Real containment (Task 7 fix round 2), not the container's own
   // `maxWidth` alone: `barStyle`'s `flexWrap: "wrap"` only wraps a line of

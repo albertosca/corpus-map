@@ -1,5 +1,6 @@
 import type { CorpusMapView } from "corpus-map";
 import type { CSSProperties, ReactElement } from "react";
+import { token } from "../tokens";
 import { INDICATOR_BOTTOM, INDICATOR_LEFT } from "./floatingLayout";
 
 interface IndicatorProps {
@@ -21,9 +22,9 @@ const style: CSSProperties = {
   whiteSpace: "nowrap",
   padding: "4px 10px",
   borderRadius: 4,
-  background: "rgba(255,255,255,0.92)",
-  border: "1px solid rgba(0,0,0,0.10)",
-  color: "#1a1d23",
+  background: token("surface"),
+  border: `1px solid ${token("border")}`,
+  color: token("text"),
   fontSize: 13,
 };
 

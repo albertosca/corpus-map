@@ -1,5 +1,13 @@
 import type { CorpusMapHandle, CorpusMapView, LodThresholds, MapNode, MapSpec, Tuning } from "corpus-map";
-import { CorpusMap, DEFAULT_THRESHOLDS, DEFAULT_TUNING, resolveThresholds, resolveTuning } from "corpus-map";
+import {
+  CorpusMap,
+  DARK_THEME,
+  DEFAULT_THEME,
+  DEFAULT_THRESHOLDS,
+  DEFAULT_TUNING,
+  resolveThresholds,
+  resolveTuning,
+} from "corpus-map";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { Drawer } from "./components/Drawer";
@@ -10,6 +18,8 @@ import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
 import { ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
+import { token } from "./tokens";
+import { useColourScheme } from "./useColourScheme";
 
 interface ElementMeta {
   name: string;
@@ -50,7 +60,9 @@ function renderArxivCard(node: MapNode) {
   const meta = node.meta as ArxivMeta | undefined;
   return (
     <div style={{ padding: 8, minWidth: 160, maxWidth: 240 }}>
-      <strong>{node.label}</strong>
+      <strong style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {node.label}
+      </strong>
       {meta?.year ? <div>{meta.year}</div> : null}
     </div>
   );
@@ -88,7 +100,7 @@ const loadingStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
-  color: "#1a1d23",
+  color: token("text"),
   fontSize: 14,
 };
 
@@ -108,16 +120,16 @@ const errorStyle: CSSProperties = {
   justifyContent: "center",
   gap: 12,
   height: "100%",
-  color: "#1a1d23",
+  color: token("text"),
   fontSize: 14,
 };
 
 const retryButtonStyle: CSSProperties = {
   padding: "6px 14px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "rgba(255,255,255,0.92)",
-  color: "#1a1d23",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surface"),
+  color: token("text"),
   fontSize: 13,
 };
 
@@ -133,7 +145,7 @@ interface CurrentCorpus {
  * same convention `floatingLayout.ts` already documents for the minimap's
  * own constants.
  */
-const DEFAULT_PANEL_CARD_SIZE = { width: 160, height: 56 };
+const DEFAULT_PANEL_CARD_SIZE = { width: 200, height: 96 };
 
 /** The synthetic corpus's own defaults (`demo/corpora/synthetic.ts`): seed 1, 5,000 items. */
 const DEFAULT_SYNTHETIC_SIZE = 5000;
@@ -192,6 +204,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   // effect on a value that actually changed).
   const [retryToken, setRetryToken] = useState(0);
   const [view, setView] = useState<CorpusMapView | null>(null);
+  const scheme = useColourScheme();
   // The selected node's drawer (showcase Task 6). `null` until an
   // `onSelect` fires; a corpus switch clears it in `handleCorpusChange`
   // below so a stale selection from the corpus just left can never show.
@@ -426,6 +439,8 @@ export function App({ loadArxiv }: AppProps = {}) {
             spec={current.spec}
             renderCard={CARDS[current.id]}
             minimap
+            legend
+            theme={scheme === "dark" ? DARK_THEME : DEFAULT_THEME}
             tuning={appliedTuning}
             thresholds={appliedThresholds}
             cardSize={cardSize}

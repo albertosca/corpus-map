@@ -6,7 +6,7 @@
     <title>corpus-map demo</title>
     <style>
       :root {
-        color-scheme: light;
+        color-scheme: light dark;
       }
       * {
         box-sizing: border-box;
@@ -19,7 +19,8 @@
         overflow: hidden;
       }
       body {
-        background: #f7f7f8;
+        background: var(--page);
+        color: var(--text);
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
       button,
@@ -31,7 +32,7 @@
         cursor: pointer;
       }
       :focus-visible {
-        outline: 2px solid #2b6de0;
+        outline: 2px solid var(--focus);
         outline-offset: 2px;
       }
       @media (prefers-reduced-motion: reduce) {

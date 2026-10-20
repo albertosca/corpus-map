@@ -1,6 +1,7 @@
 import type { MapNode } from "corpus-map";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef } from "react";
+import { token } from "../tokens";
 
 export interface DrawerProps {
   /** The selected node, or `null` when nothing is selected — renders nothing in that case. */
@@ -50,10 +51,10 @@ const panelStyle: CSSProperties = {
   gap: 10,
   overflowY: "auto",
   padding: "16px 18px",
-  background: "#ffffff",
-  borderLeft: "1px solid rgba(0,0,0,0.10)",
-  boxShadow: "-2px 0 10px rgba(0,0,0,0.08)",
-  color: "#1a1d23",
+  background: token("surfaceSolid"),
+  borderLeft: `1px solid ${token("border")}`,
+  boxShadow: `-2px 0 10px ${token("shadow")}`,
+  color: token("text"),
   fontSize: 14,
 };
 
@@ -75,9 +76,9 @@ const closeButtonStyle: CSSProperties = {
   flexShrink: 0,
   padding: "6px 10px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "rgba(255,255,255,0.92)",
-  color: "#1a1d23",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surface"),
+  color: token("text"),
   fontSize: 13,
   // A percentage `maxWidth` resolves against the containing block, so this
   // genuinely caps the button at the drawer's own width -- real CSS
@@ -92,7 +93,7 @@ const metaLineStyle: CSSProperties = {
 };
 
 const linkStyle: CSSProperties = {
-  color: "#0b5ed7",
+  color: token("link"),
 };
 
 const dlStyle: CSSProperties = {
@@ -105,7 +106,7 @@ const dlStyle: CSSProperties = {
 
 const dtStyle: CSSProperties = {
   margin: 0,
-  color: "#555b66",
+  color: token("textMuted"),
 };
 
 const ddStyle: CSSProperties = {

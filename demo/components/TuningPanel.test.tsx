@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { token } from "../tokens";
 import {
   PANEL_ALERT_COLOR,
   PANEL_BACKGROUND_COLOR,
@@ -280,33 +281,11 @@ describe("TuningPanel (showcase Task 7)", () => {
   });
 
   describe("visual restraint", () => {
-    /** WCAG 2.x relative luminance + contrast ratio, computed independently of `src/labels/contrast.ts` (demo code deliberately does not reach into library internals — see `floatingLayout.ts`'s own doc comment). */
-    function relativeLuminance(hex: string): number {
-      const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-      if (!match) throw new Error(`not a #rrggbb color: ${hex}`);
-      const [rHex, gHex, bHex] = match.slice(1) as [string, string, string];
-      const channel = (h: string) => {
-        const c = Number.parseInt(h, 16) / 255;
-        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-      };
-      return 0.2126 * channel(rHex) + 0.7152 * channel(gHex) + 0.0722 * channel(bHex);
-    }
-
-    function contrastRatio(a: string, b: string): number {
-      const la = relativeLuminance(a);
-      const lb = relativeLuminance(b);
-      const [lighter, darker] = la >= lb ? [la, lb] : [lb, la];
-      return (lighter + 0.05) / (darker + 0.05);
-    }
-
-    it("the helper agrees black/white is 21:1 (sanity check on the formula itself)", () => {
-      expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 0);
-    });
-
-    it("every text colour the panel actually uses meets AA (4.5:1) against its background", () => {
-      expect(contrastRatio(PANEL_TEXT_COLOR, PANEL_BACKGROUND_COLOR)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(PANEL_MUTED_TEXT_COLOR, PANEL_BACKGROUND_COLOR)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(PANEL_ALERT_COLOR, PANEL_BACKGROUND_COLOR)).toBeGreaterThanOrEqual(4.5);
+    it("every colour the panel uses is a demo token, whose contrast demo/tokens.test.ts checks in both schemes", () => {
+      expect(PANEL_TEXT_COLOR).toBe(token("text"));
+      expect(PANEL_MUTED_TEXT_COLOR).toBe(token("textMuted"));
+      expect(PANEL_BACKGROUND_COLOR).toBe(token("surfaceSolid"));
+      expect(PANEL_ALERT_COLOR).toBe(token("danger"));
     });
 
     it("no label reads in ALL CAPS and no arrow glyph is used", () => {

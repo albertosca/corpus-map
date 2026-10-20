@@ -1,6 +1,7 @@
 import type { CorpusMapHandle } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useState } from "react";
+import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
 
@@ -61,9 +62,9 @@ const buttonStyle: CSSProperties = {
   width: BUTTON_WIDTH,
   padding: "6px 10px",
   borderRadius: 4,
-  border: "1px solid rgba(0,0,0,0.2)",
-  background: "rgba(255,255,255,0.92)",
-  color: "#1a1d23",
+  border: `1px solid ${token("borderStrong")}`,
+  background: token("surface"),
+  color: token("text"),
   fontSize: 13,
 };
 
