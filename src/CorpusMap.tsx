@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import { AccessibleTree } from "./a11y/AccessibleTree";
+import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries } from "./legend/entries";
@@ -32,7 +33,7 @@ import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
-import { fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
+import { boundsOf, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import { useElementSize } from "./viewport/useElementSize";
@@ -115,6 +116,8 @@ export interface CorpusMapProps {
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
   /** The map surface's accessible name. Defaults to "Map of N items". */
   label?: string | undefined;
+  /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
+  headingLevel?: HeadingLevel | undefined;
   /**
    * `"auto"` (default) is guided at far and dense at mid and near; a fixed
    * value locks it. Never changes the LOD regimes, only emphasis (spec
@@ -254,6 +257,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const thresholds = useMemo(() => resolveThresholds(properties.thresholds), [properties.thresholds]);
   const tuning = useMemo(() => resolveTuning(properties.tuning), [properties.tuning]);
   const cardCap = properties.cardCap ?? 200;
+  const headingTag = resolveHeadingLevel(properties.headingLevel);
   // Not memoized: `layoutCards` is cheap and already recomputed every render
   // inside `CardOverlay`, so keying a memo on this object's identity would
   // only add a stale-dependency risk (Task 7's lesson) for no benefit.
@@ -573,6 +577,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     setViewport(
       fitClamped(bounds, width, height, FIT_PADDING, fitScale / MAXIMUM_ZOOM_OUT, fitScale * MAXIMUM_ZOOM_IN),
     );
+  };
+  // Lands in near by construction (spec slice B §5, amended): the loose
+  // nodes' box at no less than the scale a territory button zooms to.
+  const onUnassigned = () => {
+    const loose = liveSpec.nodes.filter((node) => node.territory === null);
+    if (loose.length === 0) return;
+    const bounds = boundsOf(loose.map((node) => [node.x, node.y] as const));
+    const nearScale = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
+    setViewport(fitClamped(bounds, width, height, FIT_PADDING, nearScale, fitScale * MAXIMUM_ZOOM_IN));
   };
   const onLegendEntryReference = useRef(onLegendEntry);
   useEffect(() => {
@@ -1180,6 +1193,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               setViewport({ scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale });
             }}
             onSelect={onSelect}
+            groups={scene.groups}
+            hidden={dimmed}
+            heading={headingTag}
+            theme={theme}
+            onOverview={fitView}
+            onUnassigned={onUnassigned}
+            onFocusFallback={() => rootReference.current?.focus()}
             onTerritoryFocusChange={setFocusedTerritory}
             onNodeFocusChange={setFocusedNode}
           />

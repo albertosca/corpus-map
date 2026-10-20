@@ -1,3 +1,4 @@
+export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
 export type { LodThresholds, Regime } from "./lod/lod";
