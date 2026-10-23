@@ -134,7 +134,9 @@ describe("commit cost", () => {
     console.log(
       `drag frame: App ${appFrame.toFixed(2)} ms (${app.commits()} commits), map alone ${mapFrame.toFixed(2)} ms (${map.commits()} commits), App's share ${(appFrame - mapFrame).toFixed(2)} ms`,
     );
-    // The App must re-render during the drag, or this bench measures the cold case.
+    // The indicator must re-render during the drag, or this bench measures the
+    // cold case; since the view moved into the indicator's own store
+    // (`ViewStore`), `App` itself no longer commits here.
     expect(app.commits()).toBeGreaterThan(map.commits());
     vi.useRealTimers();
     vi.unstubAllGlobals();

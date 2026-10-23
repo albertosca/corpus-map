@@ -1,10 +1,38 @@
 import type { CorpusMapView } from "corpus-map";
-import type { CSSProperties, ReactElement } from "react";
+import { type CSSProperties, type ReactElement, useSyncExternalStore } from "react";
 import { token } from "../tokens";
 import { INDICATOR_BOTTOM, INDICATOR_LEFT } from "./floatingLayout";
 
+/**
+ * The last view `CorpusMap` reported, held outside React state so a view
+ * change re-renders only the indicator: kept in `App`'s state, every drag
+ * frame that moved a point across the edge committed the whole demo twice
+ * (bench/commit.test.tsx).
+ */
+export interface ViewStore {
+  get: () => CorpusMapView | null;
+  set: (view: CorpusMapView | null) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+export function createViewStore(): ViewStore {
+  let current: CorpusMapView | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    set: (view) => {
+      current = view;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
 interface IndicatorProps {
-  view: CorpusMapView | null;
+  store: ViewStore;
 }
 
 // Sits in the library minimap's bottom-left corner, stacked above it with
@@ -33,7 +61,8 @@ const style: CSSProperties = {
  * read straight from `CorpusMap`'s own `onViewChange` payload — nothing
  * computed here.
  */
-export function Indicator({ view }: IndicatorProps): ReactElement | null {
+export function Indicator({ store }: IndicatorProps): ReactElement | null {
+  const view = useSyncExternalStore(store.subscribe, store.get);
   if (!view) return null;
   return (
     <div data-indicator data-floating-control style={style}>

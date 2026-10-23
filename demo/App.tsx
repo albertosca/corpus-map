@@ -1,4 +1,4 @@
-import type { CorpusMapHandle, CorpusMapView, LodThresholds, MapNode, MapSpec, Tuning } from "corpus-map";
+import type { CorpusMapHandle, LodThresholds, MapNode, MapSpec, Tuning } from "corpus-map";
 import {
   CorpusMap,
   DARK_THEME,
@@ -12,7 +12,7 @@ import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useStat
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
-import { Indicator } from "./components/Indicator";
+import { createViewStore, Indicator } from "./components/Indicator";
 import { TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
@@ -203,7 +203,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   // re-run for the *same* corpusId (a dependency array only re-fires an
   // effect on a value that actually changed).
   const [retryToken, setRetryToken] = useState(0);
-  const [view, setView] = useState<CorpusMapView | null>(null);
+  // The indicator reads the map's view from this store, not from `App` state,
+  // so a view change re-renders only the indicator (`ViewStore`).
+  const [viewStore] = useState(createViewStore);
   const scheme = useColourScheme();
   // The selected node's drawer (showcase Task 6). `null` until an
   // `onSelect` fires; a corpus switch clears it in `handleCorpusChange`
@@ -350,7 +352,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   // in, and must never keep showing once that corpus is gone.
   const handleCorpusChange = (id: GalleryEntry["id"]) => {
     setCorpusId(id);
-    setView(null);
+    viewStore.set(null);
     setSelected(null);
   };
 
@@ -456,7 +458,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             tuning={appliedTuning}
             thresholds={appliedThresholds}
             cardSize={cardSize}
-            onViewChange={setView}
+            onViewChange={viewStore.set}
             onSelect={handleSelect}
           />
         ) : hasError ? (
@@ -477,7 +479,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           clear of whichever of the two is open, exactly as it already does
           for the drawer alone. */}
       <ZoomControls mapRef={mapReference} drawerOpen={selected !== null || panelOpen} />
-      <Indicator view={view} />
+      <Indicator store={viewStore} />
       <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
       <Drawer
         node={selected}
