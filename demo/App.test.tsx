@@ -629,6 +629,22 @@ describe("App (showcase Task 5)", () => {
     expect(violationIds(await auditAccessibility(container))).toEqual([]);
   });
 
+  it("puts the top bar before the map, so headings read h1 then h2 and Tab reaches the demo controls first", async () => {
+    await renderApp(arxivJson);
+    await screen.findByText(territoryButtonText(arxivJson as MapSpec), undefined, { timeout: 10_000 });
+    const title = screen.getByRole("heading", { level: 1 });
+    const sectionHeadings = screen.getAllByRole("heading", { level: 2 });
+    expect(sectionHeadings.length).toBeGreaterThan(0);
+    for (const heading of sectionHeadings) {
+      expect(title.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    const surface = document.querySelector("[data-map-shell] [tabindex='0']");
+    expect(surface).not.toBeNull();
+    expect(
+      screen.getByLabelText("Corpus").compareDocumentPosition(surface as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("calls the zoom handle from the Zoom in button and the indicator reflects the new ratio", async () => {
     await renderApp();
     await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));

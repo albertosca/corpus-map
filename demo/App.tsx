@@ -433,6 +433,16 @@ export function App({ loadArxiv }: AppProps = {}) {
 
   return (
     <div data-app-shell style={shellStyle}>
+      {/* First in the DOM: the h1 precedes the map's h2s, and Tab meets the demo controls before the map. */}
+      <TopBar
+        corpora={corpora}
+        activeId={corpusId}
+        onChange={handleCorpusChange}
+        tuningOpen={panelOpen}
+        onToggleTuning={handleTogglePanel}
+        gearButtonRef={gearButtonReference}
+        barRef={topBarReference}
+      />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
           <CorpusMap
@@ -462,15 +472,6 @@ export function App({ loadArxiv }: AppProps = {}) {
           </div>
         )}
       </div>
-      <TopBar
-        corpora={corpora}
-        activeId={corpusId}
-        onChange={handleCorpusChange}
-        tuningOpen={panelOpen}
-        onToggleTuning={handleTogglePanel}
-        gearButtonRef={gearButtonReference}
-        barRef={topBarReference}
-      />
       {/* The panel occupies the same right-side slot as the drawer (mutually
           exclusive, `TuningPanel`'s own doc comment) -- `ZoomControls` shifts
           clear of whichever of the two is open, exactly as it already does
