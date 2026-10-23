@@ -74,7 +74,7 @@ export interface CorpusMapProps {
      * one commit per frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
-    /** The map surface's accessible name. Defaults to "Map of N items". */
+    /** The map surface's accessible name. Defaults to "Map of N items", also when blank. */
     label?: string | undefined;
     /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
     headingLevel?: HeadingLevel | undefined;

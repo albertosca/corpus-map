@@ -85,6 +85,24 @@ describe("keyboard-only traversal (spec slice B §9)", () => {
     expect(regimes[regimes.length - 1]).toBe("near");
   });
 
+  it("returns focus to Unassigned, not to the territory opened before it, after Back to overview", async () => {
+    const user = userEvent.setup();
+    render(<CorpusMap spec={spec} renderCard={() => null} width={400} height={300} />);
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement?.textContent).toBe("Alpha land, 2 items");
+    await user.keyboard("{Enter}");
+    await user.keyboard("{Enter}"); // Back to overview
+    expect(document.activeElement?.textContent).toBe("Alpha land, 2 items");
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement?.textContent).toBe("Unassigned, 1 item");
+    await user.keyboard("{Enter}");
+    expect(document.activeElement?.textContent).toBe("Back to overview");
+    await user.keyboard("{Enter}");
+    expect(document.activeElement?.textContent).toBe("Unassigned, 1 item");
+  });
+
   it("lands Unassigned on a loose item when the loose items are too far apart for one near view", () => {
     const spread: MapSpec = {
       ...spec,

@@ -114,7 +114,7 @@ export interface CorpusMapProps {
    * one commit per frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
-  /** The map surface's accessible name. Defaults to "Map of N items". */
+  /** The map surface's accessible name. Defaults to "Map of N items", also when blank. */
   label?: string | undefined;
   /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
   headingLevel?: HeadingLevel | undefined;
@@ -277,7 +277,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // key show it (spec slice B §4).
   const [surfaceFocusVisible, setSurfaceFocusVisible] = useState(false);
   const pointerFocus = useRef(false);
-  const surfaceLabel = properties.label ?? `Map of ${spec.nodes.length} ${spec.nodes.length === 1 ? "item" : "items"}`;
+  // A blank label would leave the region unnamed, so it keeps the default too.
+  const surfaceLabel = properties.label?.trim()
+    ? properties.label
+    : `Map of ${spec.nodes.length} ${spec.nodes.length === 1 ? "item" : "items"}`;
   // Always called (rules of hooks): a consumer that never removes/adds
   // `width`/`height` across an instance's lifetime never sees it matter, and
   // one that does gets a `measured` value that has been tracking the parent
@@ -836,8 +839,18 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     return () => element.removeEventListener("wheel", onWheel);
   }, []);
 
-  const onPointerDown = (event: PointerEvent) => {
+  // A press anywhere inside the root, including the minimap and the legend
+  // that stop the event before it bubbles here, marks the focus it causes as
+  // pointer focus. That focus lands synchronously after the press, so the
+  // mark lasts one task: a later keyboard focus still shows the ring.
+  const onPointerDownCapture = () => {
     pointerFocus.current = true;
+    setTimeout(() => {
+      pointerFocus.current = false;
+    }, 0);
+  };
+
+  const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0 || !event.isPrimary) return;
     drag.current = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
     (event.target as Element).setPointerCapture?.(event.pointerId);
@@ -1065,6 +1078,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         setSurfaceFocusVisible(false);
       }}
       onKeyDown={onKeyDown}
+      onPointerDownCapture={onPointerDownCapture}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

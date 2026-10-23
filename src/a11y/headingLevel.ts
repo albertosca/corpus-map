@@ -9,7 +9,8 @@ export const DEFAULT_HEADING_LEVEL: HeadingLevel = 3;
  * `resolveThresholds`, because a JavaScript consumer is not held to the type.
  */
 export function resolveHeadingLevel(input: number | undefined): HeadingTag {
-  const level = input ?? DEFAULT_HEADING_LEVEL;
+  // Only an omitted level defaults; `null` from untyped JavaScript is rejected like any other non-level.
+  const level = input === undefined ? DEFAULT_HEADING_LEVEL : input;
   if (typeof level !== "number" || !Number.isInteger(level) || level < 2 || level > 6) {
     throw new RangeError(`headingLevel must be an integer from 2 to 6, got ${String(level)}`);
   }

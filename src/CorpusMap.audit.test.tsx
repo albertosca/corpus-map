@@ -58,6 +58,7 @@ describe("accessibility audit (spec slice B §7)", () => {
     const { container } = renderMap({ onRegimeChange: (regime: string) => regimes.push(regime) });
     const root = container.querySelector("[data-map-surface]") as HTMLElement;
     for (let step = 0; step < 4; step += 1) fireEvent.keyDown(root, { key: "+" });
+    expect(regimes[regimes.length - 1]).toBe("mid");
     await expectClean(container);
     act(() => screen.getByRole("button", { name: "Unassigned, 1 item" }).click());
     expect(regimes[regimes.length - 1]).toBe("near");

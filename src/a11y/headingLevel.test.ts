@@ -18,6 +18,11 @@ describe("resolveHeadingLevel", () => {
     },
   );
 
+  it("rejects null from untyped JavaScript instead of falling back to the default", () => {
+    expect(() => resolveHeadingLevel(null as unknown as number)).toThrow(RangeError);
+    expect(() => resolveHeadingLevel(null as unknown as number)).toThrow("null");
+  });
+
   it("rejects a string from untyped JavaScript", () => {
     expect(() => resolveHeadingLevel("3" as unknown as number)).toThrow(RangeError);
   });

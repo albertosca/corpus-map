@@ -48,6 +48,11 @@ describe("CorpusMap surface focus (spec slice B §4)", () => {
     expect(screen.getByRole("region", { name: "Map of 1 item" })).toBeDefined();
   });
 
+  it.each(["", "   "])("keeps the default name when the label prop is blank (%j)", (label) => {
+    renderMap({ label });
+    expect(screen.getByRole("region", { name: "Map of 11 items" })).toBeDefined();
+  });
+
   it("takes its name from the label prop", () => {
     renderMap({ label: "Papers on computer science" });
     expect(screen.getByRole("region", { name: "Papers on computer science" })).toBeDefined();
@@ -64,6 +69,31 @@ describe("CorpusMap surface focus (spec slice B §4)", () => {
     const { container } = renderMap({ ref: handle });
     act(() => handle.current?.focus());
     expect(document.activeElement).toBe(surface(container));
+  });
+
+  it("shows no focus ring when a press on the minimap focuses the surface", () => {
+    const { container } = renderMap({ minimap: true });
+    const root = surface(container);
+    const minimap = container.querySelector("[data-minimap]") as HTMLElement;
+    fireEvent.pointerDown(minimap, { clientX: 5, clientY: 5, pointerId: 1, button: 0, isPrimary: true });
+    act(() => root.focus());
+    expect(root.hasAttribute("data-focus-visible")).toBe(false);
+  });
+
+  it("still shows the ring on keyboard focus after a press moved focus into the legend", async () => {
+    const withTerritory: MapSpec = {
+      version: "1",
+      territories: [{ id: "t", name: "Only land", members: ["n0"], centroid: [0, 0] }],
+      nodes: [{ id: "n0", label: "Item 0", x: 0, y: 0, territory: "t" }],
+    };
+    const { container } = renderMap({ spec: withTerritory, legend: true });
+    const root = surface(container);
+    const toggle = container.querySelector("[data-legend] button") as HTMLButtonElement;
+    fireEvent.pointerDown(toggle, { clientX: 5, clientY: 5, pointerId: 1, button: 0, isPrimary: true });
+    act(() => toggle.focus());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    act(() => root.focus());
+    expect(root.hasAttribute("data-focus-visible")).toBe(true);
   });
 
   it("shows its focus ring on keyboard focus, not on a press", async () => {

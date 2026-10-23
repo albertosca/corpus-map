@@ -181,6 +181,29 @@ describe("AccessibleTree", () => {
     expect(screen.getByRole("heading", { name: "Southern" })).toBeDefined();
   });
 
+  it("orders the near sections by group order, as the far tree and the legend do", () => {
+    const groups = [
+      { id: "group:t2", name: "Southern", members: ["t2"] },
+      { id: "group:t1", name: "Northern", members: ["t1"] },
+    ];
+    render(
+      <AccessibleTree
+        spec={spec}
+        regime="near"
+        viewport={viewport}
+        width={400}
+        height={300}
+        cap={200}
+        groups={groups}
+      />,
+    );
+    expect(screen.getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
+      "South",
+      "North",
+      "Unassigned",
+    ]);
+  });
+
   it("leads the near list with Back to overview, then items under territory headings, Unassigned last", async () => {
     const onOverview = vi.fn();
     render(

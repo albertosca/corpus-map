@@ -82,11 +82,12 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
   // this tree is withdrawn too — otherwise a stale highlight would stay drawn.
   const rootReference = useRef<HTMLDivElement>(null);
   const reported = useRef(false);
-  // The element last focused inside the tree, and the territory last opened:
-  // the focus-restore rule (spec slice B §5, amended) acts only when that
-  // element left the document and focus fell to `body`.
+  // The element last focused inside the tree, and a selector for the control
+  // last opened (a territory, or "Unassigned"): the focus-restore rule (spec
+  // slice B §5, amended) acts only when that element left the document and
+  // focus fell to `body`.
   const lastFocused = useRef<HTMLElement | null>(null);
-  const lastTerritory = useRef<string | null>(null);
+  const lastOpened = useRef<string | null>(null);
   const [focusedControl, setFocusedControl] = useState<"overview" | "unassigned" | null>(null);
 
   useEffect(() => {
@@ -104,9 +105,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       // reports itself again from its own `onFocus`.
       const target =
         root.querySelector<HTMLElement>("[data-tree-overview]") ??
-        (lastTerritory.current === null
-          ? null
-          : root.querySelector<HTMLElement>(`[data-tree-territory="${CSS.escape(lastTerritory.current)}"]`)) ??
+        (lastOpened.current === null ? null : root.querySelector<HTMLElement>(lastOpened.current)) ??
         root.querySelector<HTMLElement>("button");
       if (target) target.focus();
       else properties.onFocusFallback?.();
@@ -163,7 +162,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
         type="button"
         data-tree-territory={territory.id}
         onClick={() => {
-          lastTerritory.current = territory.id;
+          lastOpened.current = `[data-tree-territory="${CSS.escape(territory.id)}"]`;
           onFocusTerritory?.(territory);
         }}
         onFocus={(event) => {
@@ -205,7 +204,10 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       data-tree-overview={kind === "overview" ? "" : undefined}
       data-tree-unassigned={kind === "unassigned" ? "" : undefined}
       style={controlStyle(kind)}
-      onClick={() => onClick?.()}
+      onClick={() => {
+        if (kind === "unassigned") lastOpened.current = "[data-tree-unassigned]";
+        onClick?.();
+      }}
       onFocus={(event) => {
         remember(event.currentTarget);
         setFocusedControl(kind);
@@ -229,8 +231,19 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       list.push(node);
       byTerritory.set(node.territory, list);
     }
+    // Group order, as the far tree and the legend list them; a territory in
+    // no group follows, in spec order (`sort` is stable).
+    const rank = new Map(groups.flatMap((group) => group.members).map((id, index) => [id, index] as const));
+    const ordered = [...shown].sort(
+      (first, second) =>
+        (rank.get(first.id) ?? Number.POSITIVE_INFINITY) - (rank.get(second.id) ?? Number.POSITIVE_INFINITY),
+    );
     const sections = [
-      ...shown.map((territory) => ({ key: territory.id, name: territory.name, nodes: byTerritory.get(territory.id) })),
+      ...ordered.map((territory) => ({
+        key: territory.id,
+        name: territory.name,
+        nodes: byTerritory.get(territory.id),
+      })),
       { key: "unassigned", name: UNASSIGNED, nodes: byTerritory.get(null) },
     ].filter((section) => section.nodes !== undefined);
     content = (
