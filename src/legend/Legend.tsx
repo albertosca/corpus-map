@@ -130,6 +130,7 @@ export function LegendView(properties: LegendProps): ReactElement {
           ) : null}
           <input
             type="search"
+            name="corpus-map-legend-filter"
             aria-label="Filter categories"
             placeholder="Filter categories"
             value={filter}
@@ -149,6 +150,8 @@ export function LegendView(properties: LegendProps): ReactElement {
                     <label style={checkboxTarget}>
                       <input
                         type="checkbox"
+                        name="corpus-map-legend-group"
+                        value={group.id}
                         aria-label={`Show ${group.name}`}
                         checked={group.shown === "all"}
                         ref={(element) => {
@@ -190,6 +193,8 @@ export function LegendView(properties: LegendProps): ReactElement {
                           <label style={checkboxTarget}>
                             <input
                               type="checkbox"
+                              name="corpus-map-legend-territory"
+                              value={row.id}
                               aria-label={`Show ${row.name}`}
                               checked={!row.hidden}
                               onChange={() => toggleRow(row.id)}

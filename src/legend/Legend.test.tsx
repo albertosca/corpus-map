@@ -86,6 +86,16 @@ describe("Legend", () => {
       expect(label?.style.minHeight).toBe("24px");
     }
   });
+
+  it("names every form field, so Chrome does not flag it for autofill (a name, never an id: two maps may share a page)", () => {
+    const { container } = render(<Legend {...props({ groups })} />);
+    const fields = [...container.querySelectorAll("input")];
+    expect(fields.length).toBeGreaterThan(3);
+    for (const field of fields) {
+      expect(field.name).not.toBe("");
+      expect(field.id).toBe("");
+    }
+  });
 });
 
 describe("full legend", () => {
