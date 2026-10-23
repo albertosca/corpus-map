@@ -155,6 +155,8 @@ export interface AccessibleTreeProps {
     /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
     onNodeFocusChange?: ((id: string | null) => void) | undefined;
 }
+/** "1 item", "N items": the corpus-agnostic count the tree and the territory balloon share. */
+export declare function itemCount(count: number): string;
 /**
  * The canvas is decorative; this is the content (spec slice B §5). It
  * mirrors the regime: at far and mid, territory buttons under their group
@@ -513,6 +515,20 @@ export declare function regimeAt(rawRatio: number, thresholds: LodThresholds, pr
  * layer is always fully present.
  */
 export declare function fade(ratio: number, threshold: number, band: number): number;
+/**
+ * Opacity of the far map's group names: 1 below `groupNamesUntil`, then a
+ * cross-fade to 0 over `fadeBand`, outside far always 0. Far can end as low
+ * as `midAt * (1 - hysteresis)` (the zoom-out re-entry point), so when the
+ * band would run past that the fade is squeezed to end there: otherwise the
+ * names would vanish mid-fade at the regime change. With no room at all, the
+ * names hold through all of far.
+ */
+export declare function groupNameAlpha(ratio: number, regime: Regime, options: {
+    midAt: number;
+    groupNamesUntil: number;
+    fadeBand: number;
+    hysteresis: number;
+}): number;
 
 // lod/visible.d.ts
 import type { MapNode, MapSpec } from "../shared/spec";
@@ -950,8 +966,9 @@ export interface Tuning {
     /**
      * Below this zoom ratio (viewport scale over fit scale) the far map names
      * groups, not territories; the swap cross-fades over `fadeBand` above it
-     * (spec categories §4). At or above `midAt`, group names hold through all
-     * of far.
+     * (spec categories §4), squeezed to finish before far can end
+     * (`groupNameAlpha`). With no room before `midAt`, group names hold
+     * through all of far.
      */
     groupNamesUntil: number;
 }
@@ -1138,7 +1155,7 @@ import type { Viewport } from "./viewport";
 export declare const LABEL_FIT_PASSES = 3;
 /**
  * The first view: every territory outline whole, and every name that is
- * active at the fit (group names when the scene has groups) and fits the box
+ * active at the fit (group names when the scene has groups and the fit is far) and fits the box
  * whole too (closes the BACKLOG item about names cut
  * at the fitted phone view). A name's box is in screen pixels, so its extent
  * in world units depends on the scale being chosen; each pass widens the
@@ -1150,7 +1167,9 @@ export declare const LABEL_FIT_PASSES = 3;
  * the set again on every pass lets a name whose `activeFromScale` sits near
  * the fitted scale flip in and out, and the result never settles.
  */
-export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels" | "groupLabels">, width: number, height: number, padding: number): Viewport;
+export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels" | "groupLabels">, width: number, height: number, padding: number, options?: {
+    groupNames: boolean;
+}): Viewport;
 
 // viewport/keyboard.d.ts
 import type { LodThresholds, Regime } from "../lod/lod";

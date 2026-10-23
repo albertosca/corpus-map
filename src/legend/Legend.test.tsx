@@ -118,6 +118,19 @@ describe("full legend", () => {
     expect(onHiddenChange).toHaveBeenLastCalledWith([]);
   });
 
+  it("gives a one-member group a single Show checkbox, on its header, not a second one on the row", () => {
+    const onHiddenChange = vi.fn();
+    const single = [
+      groups[0] as LegendProps["groups"][number],
+      { id: "group:South", name: "South", members: ["south"] },
+    ];
+    render(<Legend {...props({ groups: single, onHiddenChange })} />);
+    const boxes = screen.getAllByRole("checkbox", { name: "Show South" });
+    expect(boxes).toHaveLength(1);
+    fireEvent.click(boxes[0] as HTMLElement);
+    expect(onHiddenChange).toHaveBeenLastCalledWith(["south"]);
+  });
+
   it("group checkbox: mixed is indeterminate; pressing shows all; pressing when all shown hides all", () => {
     const onHiddenChange = vi.fn();
     const { rerender } = render(<Legend {...props({ groups, onHiddenChange, hidden: new Set(["east"]) })} />);

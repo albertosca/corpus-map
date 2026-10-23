@@ -78,14 +78,85 @@ function hoverAt(surface: HTMLElement, point: { clientX: number; clientY: number
 const insideNorth = (): { clientX: number; clientY: number } => screenAt(spec, [5, 5]);
 
 describe("territory tooltip", () => {
-  it("names the territory under the cursor in the far regime, with its paper count", () => {
+  it("names the territory under the cursor in the far regime, with its item count", () => {
     const { container, surface } = mount();
     hoverAt(surface, insideNorth());
     const tooltip = container.querySelector("[data-hover-territories]");
     expect(tooltip?.getAttribute("data-hover-territories")).toBe("north");
     expect(tooltip?.textContent).toContain("North");
-    expect(tooltip?.textContent).toContain("3 papers");
+    expect(tooltip?.textContent).toContain("3 items");
     expect(tooltip?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("counts a one-member territory as 1 item, in the corpus-agnostic noun the tree uses", () => {
+    const { container, surface } = mount();
+    hoverAt(surface, screenAt(spec, [25, 5]));
+    const tooltip = container.querySelector("[data-hover-territories]");
+    expect(tooltip?.textContent).toContain("1 item");
+    expect(tooltip?.textContent).not.toContain("1 items");
+    expect(tooltip?.textContent).not.toContain("paper");
+  });
+
+  it("tells a territory whose id has a space apart from two territories with those ids", () => {
+    const spaced = validateSpec({
+      version: "1",
+      territories: [
+        { id: "a b", name: "Joined", members: ["j0"], centroid: [5, 5], boundary: square(0, 0, 10) },
+        { id: "a", name: "First", members: ["a0", "a1"], centroid: [25, 5], boundary: square(20, 0, 10) },
+        { id: "b", name: "Second", members: ["b0"], centroid: [25, 5], boundary: square(22, 2, 6) },
+      ],
+      nodes: [
+        { id: "j0", label: "j0", x: 5, y: 5, territory: "a b" },
+        { id: "a0", label: "a0", x: 21, y: 1, territory: "a" },
+        { id: "a1", label: "a1", x: 29, y: 9, territory: "a" },
+        { id: "b0", label: "b0", x: 25, y: 5, territory: "b" },
+      ],
+    });
+    const { container, surface } = mount({}, spaced);
+    hoverAt(surface, screenAt(spaced, [5, 5]));
+    expect(container.querySelector("[data-hover-territories]")?.textContent).toContain("Joined");
+    hoverAt(surface, screenAt(spaced, [24, 4]));
+    const tooltip = container.querySelector("[data-hover-territories]");
+    expect(tooltip?.textContent).toContain("First");
+    expect(tooltip?.textContent).toContain("Second");
+    expect(tooltip?.textContent).not.toContain("Joined");
+  });
+
+  it("survives a frame that lands after the balloon unmounts but before the passive effects run", async () => {
+    // Outside act(), so React leaves the passive effects of the unmount
+    // commit queued; the observer runs in the gap, right after that commit.
+    const actEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean | undefined };
+    const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    const { container, surface } = mount();
+    hoverAt(surface, insideNorth());
+    expect(container.querySelector("[data-hover-territories]")).not.toBeNull();
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+    const runFrames = () => {
+      for (const callback of callbacks.splice(0)) callback(0);
+    };
+    try {
+      const errors: unknown[] = [];
+      const gapReached = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (container.querySelector("[data-hover-territories]") !== null) return;
+          observer.disconnect();
+          try {
+            surface.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, ...insideNorth() }));
+            runFrames();
+          } catch (error) {
+            errors.push(error);
+          }
+          resolve();
+        });
+        observer.observe(container, { childList: true, subtree: true });
+      });
+      surface.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, ...screenAt(spec, [15, 5]) }));
+      runFrames();
+      await gapReached;
+      expect(errors).toEqual([]);
+    } finally {
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
   });
 
   it("shows nothing over empty sea between territories", () => {
@@ -111,7 +182,7 @@ describe("territory tooltip", () => {
     hoverAt(surface, screenAt(overlapping, [5, 5]));
     const tooltip = container.querySelector("[data-hover-territories]");
     expect(tooltip?.getAttribute("data-hover-territories")).toBe("wide inner");
-    expect(tooltip?.textContent).not.toContain("papers");
+    expect(tooltip?.textContent).not.toContain("items");
   });
 
   it("caps the rows at TOOLTIP_ROW_LIMIT, largest first, and counts the rest", () => {

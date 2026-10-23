@@ -182,15 +182,21 @@ export function LegendView(properties: LegendProps): ReactElement {
                           opacity: row.onScreen ? 1 : OFF_SCREEN_OPACITY,
                         }}
                       >
-                        <label style={checkboxTarget}>
-                          <input
-                            type="checkbox"
-                            aria-label={`Show ${row.name}`}
-                            checked={!row.hidden}
-                            onChange={() => toggleRow(row.id)}
-                            style={{ margin: 0 }}
-                          />
-                        </label>
+                        {/* A one-member group's header checkbox already toggles this row; a second
+                            "Show X" would repeat it. The spacer keeps the swatches aligned. */}
+                        {!model.flat && group.memberIds.length === 1 ? (
+                          <span aria-hidden="true" style={checkboxTarget} />
+                        ) : (
+                          <label style={checkboxTarget}>
+                            <input
+                              type="checkbox"
+                              aria-label={`Show ${row.name}`}
+                              checked={!row.hidden}
+                              onChange={() => toggleRow(row.id)}
+                              style={{ margin: 0 }}
+                            />
+                          </label>
+                        )}
                         <button
                           type="button"
                           onClick={() => {

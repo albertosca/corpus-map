@@ -12,14 +12,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { AccessibleTree } from "./a11y/AccessibleTree";
+import { AccessibleTree, itemCount } from "./a11y/AccessibleTree";
 import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries } from "./legend/entries";
 import { Legend } from "./legend/Legend";
 import { type LodThresholds, type Regime, resolveThresholds } from "./lod/lod";
-import { fade, regimeAt } from "./lod/regime";
+import { fade, groupNameAlpha, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
 import { Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
@@ -358,10 +358,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     return names;
   }, [scene.groups]);
 
-  const [viewport, setViewport] = useState<Viewport>(() => fitScene(spec, scene, width, height, FIT_PADDING));
+  // The fitted view is ratio 1; it shows group names only when that is far.
+  const groupNamesAtFit = regimeAt(1, thresholds, "far", tuning.hysteresis) === "far";
+  const [viewport, setViewport] = useState<Viewport>(() =>
+    fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+  );
   // A theme or font change rebuilds the scene and so moves `fitted` (and
   // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
-  const fitted = useMemo(() => fitScene(spec, scene, width, height, FIT_PADDING), [spec, scene, width, height]);
+  const fitted = useMemo(
+    () => fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+    [spec, scene, width, height, groupNamesAtFit],
+  );
   const fitScale = fitted.scale;
   // Hysteresis regime; declared before the refit below (rather than nearer
   // where `ratio`/`next` are computed) so a spec/box swap can reset it in
@@ -450,8 +457,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // entirely when they match, is what keeps a steady hover — the pointer
   // staying within radius of the same point across several frames — at
   // zero commits.
+  // Mirrored in a layout effect, inside the commit: a passive effect would
+  // leave a gap after a commit that unmounts the balloon, in which a frame
+  // still sees the old territories and places a balloon that is gone.
   const hoverReference = useRef<HoverState | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     hoverReference.current = hover;
   }, [hover]);
 
@@ -490,9 +500,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const paintedNodeFocus = next === "near" ? focusedNode : null;
 
   const pointAlpha = fade(ratio, thresholds.midAt, tuning.fadeBand);
-  // Group names hold the far map below `groupNamesUntil` and cross-fade to
-  // territory names over `fadeBand` above it; outside far, never.
-  const groupAlpha = next === "far" ? 1 - fade(ratio, tuning.groupNamesUntil, tuning.fadeBand) : 0;
+  const groupAlpha = groupNameAlpha(ratio, next, {
+    midAt: thresholds.midAt,
+    groupNamesUntil: tuning.groupNamesUntil,
+    fadeBand: tuning.fadeBand,
+    hysteresis: tuning.hysteresis,
+  });
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
 
   // The dimmed set enters memoisation as one key (JSON, so no id can collide
@@ -932,7 +945,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       if (previousHover !== null) setHover(null);
       return;
     }
-    if (previousHover?.kind === "territories" && previousHover.ids.join(" ") === ids.join(" ")) {
+    if (previousHover?.kind === "territories" && JSON.stringify(previousHover.ids) === JSON.stringify(ids)) {
       hoverReference.current = { ...previousHover, x: position.x, y: position.y };
       placeTooltip(tooltipReference.current as HTMLDivElement, position.x, position.y, width, height);
       return;
@@ -1152,7 +1165,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
           {hover?.kind === "territories" ? (
             <div
               // A new set mounts a new balloon: rows re-laid out under a moving transform count as layout shifts.
-              key={hover.ids.join(" ")}
+              key={JSON.stringify(hover.ids)}
               ref={tooltipReference}
               data-hover-territories={hover.ids.join(" ")}
               aria-hidden="true"
@@ -1184,7 +1197,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                     />
                     <span>{territoriesById.get(id)?.name}</span>
                   </div>
-                  {hover.ids.length === 1 ? <div>{`${territoriesById.get(id)?.members.length} papers`}</div> : null}
+                  {hover.ids.length === 1 ? <div>{itemCount(territoriesById.get(id)?.members.length ?? 0)}</div> : null}
                   {groupOf.has(id) ? <div style={{ opacity: GROUP_LINE_OPACITY }}>{groupOf.get(id)}</div> : null}
                 </div>
               ))}

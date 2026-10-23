@@ -113,3 +113,27 @@ it("counts the group names, not the territory names, when the scene has groups",
   const withoutGroups = fitScene(emptySpec, { ...base, labels: [], groupLabels: [] }, 400, 400, 0);
   expect(withGroups.scale).toBeLessThan(withoutGroups.scale);
 });
+
+it("counts the territory names, not the group names, when the fitted view is not far", () => {
+  const shapes = new Map([
+    [
+      "t",
+      [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ] as Array<[number, number]>,
+      ],
+    ],
+  ]);
+  const emptySpec: MapSpec = { version: "1", territories: [], nodes: [] };
+  const wideGroup: PlacedLabel = { ...label([10, 5], 300), id: "g" };
+  const narrowTerritory: PlacedLabel = { ...label([5, 5], 20), id: "t" };
+  const scene = { shapes, labels: [narrowTerritory], groupLabels: [wideGroup] };
+  // midAt <= 1: the first view is mid, which paints territory names only.
+  const notFar = fitScene(emptySpec, scene, 400, 400, 0, { groupNames: false });
+  const shapesOnly = fitScene(emptySpec, { shapes, labels: [], groupLabels: [] }, 400, 400, 0);
+  expect(notFar.scale).toBeCloseTo(shapesOnly.scale);
+});

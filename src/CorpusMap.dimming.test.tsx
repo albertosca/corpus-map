@@ -1,7 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapProps, type CorpusMapView } from "./CorpusMap";
+import { estimateText } from "./labels/placement";
+import { buildScene } from "./shared/scene";
 import { validateSpec } from "./shared/spec";
+import { DEFAULT_THEME } from "./shared/theme";
+import { DEFAULT_TUNING } from "./shared/tuning";
+import { fitScene } from "./viewport/fitScene";
+import { toScreen } from "./viewport/viewport";
 
 // The North/South/Empty spec of CorpusMap.legend.test.tsx, copied (test files do not share fixtures here).
 const cluster = (territory: string, left: number) =>
@@ -132,5 +138,48 @@ describe("dimming territories", () => {
     expect(latest(views)?.visibleCount).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: "Show all (3 hidden)" }));
     expect(latest(views)?.visibleCount).toBe(6);
+  });
+
+  it("every territory dimmed: no card shows and nothing hovers, at near and at far", () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    try {
+      const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+      const [left, top] = toScreen(fitScene(spec, scene, 600, 300, 24), 1, 1);
+      const hoverNorth = (surface: Element) => {
+        fireEvent.pointerMove(surface, { clientX: left, clientY: top, pointerId: 1, pointerType: "mouse" });
+        act(() => {
+          for (const callback of callbacks.splice(0)) callback(0);
+        });
+      };
+      const hovered = () =>
+        document.querySelector("[data-hover]") !== null || document.querySelector("[data-hover-territories]") !== null;
+      const allHidden = ["empty", "north", "south"];
+      for (const thresholds of [
+        { midAt: 0, nearAt: 0 },
+        { midAt: 2, nearAt: 6 },
+      ]) {
+        const properties: CorpusMapProps = {
+          ...base([]),
+          thresholds,
+          renderCard: (node) => <div>{node.label}</div>,
+        };
+        const { container, rerender, unmount } = render(<CorpusMap {...properties} hiddenTerritories={allHidden} />);
+        const surface = container.querySelector("[data-map-surface]") as Element;
+        expect(container.querySelector("[data-card]")).toBeNull();
+        hoverNorth(surface);
+        expect(hovered()).toBe(false);
+        // The same pointer over the same map, nothing dimmed, does hover: the probe can see one.
+        rerender(<CorpusMap {...properties} hiddenTerritories={[]} />);
+        hoverNorth(surface);
+        expect(hovered()).toBe(true);
+        unmount();
+      }
+    } finally {
+      frame.mockRestore();
+    }
   });
 });

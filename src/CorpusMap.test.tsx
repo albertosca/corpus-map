@@ -416,6 +416,31 @@ describe("CorpusMap", () => {
     }
   });
 
+  it("scales both canvases' drawing by devicePixelRatio, so a world unit lands on the same CSS pixel", () => {
+    const originalRatio = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    const transforms = new Map<HTMLCanvasElement, unknown[][]>();
+    Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+      return {
+        ...recordingContext([]),
+        setTransform: (...values: unknown[]) => transforms.set(this, [...(transforms.get(this) ?? []), values]),
+      };
+    } as unknown as typeof originalGetContext;
+    try {
+      const { container } = render(
+        <CorpusMap spec={spec} renderCard={() => null} width={width} height={height} minimap />,
+      );
+      const canvases = [...container.querySelectorAll("canvas")];
+      expect(canvases).toHaveLength(2);
+      for (const canvas of canvases) expect(transforms.get(canvas)?.[0]).toEqual([2, 0, 0, 2, 0, 0]);
+    } finally {
+      HTMLCanvasElement.prototype.getContext = originalGetContext;
+      if (originalRatio) Object.defineProperty(window, "devicePixelRatio", originalRatio);
+      else Reflect.deleteProperty(window, "devicePixelRatio");
+    }
+  });
+
   it("keys the scene memo on the primitive values buildScene reads, not on the tuning/theme object identity", () => {
     const spy = vi.spyOn(sceneModule, "buildScene");
     try {
@@ -616,6 +641,62 @@ describe("spec swap", () => {
       for (const drawn of largeTexts) {
         expect(drawn.x).toBeCloseTo(expectedLeft, 6);
         expect(drawn.y).toBeCloseTo(expectedTop, 6);
+      }
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original;
+    }
+  });
+});
+
+describe("fit with a first view that is not far", () => {
+  it("fits the territory names it paints, not the group names it does not", () => {
+    const texts: Array<{ text: string; x: number; y: number }> = [];
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => recordingContext(texts)) as unknown as typeof original;
+    try {
+      const longGroup = "A group name wide enough to widen";
+      const grouped: MapSpec = {
+        version: "1",
+        territories: [
+          { id: "t", name: "West", members: ["a", "b", "c"], centroid: [1, 1], group: longGroup },
+          { id: "u", name: "East", members: ["d", "e", "f"], centroid: [21, 1], group: longGroup },
+        ],
+        nodes: [
+          { id: "a", label: "A", x: 0, y: 0, territory: "t" },
+          { id: "b", label: "B", x: 2, y: 0, territory: "t" },
+          { id: "c", label: "C", x: 1, y: 2, territory: "t" },
+          { id: "d", label: "D", x: 20, y: 0, territory: "u" },
+          { id: "e", label: "E", x: 22, y: 0, territory: "u" },
+          { id: "f", label: "F", x: 21, y: 2, territory: "u" },
+        ],
+      };
+      render(
+        <CorpusMap
+          spec={grouped}
+          renderCard={(node) => <div>{node.label}</div>}
+          width={400}
+          height={300}
+          thresholds={{ midAt: 0.9, nearAt: 6 }}
+        />,
+      );
+      // The same ruler `useMeasure` builds on the recording context's `measureText`.
+      const recordingMeasure = (label: string, font: string) => ({
+        width: label.length * 6,
+        height: estimateText(label, font).height,
+      });
+      const scene = buildScene(grouped, DEFAULT_TUNING, DEFAULT_THEME, recordingMeasure);
+      const territoryFit = fitScene(grouped, scene, 400, 300, 24, { groupNames: false });
+      const groupFit = fitScene(grouped, scene, 400, 300, 24);
+      // The case only proves something if the two fits differ.
+      expect(groupFit.scale).not.toBeCloseTo(territoryFit.scale, 3);
+      const label = scene.labels.find((placed) => placed.id === "t");
+      if (!label) throw new Error("expected a placed label for territory 't'");
+      const [expectedLeft, expectedTop] = toScreen(territoryFit, label.anchor[0], label.anchor[1]);
+      const drawn = texts.filter((text) => text.text === "West");
+      expect(drawn.length).toBeGreaterThan(0);
+      for (const text of drawn) {
+        expect(text.x).toBeCloseTo(expectedLeft, 6);
+        expect(text.y).toBeCloseTo(expectedTop, 6);
       }
     } finally {
       HTMLCanvasElement.prototype.getContext = original;

@@ -8,7 +8,7 @@ export const LABEL_FIT_PASSES = 3;
 
 /**
  * The first view: every territory outline whole, and every name that is
- * active at the fit (group names when the scene has groups) and fits the box
+ * active at the fit (group names when the scene has groups and the fit is far) and fits the box
  * whole too (closes the BACKLOG item about names cut
  * at the fitted phone view). A name's box is in screen pixels, so its extent
  * in world units depends on the scale being chosen; each pass widens the
@@ -26,12 +26,14 @@ export function fitScene(
   width: number,
   height: number,
   padding: number,
+  options: { groupNames: boolean } = { groupNames: true },
 ): Viewport {
   const base = sceneBounds(spec, scene.shapes);
   let viewport = fitBounds(base, width, height, padding);
-  // With groups, the fitted view (ratio 1, below `groupNamesUntil`) shows
-  // group names, not territory names: those are the ones to keep whole.
-  const names = scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
+  // With groups, a far fitted view (ratio 1, below `groupNamesUntil`) shows
+  // group names, not territory names: those are the ones to keep whole. A
+  // fitted view that is already mid (`midAt <= 1`) shows territory names.
+  const names = options.groupNames && scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
   const counted = names.filter(
     (label) => viewport.scale >= label.activeFromScale && label.width <= width && label.height <= height,
   );

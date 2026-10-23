@@ -54,7 +54,8 @@ const VISUALLY_HIDDEN = {
   whiteSpace: "nowrap",
 } as const;
 
-function itemCount(count: number): string {
+/** "1 item", "N items": the corpus-agnostic count the tree and the territory balloon share. */
+export function itemCount(count: number): string {
   return `${count} ${count === 1 ? "item" : "items"}`;
 }
 

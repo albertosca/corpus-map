@@ -32,3 +32,22 @@ export function fade(ratio: number, threshold: number, band: number): number {
   const progress = (ratio - threshold) / (threshold * band);
   return Math.min(1, Math.max(0, progress));
 }
+
+/**
+ * Opacity of the far map's group names: 1 below `groupNamesUntil`, then a
+ * cross-fade to 0 over `fadeBand`, outside far always 0. Far can end as low
+ * as `midAt * (1 - hysteresis)` (the zoom-out re-entry point), so when the
+ * band would run past that the fade is squeezed to end there: otherwise the
+ * names would vanish mid-fade at the regime change. With no room at all, the
+ * names hold through all of far.
+ */
+export function groupNameAlpha(
+  ratio: number,
+  regime: Regime,
+  options: { midAt: number; groupNamesUntil: number; fadeBand: number; hysteresis: number },
+): number {
+  if (regime !== "far") return 0;
+  const room = (options.midAt * (1 - options.hysteresis)) / options.groupNamesUntil - 1;
+  if (room <= 0) return 1;
+  return 1 - fade(ratio, options.groupNamesUntil, Math.min(options.fadeBand, room));
+}

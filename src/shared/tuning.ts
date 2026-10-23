@@ -23,8 +23,9 @@ export interface Tuning {
   /**
    * Below this zoom ratio (viewport scale over fit scale) the far map names
    * groups, not territories; the swap cross-fades over `fadeBand` above it
-   * (spec categories §4). At or above `midAt`, group names hold through all
-   * of far.
+   * (spec categories §4), squeezed to finish before far can end
+   * (`groupNameAlpha`). With no room before `midAt`, group names hold
+   * through all of far.
    */
   groupNamesUntil: number;
 }
