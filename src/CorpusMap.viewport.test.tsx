@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react";
-import { createRef, useState } from "react";
+import { createRef, StrictMode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapHandle, type CorpusMapView } from "./CorpusMap";
 import type { MapNode, MapSpec } from "./shared/spec";
@@ -298,6 +298,129 @@ describe("onViewportChange (spec slice C §3)", () => {
     expect(last(views)?.regime).toBe("near");
     act(() => handle.current?.fit());
     expect(last(views)?.ratio).toBeCloseTo(1, 9);
+    expect(last(views)?.regime).toBe("mid");
+  });
+});
+
+describe("a new spec (spec slice C §4)", () => {
+  const other: MapSpec = { ...spec, nodes: spec.nodes.map((node) => ({ ...node, x: node.x * 3 })) };
+
+  it("uncontrolled: refits and emits spec once under StrictMode, never on mount", () => {
+    const changes: Change[] = [];
+    const record = (...call: Change) => changes.push(call);
+    const { rerender } = render(
+      <StrictMode>
+        <CorpusMap renderCard={card} spec={spec} width={400} height={300} onViewportChange={record} />
+      </StrictMode>,
+    );
+    expect(changes).toHaveLength(0);
+    rerender(
+      <StrictMode>
+        <CorpusMap renderCard={card} spec={other} width={400} height={300} onViewportChange={record} />
+      </StrictMode>,
+    );
+    expect(changes.map((change) => change[1].reason)).toEqual(["spec"]);
+    expect(changes[0]?.[0].zoom).toBeCloseTo(1, 9);
+  });
+
+  it("a box change or fresh thresholds after a new spec do not propose it again", () => {
+    const changes: Change[] = [];
+    const record = (...call: Change) => changes.push(call);
+    const { rerender } = render(
+      <CorpusMap renderCard={card} spec={spec} width={400} height={300} onViewportChange={record} />,
+    );
+    rerender(<CorpusMap renderCard={card} spec={other} width={400} height={300} onViewportChange={record} />);
+    rerender(
+      <CorpusMap
+        renderCard={card}
+        spec={other}
+        width={800}
+        height={500}
+        thresholds={{ midAt: 0.5, nearAt: 1.02 }}
+        onViewportChange={record}
+      />,
+    );
+    expect(changes.map((change) => change[1].reason)).toEqual(["spec"]);
+  });
+
+  it("controlled: keeps the drawn view and proposes the fit", () => {
+    const changes: Change[] = [];
+    const views: CorpusMapView[] = [];
+    const properties = {
+      renderCard: card,
+      width: 400,
+      height: 300,
+      viewport: { centre: [0, 0] as [number, number], zoom: 5 },
+      onViewChange: (next: CorpusMapView) => views.push(next),
+      onViewportChange: (...call: Change) => changes.push(call),
+    };
+    const { rerender } = render(<CorpusMap spec={spec} {...properties} />);
+    rerender(<CorpusMap spec={other} {...properties} />);
+    expect(changes.map((change) => change[1].reason)).toEqual(["spec"]);
+    expect(changes[0]?.[0].zoom).toBeCloseTo(1, 9);
+    expect(last(views)?.ratio).toBeCloseTo(5, 9);
+  });
+
+  it("controlled: accepting the proposal draws the fit and resets the regime", () => {
+    const views: CorpusMapView[] = [];
+    function Accepting({ corpus }: { corpus: MapSpec }) {
+      const [view, setView] = useStateView({ centre: [0, 0], zoom: 1.2 });
+      return (
+        <CorpusMap
+          renderCard={card}
+          spec={corpus}
+          width={400}
+          height={300}
+          {...HYSTERESIS}
+          viewport={view}
+          onViewChange={(next) => views.push(next)}
+          onViewportChange={(next) => setView(next)}
+        />
+      );
+    }
+    const { rerender } = render(<Accepting corpus={spec} />);
+    expect(last(views)?.regime).toBe("near");
+    rerender(<Accepting corpus={other} />);
+    expect(last(views)?.ratio).toBeCloseTo(1, 9);
+    expect(last(views)?.regime).toBe("mid");
+  });
+
+  it("controlled: a consumer already drawing the fit gets the reset with the new spec", () => {
+    // The fit of `other`, read off a probe's fit() proposal rather than assumed.
+    const probeChanges: Change[] = [];
+    const probe = createRef<CorpusMapHandle>();
+    const probeRender = render(
+      <CorpusMap
+        renderCard={card}
+        ref={probe}
+        spec={other}
+        width={400}
+        height={300}
+        viewport={{ centre: [0, 0], zoom: 2 }}
+        onViewportChange={(...call) => probeChanges.push(call)}
+      />,
+    );
+    act(() => probe.current?.fit());
+    probeRender.unmount();
+    const otherFit = probeChanges[0]?.[0];
+    if (otherFit === undefined) throw new Error("the probe proposed no fit");
+    const views: CorpusMapView[] = [];
+    const changes: Change[] = [];
+    const properties = {
+      renderCard: card,
+      width: 400,
+      height: 300,
+      ...HYSTERESIS,
+      onViewChange: (next: CorpusMapView) => views.push(next),
+      onViewportChange: (...call: Change) => changes.push(call),
+    };
+    const { rerender } = render(<CorpusMap spec={spec} viewport={{ centre: [0, 0], zoom: 1.2 }} {...properties} />);
+    expect(last(views)?.regime).toBe("near");
+    // Down to zoom 1 by the consumer's own hand: the hysteresis keeps near.
+    rerender(<CorpusMap spec={spec} viewport={{ centre: otherFit.centre, zoom: 1 }} {...properties} />);
+    expect(last(views)?.regime).toBe("near");
+    rerender(<CorpusMap spec={other} viewport={otherFit} {...properties} />);
+    expect(changes.map((change) => change[1].reason)).toEqual(["spec"]);
     expect(last(views)?.regime).toBe("mid");
   });
 });

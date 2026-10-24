@@ -479,7 +479,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // waits for that call).
   const [refits, setRefits] = useState(0);
   // Counts spec swaps after the first, for the `"spec"` proposal below.
-  const [, setSpecChanges] = useState(0);
+  const [specChanges, setSpecChanges] = useState(0);
   if (ready) {
     if (fitBasis === null || fitBasis.spec !== spec) {
       setFitBasis({ spec, width, height });
@@ -551,6 +551,29 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     requestedReference.current = target;
     onViewportChangeReference.current?.(view, { reason });
   }, []);
+  // A new spec proposes the fresh fit (spec slice C §4), after the commit so
+  // the consumer's callback never runs during render. Deduped on the counter,
+  // so StrictMode's second effect run and a box change never re-emit; the
+  // first spec is not a change (`specChanges` starts at 0). Controlled, the
+  // regime resets once the consumer draws that fit: now, if the drawn view
+  // already is that fit (the view's own layout effect has run by now), else
+  // through `pendingResetReference`.
+  const firedSpecChange = useRef(0);
+  useEffect(() => {
+    if (specChanges === 0 || firedSpecChange.current === specChanges) return;
+    firedSpecChange.current = specChanges;
+    const fitPublic = toPublic(fitted, fitted.scale, width, height);
+    if (viewportControlled) {
+      const reset = { regime: regimeAt(1, thresholds, "far", tuning.hysteresis), refit: true };
+      const drawn = drawnReference.current;
+      if (sameView(fitPublic, toPublic(drawn.viewport, drawn.fitScale, drawn.width, drawn.height))) {
+        pendingResetReference.current = null;
+        setRegime(reset.regime);
+        setRefits((count) => count + 1);
+      } else pendingResetReference.current = { view: fitPublic, reset };
+    }
+    onViewportChangeReference.current?.(fitPublic, { reason: "spec" });
+  }, [specChanges, fitted, width, height, viewportControlled, thresholds, tuning.hysteresis]);
   const canvasReference = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
