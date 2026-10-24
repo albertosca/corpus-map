@@ -8,7 +8,7 @@ import {
   resolveThresholds,
   resolveTuning,
 } from "corpus-map";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
@@ -212,17 +212,20 @@ export function App({ loadArxiv }: AppProps = {}) {
   // so a view change re-renders only the indicator (`ViewStore`).
   const [viewStore] = useState(createViewStore);
   const scheme = useColourScheme();
-  // The selected node's drawer (showcase Task 6). `null` until an
-  // `onSelect` fires; a corpus switch clears it in `handleCorpusChange`
-  // below so a stale selection from the corpus just left can never show.
-  const [selected, setSelected] = useState<MapNode | null>(null);
   const mapReference = useRef<CorpusMapHandle>(null);
-  // Not part of the library's own DOM (it wraps `CorpusMap`, whose own
-  // `[data-map-surface]` root carries no tabIndex/role of its own) — made
-  // programmatically focusable here (`tabIndex={-1}`: never in the Tab
-  // order, only reachable via `.focus()`) so the drawer has somewhere to
-  // return focus to when it closes.
+  // Wraps `CorpusMap` (or the loading/error state); programmatically
+  // focusable (`tabIndex={-1}`: never in the Tab order) as the fallback
+  // focus target when no map is mounted.
   const mapShellReference = useRef<HTMLDivElement>(null);
+  // Where the drawer returns focus: the map's own surface, whose key
+  // handlers (Escape, +/-, arrows) listen only there, so a keyboard user
+  // who closes the drawer keeps driving the map. The shell when the map
+  // is not mounted.
+  const [mapFocusTarget] = useState(() => ({
+    get current(): HTMLElement | null {
+      return mapShellReference.current?.querySelector<HTMLElement>("[data-map-surface]") ?? mapShellReference.current;
+    },
+  }));
 
   // The hidden tuning panel (showcase Task 7). `tuningDraft`/`thresholdsDraft`
   // mirror every control in the panel, including combinations the library
@@ -257,6 +260,12 @@ export function App({ loadArxiv }: AppProps = {}) {
   // (spec slice C §6), and returning to arXiv, which remounts the map after
   // its load, must not reopen the old link.
   const [linkApplies, setLinkApplies] = useState(() => initialLink.corpus === corpusId);
+  // The one selection the map (controlled `selectedId`), the drawer and the
+  // link all read: closing the drawer clears the ring, and a press that
+  // clears the ring closes the drawer (2026-10-24 browser pass). A corpus
+  // switch clears it in `handleCorpusChange` below so a stale selection from
+  // the corpus just left can never show.
+  const [selectedId, setSelectedId] = useState<string | null>(() => (linkApplies ? initialLink.selected : null));
   // The hash mirrors what is on screen; writes are debounced (spec slice C §6).
   const [hashWriter] = useState(() => createHashWriter(writeHash));
   useEffect(() => () => hashWriter.cancel(), [hashWriter]);
@@ -272,6 +281,12 @@ export function App({ loadArxiv }: AppProps = {}) {
     hashWriter.schedule(linkReference.current);
     setLinkStatus(null);
   };
+  // Every path that changes the selection (the map, the drawer, the panel)
+  // sets `selectedId` only; the link follows here.
+  const syncSelectionToLink = useEffectEvent((id: string | null) => {
+    if (linkReference.current.selected !== id) updateLink({ selected: id });
+  });
+  useEffect(() => syncSelectionToLink(selectedId), [selectedId]);
   const handleCopyLink = () => {
     hashWriter.flush();
     // No clipboard (an insecure origin, an old browser) or a refusal: say so,
@@ -359,7 +374,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   // ignored with a modifier (Ctrl/Meta/Alt) so browser shortcuts still
   // work -- Shift is deliberately not in that list, since Shift+t is still
   // just "t" from a text-entry point of view, not a shortcut. `setPanelOpen`
-  // and `setSelected` are `useState` setters (stable identity), so this
+  // and `setSelectedId` are `useState` setters (stable identity), so this
   // effect never needs to re-subscribe when other state changes.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -376,7 +391,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         // comment): the two share the right side of the screen, and
         // opening one always closes the other, so each has an
         // uncontested Escape listener and neither ever fights the other.
-        if (next) setSelected(null);
+        if (next) setSelectedId(null);
         return next;
       });
     };
@@ -392,7 +407,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   const handleCorpusChange = (id: GalleryEntry["id"]) => {
     setCorpusId(id);
     viewStore.set(null);
-    setSelected(null);
+    setSelectedId(null);
     setLinkApplies(false);
     linkReference.current = { corpus: id, view: null, selected: null };
     hashWriter.schedule(linkReference.current);
@@ -407,15 +422,15 @@ export function App({ loadArxiv }: AppProps = {}) {
   // exclusion `TuningPanel`'s own doc comment describes, from the other
   // direction (the `t`-key/gear-button handlers close the drawer when the
   // panel opens; this closes the panel when the drawer opens).
-  const handleSelect = (node: MapNode) => {
-    setSelected(node);
-    setPanelOpen(false);
+  const handleSelectedChange = (id: string | null) => {
+    setSelectedId(id);
+    if (id !== null) setPanelOpen(false);
   };
 
   const handleTogglePanel = () => {
     setPanelOpen((open) => {
       const next = !open;
-      if (next) setSelected(null);
+      if (next) setSelectedId(null);
       return next;
     });
   };
@@ -471,6 +486,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   // (`spec.territories[].name`) rather than its id — resolved here, once,
   // from whichever spec is actually on screen, so `Drawer` itself never
   // needs to know how a `MapSpec` is shaped.
+  const selected = selectedId === null ? null : (current?.spec.nodes.find((node) => node.id === selectedId) ?? null);
   const territoryName =
     selected && current
       ? (current.spec.territories.find((territory) => territory.id === selected.territory)?.name ?? null)
@@ -508,11 +524,10 @@ export function App({ loadArxiv }: AppProps = {}) {
             thresholds={appliedThresholds}
             cardSize={cardSize}
             onViewChange={viewStore.set}
-            onSelect={handleSelect}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
-            defaultSelectedId={linkApplies ? initialLink.selected : null}
+            selectedId={selectedId}
             onViewportChange={(view) => updateLink({ view })}
-            onSelectedChange={(selectedId) => updateLink({ selected: selectedId })}
+            onSelectedChange={handleSelectedChange}
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>
@@ -538,8 +553,8 @@ export function App({ loadArxiv }: AppProps = {}) {
         node={selected}
         territoryName={territoryName}
         isArxiv={current?.id === "arxiv"}
-        onClose={() => setSelected(null)}
-        returnFocusTo={mapShellReference}
+        onClose={() => setSelectedId(null)}
+        returnFocusTo={mapFocusTarget}
         topInset={topBarHeight}
       />
       <TuningPanel

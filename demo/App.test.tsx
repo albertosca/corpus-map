@@ -1031,8 +1031,21 @@ describe("App (showcase Task 5)", () => {
 
       fireEvent.keyDown(document, { key: "Escape" });
       expect(screen.queryByRole("dialog")).toBeNull();
-      const mapShell = container.querySelector("[data-map-shell]");
-      expect(document.activeElement).toBe(mapShell);
+      // The surface itself, not its shell: the map's keys (a second Escape,
+      // +/-, arrows) only listen on the surface (2026-10-24 browser pass).
+      expect(document.activeElement).toBe(container.querySelector("[data-map-shell] [data-map-surface]"));
+    });
+
+    it("the drawer's Close button returns focus to the map surface", async () => {
+      const { container } = await renderApp(SELECT_SPEC);
+      await screen.findByText(territoryButtonText(SELECT_SPEC));
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(container.querySelector("[data-map-shell] [data-map-surface]"));
     });
 
     it("a view change while the drawer is open leaves focus where the user put it (Zoom in click)", async () => {
@@ -1663,6 +1676,51 @@ describe("App (showcase Task 5)", () => {
       fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
       await openNonmetals();
       expect(container.querySelector('[aria-current="true"]')).toBeNull();
+    });
+
+    describe("the drawer and the map share one selection (2026-10-24 browser pass)", () => {
+      const openNonmetals = async () => {
+        await screen.findByText(/1\.0×/);
+        act(() => screen.getByRole("button", { name: /^Reactive Nonmetals,/ }).click());
+        await screen.findByRole("button", { name: "C" });
+      };
+
+      it("a linked selection opens its drawer", async () => {
+        window.history.replaceState(null, "", "#corpus=elements&selected=c");
+        await renderApp();
+        await screen.findByRole("dialog", { name: "C" });
+      });
+
+      it("closing the drawer clears the map's selection and the link", async () => {
+        window.history.replaceState(null, "", "#corpus=elements&selected=c");
+        await renderApp();
+        const dialog = await screen.findByRole("dialog", { name: "C" });
+        fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+        await openNonmetals();
+        expect(screen.getByRole("button", { name: "C" }).getAttribute("aria-current")).toBeNull();
+        await waitFor(() => expect(window.location.hash).not.toContain("selected"));
+      });
+
+      it("a press that clears the map's selection closes the drawer", async () => {
+        window.history.replaceState(null, "", "#corpus=elements&selected=c");
+        const { container } = await renderApp();
+        await screen.findByRole("dialog", { name: "C" });
+        // At far any press clears the selection (spec slice C §3).
+        const surface = container.querySelector("[data-map-surface]") as HTMLElement;
+        const pointer = { pointerId: 1, button: 0, isPrimary: true, clientX: 5, clientY: 5 };
+        fireEvent.pointerDown(surface, pointer);
+        fireEvent.pointerUp(surface, pointer);
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+
+      it("opening the tuning panel clears the map's selection", async () => {
+        window.history.replaceState(null, "", "#corpus=elements&selected=c");
+        await renderApp();
+        await screen.findByRole("dialog", { name: "C" });
+        fireEvent.keyDown(window, { key: "t" });
+        await openNonmetals();
+        expect(screen.getByRole("button", { name: "C" }).getAttribute("aria-current")).toBeNull();
+      });
     });
 
     it("Copy link writes the pending hash first, then copies the URL and says so", async () => {
