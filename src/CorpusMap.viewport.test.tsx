@@ -52,6 +52,24 @@ describe("onViewportChange (spec slice C §3)", () => {
     expect(last(changes)?.[0].zoom).toBeCloseTo(1, 9);
   });
 
+  it.each(["0", "Home"])("the %s key fits with reason fit", (key) => {
+    const changes: Change[] = [];
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={spec}
+        width={400}
+        height={300}
+        defaultViewport={{ centre: [0, 0], zoom: 4 }}
+        onViewportChange={(...call) => changes.push(call)}
+      />,
+    );
+    fireEvent.keyDown(surface(container), { key });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.[1].reason).toBe("fit");
+    expect(changes[0]?.[0].zoom).toBeCloseTo(1, 9);
+  });
+
   it("draws the controlled viewport: onViewChange reports its zoom as the ratio", () => {
     const views: CorpusMapView[] = [];
     render(
@@ -108,6 +126,27 @@ describe("onViewportChange (spec slice C §3)", () => {
     expect(onViewportChange).not.toHaveBeenCalled();
   });
 
+  it("the handle proposes nothing before the box has a size", () => {
+    const onViewportChange = vi.fn();
+    const handle = createRef<CorpusMapHandle>();
+    render(
+      <CorpusMap
+        renderCard={card}
+        ref={handle}
+        spec={spec}
+        width={0}
+        height={0}
+        viewport={{ centre: [0, 0], zoom: 1 }}
+        onViewportChange={onViewportChange}
+      />,
+    );
+    act(() => {
+      handle.current?.zoomIn();
+      handle.current?.fit();
+    });
+    expect(onViewportChange).not.toHaveBeenCalled();
+  });
+
   it("two zoomIn calls before the consumer re-renders compose", () => {
     const changes: Change[] = [];
     const handle = createRef<CorpusMapHandle>();
@@ -129,6 +168,51 @@ describe("onViewportChange (spec slice C §3)", () => {
     expect(changes).toHaveLength(2);
     const step = changes[0]?.[0].zoom ?? 0;
     expect(changes[1]?.[0].zoom).toBeCloseTo(step * step, 9);
+  });
+
+  it("a consumer that bails out of a request is asked again from the drawn view on the next frame", () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const nextFrame = () =>
+      act(() =>
+        frames.splice(0).forEach((callback) => {
+          callback(0);
+        }),
+      );
+    const changes: Change[] = [];
+    const handle = createRef<CorpusMapHandle>();
+    // A zoom limit written the way a consumer would: a rejected request
+    // returns the previous state, so React skips the re-render entirely.
+    function Limited() {
+      const [view, setView] = useStateView();
+      return (
+        <CorpusMap
+          renderCard={card}
+          ref={handle}
+          spec={spec}
+          width={400}
+          height={300}
+          viewport={view}
+          onViewportChange={(next, info) => {
+            changes.push([next, info]);
+            setView((previous) => (next.zoom > 1.5 ? previous : next));
+          }}
+        />
+      );
+    }
+    render(<Limited />);
+    for (let notch = 0; notch < 10; notch += 1) {
+      act(() => handle.current?.zoomIn());
+      nextFrame();
+    }
+    const accepted = Math.max(...changes.map(([view]) => view.zoom).filter((zoom) => zoom <= 1.5));
+    expect(Math.max(...changes.map(([view]) => view.zoom))).toBeLessThan(accepted * accepted);
+    act(() => handle.current?.zoomOut());
+    expect(last(changes)?.[0].zoom).toBeLessThan(accepted);
+    animationFrame.mockRestore();
   });
 
   it("a consumer that ignores requests gets the next one based on the drawn view", () => {
@@ -169,6 +253,7 @@ describe("onViewportChange (spec slice C §3)", () => {
     ["zero zoom", { centre: [0, 0] as [number, number], zoom: 0 }],
     ["negative zoom", { centre: [0, 0] as [number, number], zoom: -1 }],
     ["Infinity zoom", { centre: [0, 0] as [number, number], zoom: Number.POSITIVE_INFINITY }],
+    ["overflowing centre", { centre: [1e308, 0] as [number, number], zoom: 64 }],
   ])("an invalid viewport (%s) draws the fit and emits nothing", (_name, viewport) => {
     const views: CorpusMapView[] = [];
     const onViewportChange = vi.fn();
@@ -239,13 +324,39 @@ describe("onViewportChange (spec slice C §3)", () => {
     expect(onViewportChange).not.toHaveBeenCalled();
   });
 
-  it("a box change emits nothing (uncontrolled)", () => {
-    const onViewportChange = vi.fn();
+  it("uncontrolled, a box change that moves the public view emits it once as resize", () => {
+    const changes: Change[] = [];
+    const views: CorpusMapView[] = [];
     const { rerender } = render(
-      <CorpusMap renderCard={card} spec={spec} width={400} height={300} onViewportChange={onViewportChange} />,
+      <StrictMode>
+        <CorpusMap
+          renderCard={card}
+          spec={spec}
+          width={400}
+          height={300}
+          onViewportChange={(...call) => changes.push(call)}
+          onViewChange={(view) => views.push(view)}
+        />
+      </StrictMode>,
     );
-    rerender(<CorpusMap renderCard={card} spec={spec} width={800} height={500} onViewportChange={onViewportChange} />);
-    expect(onViewportChange).not.toHaveBeenCalled();
+    expect(changes).toHaveLength(0);
+    rerender(
+      <StrictMode>
+        <CorpusMap
+          renderCard={card}
+          spec={spec}
+          width={800}
+          height={500}
+          onViewportChange={(...call) => changes.push(call)}
+          onViewChange={(view) => views.push(view)}
+        />
+      </StrictMode>,
+    );
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.[1]).toEqual({ reason: "resize" });
+    // The pixel scale is kept, so the zoom over the new fit is what onViewChange reads.
+    expect(changes[0]?.[0].zoom).toBeCloseTo(last(views)?.ratio ?? 0, 9);
+    expect(changes[0]?.[0].zoom).not.toBeCloseTo(1, 3);
   });
 
   it("defaultViewport opens the first spec where it says, and a later spec refits", () => {
@@ -340,7 +451,9 @@ describe("a new spec (spec slice C §4)", () => {
         onViewportChange={record}
       />,
     );
-    expect(changes.map((change) => change[1].reason)).toEqual(["spec"]);
+    // The box change moves the uncontrolled public zoom (pixel scale kept), so
+    // it emits once as resize; the spec fit is never proposed again.
+    expect(changes.map((change) => change[1].reason)).toEqual(["spec", "resize"]);
   });
 
   it("controlled: keeps the drawn view and proposes the fit", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromPublic, sameView, sanitise, toPublic } from "./publicViewport";
+import { drawableView, fromPublic, sameView, sanitise, toPublic } from "./publicViewport";
 
 const band = { minimum: 1 / 8, maximum: 64 };
 
@@ -44,6 +44,15 @@ describe("public viewport", () => {
     expect(sanitise({ centre: [1, 2], zoom: 1000 }, band)).toEqual({ centre: [1, 2], zoom: 64 });
     expect(sanitise({ centre: [1, 2], zoom: 0.001 }, band)).toEqual({ centre: [1, 2], zoom: 1 / 8 });
     expect(sanitise({ centre: [1, 2], zoom: 3 }, band)).toEqual({ centre: [1, 2], zoom: 3 });
+  });
+
+  it("drawableView falls back to the fit for a view whose pixels overflow", () => {
+    const fit = { scale: 2, tx: 200, ty: 150 };
+    expect(drawableView({ centre: [1e308, 0], zoom: 64 }, fit, 400, 300)).toBe(fit);
+    expect(drawableView(null, fit, 400, 300)).toBe(fit);
+    expect(drawableView({ centre: [5, 5], zoom: 3 }, fit, 400, 300)).toEqual(
+      fromPublic({ centre: [5, 5], zoom: 3 }, 2, 400, 300),
+    );
   });
 
   it("sameView tolerates float noise but not a real move", () => {

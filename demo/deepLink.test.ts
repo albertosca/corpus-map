@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHashWriter, parseDeepLink, serialiseDeepLink } from "./deepLink";
+import { createHashWriter, parseDeepLink, serialiseDeepLink, writeHash } from "./deepLink";
 
 describe("deep link", () => {
   afterEach(() => vi.useRealTimers());
@@ -25,9 +25,26 @@ describe("deep link", () => {
     ["#view=1,2", { corpus: null, view: null, selected: null }],
     ["#view=0,0,-3", { corpus: null, view: null, selected: null }],
     ["#view=0,0,Infinity", { corpus: null, view: null, selected: null }],
+    // Number("") and Number(" ") are 0: an empty part must not read as the origin.
+    ["#view=,,1", { corpus: null, view: null, selected: null }],
+    ["#view=0, ,1", { corpus: null, view: null, selected: null }],
     ["#corpus=&selected=", { corpus: null, view: null, selected: null }],
   ])("parses %j without throwing", (hash, expected) => {
     expect(parseDeepLink(hash)).toEqual(expected);
+  });
+
+  it.each([
+    ["", "/demo/?theme=dark"],
+    ["#corpus=arxiv", "/demo/?theme=dark#corpus=arxiv"],
+  ])("writing the hash %j keeps the path and the query", (hash, expected) => {
+    const original = window.location.href;
+    window.history.replaceState(null, "", "/demo/?theme=dark#corpus=elements");
+    try {
+      writeHash(hash);
+      expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
+    } finally {
+      window.history.replaceState(null, "", original);
+    }
   });
 
   it("debounces writes to one per quiet period, and flush writes at once", () => {

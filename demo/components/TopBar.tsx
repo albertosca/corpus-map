@@ -15,8 +15,13 @@ interface TopBarProps {
   barRef?: Ref<HTMLElement> | undefined;
   /** Copies the page URL, which carries the corpus, view and selection (spec slice C §6). */
   onCopyLink: () => void;
-  linkCopied: boolean;
+  /** What the last Copy link did, announced in a status region; null says nothing. */
+  linkStatus: LinkStatus;
 }
+
+export type LinkStatus = "copied" | "failed" | null;
+
+const LINK_STATUS_TEXT = { copied: "Link copied", failed: "Copy failed: use the address bar" } as const;
 
 const barStyle: CSSProperties = {
   position: "fixed",
@@ -96,7 +101,7 @@ export function TopBar({
   gearButtonRef: gearButtonReference,
   barRef: barReference,
   onCopyLink,
-  linkCopied,
+  linkStatus,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange(event.target.value as GalleryEntry["id"]);
@@ -128,7 +133,7 @@ export function TopBar({
         Copy link
       </button>
       <span role="status" style={statusStyle}>
-        {linkCopied ? "Link copied" : ""}
+        {linkStatus === null ? "" : LINK_STATUS_TEXT[linkStatus]}
       </span>
     </header>
   );

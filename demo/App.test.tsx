@@ -571,6 +571,10 @@ describe("App (showcase Task 5)", () => {
 
   afterEach(() => {
     cleanup();
+    // The demo mirrors its view into the hash (spec slice C §6) and the next
+    // App reads its corpus from there: a hash a test leaves behind would open
+    // the next test on the wrong corpus.
+    window.history.replaceState(null, "", window.location.pathname);
     vi.unstubAllGlobals();
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserver | undefined }).ResizeObserver =
       originalResizeObserver;
@@ -1644,6 +1648,23 @@ describe("App (showcase Task 5)", () => {
       expect(screen.queryByText(/6\.0×/)).toBeNull();
     });
 
+    it("a selection does not survive a switch away and back", async () => {
+      window.history.replaceState(null, "", "#corpus=elements&selected=c");
+      const { container } = await renderApp();
+      // Item buttons render at near: open Carbon's territory from the tree.
+      const openNonmetals = async () => {
+        await screen.findByText(/1\.0×/);
+        act(() => screen.getByRole("button", { name: /^Reactive Nonmetals,/ }).click());
+        await screen.findByRole("button", { name: "C" });
+      };
+      await openNonmetals();
+      expect(screen.getByRole("button", { name: "C" }).getAttribute("aria-current")).toBe("true");
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "constellations" } });
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await openNonmetals();
+      expect(container.querySelector('[aria-current="true"]')).toBeNull();
+    });
+
     it("Copy link writes the pending hash first, then copies the URL and says so", async () => {
       const writeText = vi.fn(async (_text: string) => {});
       Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -1654,10 +1675,28 @@ describe("App (showcase Task 5)", () => {
         await act(async () => {
           fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
         });
-        // The switch refits, and the map proposes that fit (spec slice C §4), so the link carries it.
-        expect(window.location.hash).toMatch(/^#corpus=elements&view=[^&]+$/);
+        // The switch mounts a fresh map at its fit, so the link names the corpus
+        // and no view: a link without a view opens at that same fit.
+        expect(window.location.hash).toBe("#corpus=elements");
         expect(writeText).toHaveBeenCalledExactlyOnceWith(window.location.href);
         expect(screen.getByText("Link copied")).toBeTruthy();
+      } finally {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    });
+
+    it.each([
+      ["no clipboard", undefined],
+      ["a clipboard that refuses", { writeText: async () => Promise.reject(new Error("denied")) }],
+    ])("Copy link with %s says so and points at the address bar", async (_case, clipboard) => {
+      Object.defineProperty(navigator, "clipboard", { value: clipboard, configurable: true });
+      try {
+        await renderApp();
+        await screen.findByText(/1\.0×/);
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+        });
+        expect(screen.getByText("Copy failed: use the address bar")).toBeTruthy();
       } finally {
         Reflect.deleteProperty(navigator, "clipboard");
       }

@@ -37,7 +37,7 @@ import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./view
 import { fitScene } from "./viewport/fitScene";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import {
-  fromPublic,
+  drawableView,
   type MapViewport,
   sameView,
   sanitise,
@@ -138,9 +138,11 @@ export interface CorpusMapProps {
   /** The initial view, for the first spec only; later specs refit. */
   defaultViewport?: MapViewport | undefined;
   /**
-   * Fired in both modes for every real change, never for a box change:
-   * `"interaction"`, `"fit"` (`fit()`, Back to overview) or `"spec"` (the
-   * fit a new spec proposes). Never called during render.
+   * Fired in both modes for every real change: `"interaction"`, `"fit"`
+   * (`fit()`, the fit key, Back to overview), `"spec"` (the fit a new spec
+   * proposes) or, uncontrolled only, `"resize"` (a box change keeps the pixel
+   * scale, so the zoom over the new fit moves; controlled, the public view
+   * survives a box change and nothing fires). Never called during render.
    */
   onViewportChange?: ((viewport: MapViewport, details: { reason: ViewportChangeReason }) => void) | undefined;
   /** The map surface's accessible name. Defaults to "Map of N items", also when blank. */
@@ -201,8 +203,7 @@ function startingView(
   width: number,
   height: number,
 ): Viewport {
-  const view = sanitise(defaultViewport, ZOOM_BAND);
-  return view === null ? fit : fromPublic(view, fit.scale, width, height);
+  return drawableView(sanitise(defaultViewport, ZOOM_BAND), fit, width, height);
 }
 
 type ViewportUpdate = Viewport | ((previous: Viewport) => Viewport);
@@ -434,7 +435,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const controlledViewport = useMemo(() => {
     if (!viewportControlled) return fitted;
     const view = sanitise({ centre: [controlledHorizontal, controlledVertical], zoom: controlledZoom }, ZOOM_BAND);
-    return view === null ? fitted : fromPublic(view, fitted.scale, width, height);
+    return drawableView(view, fitted, width, height);
   }, [viewportControlled, controlledHorizontal, controlledVertical, controlledZoom, fitted, width, height]);
   const viewport = viewportControlled ? controlledViewport : ownViewport;
   // Hysteresis regime; declared before the refit below (rather than nearer
@@ -515,9 +516,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // is stable and safe inside the `[]` wheel listener and the rAF flush.
   // `requestedReference` holds the last request since the last commit, so
   // two updaters before a re-render compose instead of the second one
-  // basing on the stale drawn view; every commit clears it, so a consumer
-  // that ignores a request is asked again from what is actually drawn.
-  const drawnReference = useRef({ viewport, fitScale, width, height, controlled: viewportControlled });
+  // basing on the stale drawn view; every commit clears it, and so does the
+  // next frame (a consumer that bails out by returning its previous state
+  // never re-renders), so a consumer that ignores a request is asked again
+  // from what is actually drawn.
+  const drawnReference = useRef({ viewport, fitScale, width, height, controlled: viewportControlled, ready });
   const requestedReference = useRef<Viewport | null>(null);
   // A regime reset (a fit) proposed to a controlled consumer, applied once the
   // drawn view is that fit: the regime follows the drawn view (spec slice C §4).
@@ -525,8 +528,24 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const onViewportChangeReference = useRef(properties.onViewportChange);
   useLayoutEffect(() => {
     onViewportChangeReference.current = properties.onViewportChange;
-    drawnReference.current = { viewport, fitScale, width, height, controlled: viewportControlled };
+    drawnReference.current = { viewport, fitScale, width, height, controlled: viewportControlled, ready };
     requestedReference.current = null;
+  });
+  // Uncontrolled, a box change keeps the pixel scale (the reader's zoom does
+  // not jump on a resize), so the public zoom over the new fit moves: emit it
+  // once as `"resize"`, so a consumer mirroring the view (the demo's link)
+  // stays true. A spec swap in the same commit is the spec proposal's.
+  const committedPublicReference = useRef<{ view: MapViewport; spec: MapSpec; width: number; height: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const view = toPublic(viewport, fitScale, width, height);
+    const previous = committedPublicReference.current;
+    committedPublicReference.current = { view, spec, width, height };
+    if (viewportControlled || previous === null || previous.spec !== spec) return;
+    if ((previous.width !== width || previous.height !== height) && !sameView(previous.view, view))
+      onViewportChangeReference.current?.(view, { reason: "resize" });
   });
   useLayoutEffect(() => {
     const pendingReset = pendingResetReference.current;
@@ -538,6 +557,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   }, [viewport, fitScale, width, height]);
   const requestViewport = useCallback((update: ViewportUpdate, reason: ViewportChangeReason, reset?: RegimeReset) => {
     const drawn = drawnReference.current;
+    // Nothing is drawn yet, so there is no view to change (the handle can be called this early).
+    if (!drawn.ready) return;
     const base = requestedReference.current ?? drawn.viewport;
     const target = typeof update === "function" ? update(base) : update;
     const view = toPublic(target, drawn.fitScale, drawn.width, drawn.height);
@@ -556,6 +577,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     }
     if (same) return;
     requestedReference.current = target;
+    window.requestAnimationFrame(() => {
+      if (requestedReference.current === target) requestedReference.current = null;
+    });
     onViewportChangeReference.current?.(view, { reason });
   }, []);
   // A new spec proposes the fresh fit (spec slice C §4), after the commit so
@@ -701,17 +725,27 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const selectedNode = requestedSelection === null ? undefined : nodesById.get(requestedSelection);
   const selected =
     selectedNode && (selectedNode.territory === null || !dimmed.has(selectedNode.territory)) ? selectedNode.id : null;
+  // The drawn selection, plus the last request since the last commit or
+  // frame (the viewport gate's rule): a consumer that ignores a request is
+  // asked again by the next press or Escape.
   const requestedSelectionReference = useRef(requestedSelection);
+  const pendingSelectionReference = useRef<{ id: string | null } | null>(null);
   const selectionControlledReference = useRef(selectionControlled);
   const onSelectedChangeReference = useRef(properties.onSelectedChange);
   useLayoutEffect(() => {
     requestedSelectionReference.current = requestedSelection;
+    pendingSelectionReference.current = null;
     selectionControlledReference.current = selectionControlled;
     onSelectedChangeReference.current = properties.onSelectedChange;
   });
   const requestSelection = useCallback((id: string | null) => {
-    if (id === requestedSelectionReference.current) return;
-    requestedSelectionReference.current = id;
+    const current = pendingSelectionReference.current ?? { id: requestedSelectionReference.current };
+    if (id === current.id) return;
+    const pending = { id };
+    pendingSelectionReference.current = pending;
+    window.requestAnimationFrame(() => {
+      if (pendingSelectionReference.current === pending) pendingSelectionReference.current = null;
+    });
     if (!selectionControlledReference.current) setOwnSelected(id);
     onSelectedChangeReference.current?.(id);
   }, []);

@@ -13,7 +13,7 @@ describe("TopBar (showcase Task 5)", () => {
         tuningOpen={false}
         onToggleTuning={() => {}}
         onCopyLink={() => {}}
-        linkCopied={false}
+        linkStatus={null}
       />,
     );
 
@@ -37,7 +37,7 @@ describe("TopBar (showcase Task 5)", () => {
         tuningOpen={false}
         onToggleTuning={() => {}}
         onCopyLink={() => {}}
-        linkCopied={false}
+        linkStatus={null}
       />,
     );
 
@@ -54,7 +54,7 @@ describe("TopBar (showcase Task 5)", () => {
         tuningOpen={false}
         onToggleTuning={() => {}}
         onCopyLink={() => {}}
-        linkCopied={false}
+        linkStatus={null}
       />,
     );
 
@@ -73,7 +73,7 @@ describe("TopBar (showcase Task 5)", () => {
         tuningOpen={false}
         onToggleTuning={() => {}}
         onCopyLink={() => {}}
-        linkCopied={false}
+        linkStatus={null}
       />,
     );
     expect((screen.getByLabelText("Corpus") as HTMLSelectElement).value).toBe("synthetic");
@@ -90,7 +90,7 @@ describe("TopBar (showcase Task 5)", () => {
           tuningOpen={false}
           onToggleTuning={onToggleTuning}
           onCopyLink={() => {}}
-          linkCopied={false}
+          linkStatus={null}
         />,
       );
       fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
@@ -106,7 +106,7 @@ describe("TopBar (showcase Task 5)", () => {
           tuningOpen={false}
           onToggleTuning={() => {}}
           onCopyLink={() => {}}
-          linkCopied={false}
+          linkStatus={null}
         />,
       );
       expect(screen.getByRole("button", { name: "Tuning" }).getAttribute("aria-pressed")).toBe("false");
@@ -119,7 +119,7 @@ describe("TopBar (showcase Task 5)", () => {
           tuningOpen
           onToggleTuning={() => {}}
           onCopyLink={() => {}}
-          linkCopied={false}
+          linkStatus={null}
         />,
       );
       expect(screen.getByRole("button", { name: "Tuning" }).getAttribute("aria-pressed")).toBe("true");
@@ -137,12 +137,14 @@ describe("TopBar (showcase Task 5)", () => {
         onToggleTuning: () => {},
         onCopyLink,
       };
-      const { rerender } = render(<TopBar {...properties} linkCopied={false} />);
+      const { rerender } = render(<TopBar {...properties} linkStatus={null} />);
       fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
       expect(onCopyLink).toHaveBeenCalledOnce();
       expect(screen.getByRole("status").textContent).toBe("");
-      rerender(<TopBar {...properties} linkCopied />);
+      rerender(<TopBar {...properties} linkStatus="copied" />);
       expect(screen.getByRole("status").textContent).toBe("Link copied");
+      rerender(<TopBar {...properties} linkStatus="failed" />);
+      expect(screen.getByRole("status").textContent).toBe("Copy failed: use the address bar");
     });
   });
 });

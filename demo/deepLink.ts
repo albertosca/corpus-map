@@ -12,7 +12,8 @@ const EMPTY: DeepLink = { corpus: null, view: null, selected: null };
 function parseView(value: string | null): MapViewport | null {
   if (value === null) return null;
   const parts = value.split(",");
-  if (parts.length !== 3) return null;
+  // Number("") and Number(" ") are 0: an empty part would read as the origin.
+  if (parts.length !== 3 || parts.some((part) => part.trim() === "")) return null;
   const [horizontal, vertical, zoom] = parts.map(Number) as [number, number, number];
   if (![horizontal, vertical, zoom].every(Number.isFinite) || zoom <= 0) return null;
   return { centre: [horizontal, vertical], zoom };
@@ -39,6 +40,14 @@ export function serialiseDeepLink(link: DeepLink): string {
   // Commas stay readable in the address bar (lib ES2020 has no `replaceAll`).
   const query = parameters.toString().split("%2C").join(",");
   return query === "" ? "" : `#${query}`;
+}
+
+/**
+ * Replaces the hash in place; an empty one keeps the path and the query, so a
+ * page opened with a query string keeps it.
+ */
+export function writeHash(hash: string) {
+  window.history.replaceState(null, "", hash === "" ? window.location.pathname + window.location.search : hash);
 }
 
 /**

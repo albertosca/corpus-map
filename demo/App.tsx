@@ -13,12 +13,12 @@ import { generateCorpus } from "../fixtures/synthetic/generate";
 import { Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
 import { createViewStore, Indicator } from "./components/Indicator";
-import { TopBar } from "./components/TopBar";
+import { type LinkStatus, TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
 import { ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
-import { createHashWriter, type DeepLink, parseDeepLink } from "./deepLink";
+import { createHashWriter, type DeepLink, parseDeepLink, writeHash } from "./deepLink";
 import { token } from "./tokens";
 import { useColourScheme } from "./useColourScheme";
 
@@ -258,26 +258,31 @@ export function App({ loadArxiv }: AppProps = {}) {
   // its load, must not reopen the old link.
   const [linkApplies, setLinkApplies] = useState(() => initialLink.corpus === corpusId);
   // The hash mirrors what is on screen; writes are debounced (spec slice C §6).
-  const [hashWriter] = useState(() =>
-    createHashWriter((hash) => window.history.replaceState(null, "", hash === "" ? window.location.pathname : hash)),
-  );
+  const [hashWriter] = useState(() => createHashWriter(writeHash));
   useEffect(() => () => hashWriter.cancel(), [hashWriter]);
   const linkReference = useRef<DeepLink>({
     corpus: null,
     view: linkApplies ? initialLink.view : null,
     selected: linkApplies ? initialLink.selected : null,
   });
-  const [linkCopied, setLinkCopied] = useState(false);
+  // What Copy link last did; any later change to the link clears it.
+  const [linkStatus, setLinkStatus] = useState<LinkStatus>(null);
   const updateLink = (change: Partial<DeepLink>) => {
     linkReference.current = { ...linkReference.current, corpus: corpusId, ...change };
     hashWriter.schedule(linkReference.current);
-    setLinkCopied(false);
+    setLinkStatus(null);
   };
   const handleCopyLink = () => {
     hashWriter.flush();
-    void navigator.clipboard?.writeText(window.location.href).then(
-      () => setLinkCopied(true),
-      () => setLinkCopied(false),
+    // No clipboard (an insecure origin, an old browser) or a refusal: say so,
+    // and point at the address bar, which already holds the link.
+    if (navigator.clipboard === undefined) {
+      setLinkStatus("failed");
+      return;
+    }
+    navigator.clipboard.writeText(window.location.href).then(
+      () => setLinkStatus("copied"),
+      () => setLinkStatus("failed"),
     );
   };
 
@@ -391,7 +396,7 @@ export function App({ loadArxiv }: AppProps = {}) {
     setLinkApplies(false);
     linkReference.current = { corpus: id, view: null, selected: null };
     hashWriter.schedule(linkReference.current);
-    setLinkCopied(false);
+    setLinkStatus(null);
   };
 
   const handleRetry = () => {
@@ -483,11 +488,15 @@ export function App({ loadArxiv }: AppProps = {}) {
         gearButtonRef={gearButtonReference}
         barRef={topBarReference}
         onCopyLink={handleCopyLink}
-        linkCopied={linkCopied}
+        linkStatus={linkStatus}
       />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
           <CorpusMap
+            // A selection belongs to the corpus it was made in: the map keeps
+            // an uncontrolled one across a spec swap, so a new corpus (or a
+            // regenerated synthetic one, whose ids repeat) gets a fresh map.
+            key={current.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current.id}
             ref={mapReference}
             spec={current.spec}
             renderCard={CARDS[current.id]}

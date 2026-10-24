@@ -6,8 +6,12 @@ export interface MapViewport {
   zoom: number;
 }
 
-/** Why `onViewportChange` fired: a reader's action, an explicit fit, or the fit a new spec proposes. */
-export type ViewportChangeReason = "interaction" | "fit" | "spec";
+/**
+ * Why `onViewportChange` fired: a reader's action, an explicit fit, the fit a
+ * new spec proposes, or (uncontrolled only) a box change that kept the pixel
+ * scale and so moved the zoom over the new fit.
+ */
+export type ViewportChangeReason = "interaction" | "fit" | "spec" | "resize";
 
 /** The zoom range a public view is clamped to, relative to the fit. */
 export interface ZoomBand {
@@ -36,6 +40,16 @@ export function sanitise(
   const zoom = view.zoom;
   if (!finite(horizontal) || !finite(vertical) || !finite(zoom) || zoom <= 0) return null;
   return { centre: [horizontal, vertical], zoom: Math.min(band.maximum, Math.max(band.minimum, zoom)) };
+}
+
+/**
+ * The pixel view for a sanitised public view, else `fit`: a finite centre far
+ * enough out (`1e308`) still overflows once scaled, and would draw nothing.
+ */
+export function drawableView(view: MapViewport | null, fit: Viewport, width: number, height: number): Viewport {
+  if (view === null) return fit;
+  const drawn = fromPublic(view, fit.scale, width, height);
+  return Number.isFinite(drawn.tx) && Number.isFinite(drawn.ty) ? drawn : fit;
 }
 
 const close = (left: number, right: number) =>

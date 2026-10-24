@@ -56,6 +56,25 @@ describe("selection (spec slice C §3, §5)", () => {
     expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ id: "a" }));
   });
 
+  it("at near a press on a card selects its item, even away from the point", () => {
+    const onSelectedChange = vi.fn();
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={spec}
+        width={400}
+        height={300}
+        defaultViewport={near}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+    // jsdom has no layout: put Alpha's card over an empty corner of the map.
+    const alphaCard = container.querySelector('[data-card="a"]') as HTMLElement;
+    vi.spyOn(alphaCard, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 10, 60, 30));
+    press(surface(container), 30, 20);
+    expect(onSelectedChange).toHaveBeenLastCalledWith("a");
+  });
+
   it("a press on empty map clears it", () => {
     const onSelectedChange = vi.fn();
     const { container } = render(
@@ -143,6 +162,69 @@ describe("selection (spec slice C §3, §5)", () => {
     press(surface(container), 200, 150);
     expect(onSelectedChange).toHaveBeenLastCalledWith("a");
     expect(screen.getByRole("button", { name: "Alpha" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("a controlled consumer that ignores a clear is asked again by the next Escape", () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const nextFrame = () =>
+      act(() =>
+        frames.splice(0).forEach((callback) => {
+          callback(0);
+        }),
+      );
+    const onSelectedChange = vi.fn();
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={spec}
+        width={400}
+        height={300}
+        defaultViewport={near}
+        selectedId="a"
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+    fireEvent.keyDown(surface(container), { key: "Escape" });
+    nextFrame();
+    fireEvent.keyDown(surface(container), { key: "Escape" });
+    expect(onSelectedChange).toHaveBeenCalledTimes(2);
+    expect(onSelectedChange).toHaveBeenLastCalledWith(null);
+    animationFrame.mockRestore();
+  });
+
+  it("a controlled consumer that ignores a selection is asked again by the next press", () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const nextFrame = () =>
+      act(() =>
+        frames.splice(0).forEach((callback) => {
+          callback(0);
+        }),
+      );
+    const onSelectedChange = vi.fn();
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={spec}
+        width={400}
+        height={300}
+        defaultViewport={near}
+        selectedId={null}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+    press(surface(container), 200, 150);
+    nextFrame();
+    press(surface(container), 200, 150);
+    expect(onSelectedChange).toHaveBeenCalledTimes(2);
+    animationFrame.mockRestore();
   });
 
   it("the first Escape clears the selection, the second zooms out a regime", () => {

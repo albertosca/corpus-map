@@ -91,9 +91,11 @@ export interface CorpusMapProps {
     /** The initial view, for the first spec only; later specs refit. */
     defaultViewport?: MapViewport | undefined;
     /**
-     * Fired in both modes for every real change, never for a box change:
-     * `"interaction"`, `"fit"` (`fit()`, Back to overview) or `"spec"` (the
-     * fit a new spec proposes). Never called during render.
+     * Fired in both modes for every real change: `"interaction"`, `"fit"`
+     * (`fit()`, the fit key, Back to overview), `"spec"` (the fit a new spec
+     * proposes) or, uncontrolled only, `"resize"` (a box change keeps the pixel
+     * scale, so the zoom over the new fit moves; controlled, the public view
+     * survives a box change and nothing fires). Never called during render.
      */
     onViewportChange?: ((viewport: MapViewport, details: {
         reason: ViewportChangeReason;
@@ -1264,8 +1266,12 @@ export interface MapViewport {
     centre: [number, number];
     zoom: number;
 }
-/** Why `onViewportChange` fired: a reader's action, an explicit fit, or the fit a new spec proposes. */
-export type ViewportChangeReason = "interaction" | "fit" | "spec";
+/**
+ * Why `onViewportChange` fired: a reader's action, an explicit fit, the fit a
+ * new spec proposes, or (uncontrolled only) a box change that kept the pixel
+ * scale and so moved the zoom over the new fit.
+ */
+export type ViewportChangeReason = "interaction" | "fit" | "spec" | "resize";
 /** The zoom range a public view is clamped to, relative to the fit. */
 export interface ZoomBand {
     minimum: number;
@@ -1278,6 +1284,11 @@ export declare function sanitise(view: {
     centre?: unknown;
     zoom?: unknown;
 } | null | undefined, band: ZoomBand): MapViewport | null;
+/**
+ * The pixel view for a sanitised public view, else `fit`: a finite centre far
+ * enough out (`1e308`) still overflows once scaled, and would draw nothing.
+ */
+export declare function drawableView(view: MapViewport | null, fit: Viewport, width: number, height: number): Viewport;
 /** Equal within a relative 1e-9: a round trip through pixels is never a change. */
 export declare function sameView(left: MapViewport, right: MapViewport): boolean;
 
