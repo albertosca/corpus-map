@@ -23,6 +23,8 @@ export interface AccessibleTreeProps {
   theme?: Pick<Theme, "cardBackground" | "territoryLabel" | "focusOutline" | "focusOutlineWidth"> | undefined;
   onFocusTerritory?: ((territory: Territory) => void) | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
+  /** The selected item's id; its button carries `aria-current="true"` (spec slice C §5). */
+  selectedId?: string | null | undefined;
   onOverview?: (() => void) | undefined;
   onUnassigned?: (() => void) | undefined;
   /** Called when a focused control unmounted and the new tree has none to take its place. */
@@ -69,7 +71,7 @@ export function itemCount(count: number): string {
  * shape on the canvas, which show in the corner while focused.
  */
 export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
-  const { spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect } = properties;
+  const { spec, regime, viewport, width, height, cap, onFocusTerritory, onSelect, selectedId } = properties;
   const groups = properties.groups ?? NO_GROUPS;
   const hidden = properties.hidden ?? NOTHING_HIDDEN;
   const Heading = properties.heading ?? "h3";
@@ -184,6 +186,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
     <li key={node.id}>
       <button
         type="button"
+        aria-current={node.id === selectedId ? "true" : undefined}
         onClick={() => onSelect?.(node)}
         onFocus={(event) => {
           remember(event.currentTarget);

@@ -112,6 +112,11 @@ export interface CorpusMapProps {
   cardSize?: { width: number; height: number } | undefined;
   theme?: Theme | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
+  /** Present, even `null`, means controlled (spec slice C §3). An id whose node is dimmed or absent reads as no selection. */
+  selectedId?: string | null | undefined;
+  defaultSelectedId?: string | null | undefined;
+  /** Fired only when the selected id changes, `null` included: a press on a point, a press on no point, Escape, a tree item. */
+  onSelectedChange?: ((id: string | null) => void) | undefined;
   /** Fired once on mount with the initial regime, then on every change. */
   onRegimeChange?: ((regime: Regime) => void) | undefined;
   /**
@@ -685,6 +690,29 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         : { ...spec, nodes: spec.nodes.filter((node) => node.territory === null || !dimmed.has(node.territory)) },
     [spec, dimmed],
   );
+  // Selection (spec slice C §3): requested by the prop or own state; the
+  // effective id is that of a live node, else null, so a dimmed or absent
+  // item is neither drawn nor marked, and comes back when shown again.
+  const selectionControlled = properties.selectedId !== undefined;
+  const [ownSelected, setOwnSelected] = useState<string | null>(properties.defaultSelectedId ?? null);
+  const requestedSelection = selectionControlled ? (properties.selectedId ?? null) : ownSelected;
+  const selectedNode = requestedSelection === null ? undefined : nodesById.get(requestedSelection);
+  const selected =
+    selectedNode && (selectedNode.territory === null || !dimmed.has(selectedNode.territory)) ? selectedNode.id : null;
+  const requestedSelectionReference = useRef(requestedSelection);
+  const selectionControlledReference = useRef(selectionControlled);
+  const onSelectedChangeReference = useRef(properties.onSelectedChange);
+  useLayoutEffect(() => {
+    requestedSelectionReference.current = requestedSelection;
+    selectionControlledReference.current = selectionControlled;
+    onSelectedChangeReference.current = properties.onSelectedChange;
+  });
+  const requestSelection = useCallback((id: string | null) => {
+    if (id === requestedSelectionReference.current) return;
+    requestedSelectionReference.current = id;
+    if (!selectionControlledReference.current) setOwnSelected(id);
+    onSelectedChangeReference.current?.(id);
+  }, []);
   const onHiddenChangeReference = useRef(properties.onHiddenTerritoriesChange);
   useEffect(() => {
     onHiddenChangeReference.current = properties.onHiddenTerritoriesChange;
@@ -952,6 +980,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const command = keyboardCommand(event);
     if (command === null) return;
     if (command.kind === "regimeOut") {
+      // Escape in layers (spec slice C §5): the innermost thing closes first.
+      if (selected !== null) {
+        requestSelection(null);
+        event.preventDefault();
+        return;
+      }
       const target = regimeOutRatio(next, ratio, thresholds);
       if (target === null) return;
       if (target === 1) fitView("interaction");
@@ -1055,40 +1089,46 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // a touch tap. Every branch compares against `hoverReference` and skips
   // `setHover` when nothing changed: a steady hover costs no commit
   // (metric 13), and a balloon over the same territories only moves.
+  // The nearest visible point within the hover radius, in mid and near once
+  // the points are visible enough to aim at; null elsewhere (at far there
+  // are no points to hit). Shared by hover and by a press (spec slice C §3).
+  const nearestPoint = (position: { x: number; y: number }) => {
+    if ((next !== "mid" && next !== "near") || pointAlpha < 0.1) return null;
+    // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
+    // calls: the canvas paints every on-screen point regardless of the
+    // card cap, so hover must be resolvable against all of them, not
+    // just the first `cardCap` in spec order (C1) — otherwise most
+    // on-screen points past the cap are silently unhoverable.
+    const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
+      const [left, top] = toScreen(viewport, node.x, node.y);
+      return { id: node.id, x: left, y: top };
+    });
+    return nearestWithin(points, position.x, position.y, tuning.hoverRadius);
+  };
+  const pointNear = (position: { x: number; y: number }): string | null => nearestPoint(position)?.id ?? null;
   const resolveHover = (position: HoverPosition) => {
     const previousHover = hoverReference.current;
-    if ((next === "mid" || next === "near") && pointAlpha >= 0.1) {
-      // Uncapped, unlike the cards/tree's own `visibleNodes(..., cardCap)`
-      // calls: the canvas paints every on-screen point regardless of the
-      // card cap, so hover must be resolvable against all of them, not
-      // just the first `cardCap` in spec order (C1) — otherwise most
-      // on-screen points past the cap are silently unhoverable.
-      const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).map((node) => {
-        const [left, top] = toScreen(viewport, node.x, node.y);
-        return { id: node.id, x: left, y: top };
-      });
-      const nearest = nearestWithin(points, position.x, position.y, tuning.hoverRadius);
-      if (nearest) {
-        // Same node, same screen position as the currently shown hover:
-        // skip the call rather than dispatch a freshly-allocated (but
-        // deeply equal) object every frame the pointer holds still —
-        // `Object.is` would never consider two such objects equal, so
-        // React would never bail out and a steady hover would cost a
-        // commit on every frame (see the `hoverReference` comment above).
-        const same =
-          previousHover?.kind === "point" &&
-          previousHover.id === nearest.id &&
-          previousHover.x === nearest.x &&
-          previousHover.y === nearest.y;
-        if (!same) {
-          // `nearest.id` is always a key of `nodesById`: `points` was
-          // built from `visibleNodes(liveSpec, ...)`, which only ever
-          // returns `spec`'s own nodes.
-          const label = (nodesById.get(nearest.id) as MapNode).label;
-          setHover({ kind: "point", id: nearest.id, label, x: nearest.x, y: nearest.y });
-        }
-        return;
+    const nearest = nearestPoint(position);
+    if (nearest) {
+      // Same node, same screen position as the currently shown hover:
+      // skip the call rather than dispatch a freshly-allocated (but
+      // deeply equal) object every frame the pointer holds still —
+      // `Object.is` would never consider two such objects equal, so
+      // React would never bail out and a steady hover would cost a
+      // commit on every frame (see the `hoverReference` comment above).
+      const same =
+        previousHover?.kind === "point" &&
+        previousHover.id === nearest.id &&
+        previousHover.x === nearest.x &&
+        previousHover.y === nearest.y;
+      if (!same) {
+        // `nearest.id` is always a key of `nodesById`: `points` was
+        // built from `visibleNodes(liveSpec, ...)`, which only ever
+        // returns `spec`'s own nodes.
+        const label = (nodesById.get(nearest.id) as MapNode).label;
+        setHover({ kind: "point", id: nearest.id, label, x: nearest.x, y: nearest.y });
       }
+      return;
     }
     const ids =
       visibleCardAt(position.clientX, position.clientY) === null
@@ -1205,21 +1245,21 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const press = drag.current;
     drag.current = null;
     if (!press || Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > CLICK_SLOP) return;
-    const id = visibleCardAt(event.clientX, event.clientY);
-    // A touch has no hover: a tap off a card names what is under it, the
-    // way a mouse resting there would (spec categories §7).
-    if (event.pointerType === "touch" && id === null) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      resolveHover({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-        clientX: event.clientX,
-        clientY: event.clientY,
-      });
-      return;
-    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+    const cardId = visibleCardAt(event.clientX, event.clientY);
+    const id = cardId ?? pointNear(position);
+    requestSelection(id);
     const node = id === null ? undefined : nodesById.get(id);
     if (node && onSelect) onSelect(node);
+    // A touch has no hover: a tap off a card names what is under it, the
+    // way a mouse resting there would (spec categories §7).
+    if (event.pointerType === "touch" && cardId === null) resolveHover(position);
   };
 
   // The hovered point's territory, named beside its label (spec categories §7).
@@ -1390,7 +1430,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                 "interaction",
               );
             }}
-            onSelect={onSelect}
+            onSelect={(node) => {
+              requestSelection(node.id);
+              onSelect?.(node);
+            }}
+            selectedId={selected}
             groups={scene.groups}
             hidden={dimmed}
             heading={headingTag}
