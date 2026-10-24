@@ -1616,4 +1616,57 @@ describe("App (showcase Task 5)", () => {
       });
     });
   });
+
+  describe("deep link (spec slice C §6)", () => {
+    afterEach(() => {
+      window.history.replaceState(null, "", window.location.pathname);
+    });
+
+    it("reopens the linked view after the lazy arXiv load", async () => {
+      window.history.replaceState(null, "", "#corpus=arxiv&view=0,0,6");
+      await renderApp();
+      expect(await screen.findByText(/6\.0×/)).toBeTruthy();
+    });
+
+    it("a malformed link opens the default corpus at the fit", async () => {
+      window.history.replaceState(null, "", "#corpus=nope&view=0,0,-1");
+      await renderApp();
+      expect(await screen.findByText(/1\.0×/)).toBeTruthy();
+    });
+
+    it("a user switch away and back to arXiv opens at the fit, not the old link", async () => {
+      window.history.replaceState(null, "", "#corpus=arxiv&view=0,0,6");
+      await renderApp();
+      expect(await screen.findByText(/6\.0×/)).toBeTruthy();
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
+      expect(await screen.findByText(/1\.0×/)).toBeTruthy();
+      expect(screen.queryByText(/6\.0×/)).toBeNull();
+    });
+
+    it("Copy link writes the pending hash first, then copies the URL and says so", async () => {
+      const writeText = vi.fn(async (_text: string) => {});
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      try {
+        await renderApp();
+        await screen.findByText(/1\.0×/);
+        fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+        });
+        // The switch refits, and the map proposes that fit (spec slice C §4), so the link carries it.
+        expect(window.location.hash).toMatch(/^#corpus=elements&view=[^&]+$/);
+        expect(writeText).toHaveBeenCalledExactlyOnceWith(window.location.href);
+        expect(screen.getByText("Link copied")).toBeTruthy();
+      } finally {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    });
+
+    it("offers a Copy link button with its own maxWidth", async () => {
+      await renderApp();
+      const button = await screen.findByRole("button", { name: "Copy link" });
+      expect(button.style.maxWidth).not.toBe("");
+    });
+  });
 });

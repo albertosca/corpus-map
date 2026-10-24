@@ -13,6 +13,9 @@ interface TopBarProps {
   gearButtonRef?: Ref<HTMLButtonElement> | undefined;
   /** The bar itself, so `App` can measure its height (it wraps on a narrow screen) and start the right-side sheets below it. */
   barRef?: Ref<HTMLElement> | undefined;
+  /** Copies the page URL, which carries the corpus, view and selection (spec slice C §6). */
+  onCopyLink: () => void;
+  linkCopied: boolean;
 }
 
 const barStyle: CSSProperties = {
@@ -48,6 +51,10 @@ const selectStyle: CSSProperties = {
   background: token("surfaceSolid"),
   color: "inherit",
   maxWidth: "70vw",
+};
+
+const statusStyle: CSSProperties = {
+  fontSize: 13,
 };
 
 const gearButtonStyle: CSSProperties = {
@@ -88,6 +95,8 @@ export function TopBar({
   onToggleTuning,
   gearButtonRef: gearButtonReference,
   barRef: barReference,
+  onCopyLink,
+  linkCopied,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange(event.target.value as GalleryEntry["id"]);
@@ -115,6 +124,12 @@ export function TopBar({
       >
         Tuning
       </button>
+      <button type="button" onClick={onCopyLink} style={gearButtonStyle}>
+        Copy link
+      </button>
+      <span role="status" style={statusStyle}>
+        {linkCopied ? "Link copied" : ""}
+      </span>
     </header>
   );
 }

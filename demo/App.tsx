@@ -18,6 +18,7 @@ import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
 import { ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
+import { createHashWriter, type DeepLink, parseDeepLink } from "./deepLink";
 import { token } from "./tokens";
 import { useColourScheme } from "./useColourScheme";
 
@@ -187,7 +188,11 @@ export interface AppProps {
 }
 
 export function App({ loadArxiv }: AppProps = {}) {
+  // The link the page was opened with (spec slice C §6), read once.
+  const [initialLink] = useState(() => parseDeepLink(window.location.hash));
   const [corpusId, setCorpusId] = useState<GalleryEntry["id"]>(() => {
+    const linked = gallery.find((entry) => entry.id === initialLink.corpus);
+    if (linked) return linked.id;
     const firstEntry = gallery[0];
     if (!firstEntry) throw new Error("demo gallery is empty");
     return firstEntry.id;
@@ -246,6 +251,35 @@ export function App({ loadArxiv }: AppProps = {}) {
   // map under the bar hid the legend's toggle and the fitted names' top row.
   const topBarReference = useRef<HTMLElement>(null);
   const topBarHeight = useBorderBoxHeight(topBarReference);
+
+  // The linked view and selection apply while the page still shows the
+  // corpus the link named. A user switch ends that for good: the map refits
+  // (spec slice C §6), and returning to arXiv, which remounts the map after
+  // its load, must not reopen the old link.
+  const [linkApplies, setLinkApplies] = useState(() => initialLink.corpus === corpusId);
+  // The hash mirrors what is on screen; writes are debounced (spec slice C §6).
+  const [hashWriter] = useState(() =>
+    createHashWriter((hash) => window.history.replaceState(null, "", hash === "" ? window.location.pathname : hash)),
+  );
+  useEffect(() => () => hashWriter.cancel(), [hashWriter]);
+  const linkReference = useRef<DeepLink>({
+    corpus: null,
+    view: linkApplies ? initialLink.view : null,
+    selected: linkApplies ? initialLink.selected : null,
+  });
+  const [linkCopied, setLinkCopied] = useState(false);
+  const updateLink = (change: Partial<DeepLink>) => {
+    linkReference.current = { ...linkReference.current, corpus: corpusId, ...change };
+    hashWriter.schedule(linkReference.current);
+    setLinkCopied(false);
+  };
+  const handleCopyLink = () => {
+    hashWriter.flush();
+    void navigator.clipboard?.writeText(window.location.href).then(
+      () => setLinkCopied(true),
+      () => setLinkCopied(false),
+    );
+  };
 
   // Regenerated only when the panel's own size/seed controls change --
   // never on an unrelated render -- because a plain object literal would
@@ -354,6 +388,10 @@ export function App({ loadArxiv }: AppProps = {}) {
     setCorpusId(id);
     viewStore.set(null);
     setSelected(null);
+    setLinkApplies(false);
+    linkReference.current = { corpus: id, view: null, selected: null };
+    hashWriter.schedule(linkReference.current);
+    setLinkCopied(false);
   };
 
   const handleRetry = () => {
@@ -444,6 +482,8 @@ export function App({ loadArxiv }: AppProps = {}) {
         onToggleTuning={handleTogglePanel}
         gearButtonRef={gearButtonReference}
         barRef={topBarReference}
+        onCopyLink={handleCopyLink}
+        linkCopied={linkCopied}
       />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
@@ -460,6 +500,10 @@ export function App({ loadArxiv }: AppProps = {}) {
             cardSize={cardSize}
             onViewChange={viewStore.set}
             onSelect={handleSelect}
+            defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
+            defaultSelectedId={linkApplies ? initialLink.selected : null}
+            onViewportChange={(view) => updateLink({ view })}
+            onSelectedChange={(selectedId) => updateLink({ selected: selectedId })}
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>

@@ -13,3 +13,4 @@ export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 export type { TerritoryGroup } from "./territories/groups";
 export { deriveTerritoryGroups } from "./territories/groups";
+export type { MapViewport, ViewportChangeReason } from "./viewport/publicViewport";

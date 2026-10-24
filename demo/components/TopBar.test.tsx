@@ -6,7 +6,15 @@ import { TopBar } from "./TopBar";
 describe("TopBar (showcase Task 5)", () => {
   it("shows the library name and a Corpus select with the exact four option labels", () => {
     render(
-      <TopBar corpora={gallery} activeId="arxiv" onChange={() => {}} tuningOpen={false} onToggleTuning={() => {}} />,
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkCopied={false}
+      />,
     );
 
     expect(screen.getByText("corpus-map")).not.toBeNull();
@@ -22,7 +30,15 @@ describe("TopBar (showcase Task 5)", () => {
 
   it("names the page with the only level-1 heading, so the map's h2 sections sit under it", () => {
     render(
-      <TopBar corpora={gallery} activeId="arxiv" onChange={() => {}} tuningOpen={false} onToggleTuning={() => {}} />,
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkCopied={false}
+      />,
     );
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("corpus-map");
@@ -31,7 +47,15 @@ describe("TopBar (showcase Task 5)", () => {
   it("calls onChange with the newly selected corpus id", () => {
     const onChange = vi.fn();
     render(
-      <TopBar corpora={gallery} activeId="arxiv" onChange={onChange} tuningOpen={false} onToggleTuning={() => {}} />,
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={onChange}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkCopied={false}
+      />,
     );
 
     fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
@@ -48,6 +72,8 @@ describe("TopBar (showcase Task 5)", () => {
         onChange={() => {}}
         tuningOpen={false}
         onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkCopied={false}
       />,
     );
     expect((screen.getByLabelText("Corpus") as HTMLSelectElement).value).toBe("synthetic");
@@ -63,6 +89,8 @@ describe("TopBar (showcase Task 5)", () => {
           onChange={() => {}}
           tuningOpen={false}
           onToggleTuning={onToggleTuning}
+          onCopyLink={() => {}}
+          linkCopied={false}
         />,
       );
       fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
@@ -71,12 +99,50 @@ describe("TopBar (showcase Task 5)", () => {
 
     it("reflects tuningOpen through aria-pressed", () => {
       const { rerender } = render(
-        <TopBar corpora={gallery} activeId="arxiv" onChange={() => {}} tuningOpen={false} onToggleTuning={() => {}} />,
+        <TopBar
+          corpora={gallery}
+          activeId="arxiv"
+          onChange={() => {}}
+          tuningOpen={false}
+          onToggleTuning={() => {}}
+          onCopyLink={() => {}}
+          linkCopied={false}
+        />,
       );
       expect(screen.getByRole("button", { name: "Tuning" }).getAttribute("aria-pressed")).toBe("false");
 
-      rerender(<TopBar corpora={gallery} activeId="arxiv" onChange={() => {}} tuningOpen onToggleTuning={() => {}} />);
+      rerender(
+        <TopBar
+          corpora={gallery}
+          activeId="arxiv"
+          onChange={() => {}}
+          tuningOpen
+          onToggleTuning={() => {}}
+          onCopyLink={() => {}}
+          linkCopied={false}
+        />,
+      );
       expect(screen.getByRole("button", { name: "Tuning" }).getAttribute("aria-pressed")).toBe("true");
+    });
+  });
+
+  describe("Copy link (spec slice C §6)", () => {
+    it("calls onCopyLink and announces the copy through a status region", () => {
+      const onCopyLink = vi.fn();
+      const properties = {
+        corpora: gallery,
+        activeId: "arxiv" as const,
+        onChange: () => {},
+        tuningOpen: false,
+        onToggleTuning: () => {},
+        onCopyLink,
+      };
+      const { rerender } = render(<TopBar {...properties} linkCopied={false} />);
+      fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+      expect(onCopyLink).toHaveBeenCalledOnce();
+      expect(screen.getByRole("status").textContent).toBe("");
+      rerender(<TopBar {...properties} linkCopied />);
+      expect(screen.getByRole("status").textContent).toBe("Link copied");
     });
   });
 });
