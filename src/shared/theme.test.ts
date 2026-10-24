@@ -64,6 +64,31 @@ describe.each([
   });
 });
 
+/**
+ * The selection ring (spec slice C §5) is held to the same WCAG 2.2 SC 1.4.11
+ * bar as the focus outline: 3:1 against every page, bare and under every
+ * territory fill, for the colour actually drawn (`selectionRing`, else
+ * `territoryLabel`).
+ */
+describe.each([
+  ["light", DEFAULT_THEME, ["#ffffff", "#f7f7f8"]],
+  ["dark", DARK_THEME, ["#18181b", "#111114"]],
+] as const)("selection ring clears 3:1 (%s)", (_name, theme, pages) => {
+  it("reaches at least 3:1 against the page, bare and under every territory fill", () => {
+    const ring = parseColor(theme.selectionRing ?? theme.territoryLabel);
+    expect(ring[3], "an opaque ring, so its contrast does not depend on what is under it").toBe(1);
+    for (const page of pages) {
+      const background = parseColor(page);
+      expect(contrastRatio(ring, background), `against ${page}`).toBeGreaterThanOrEqual(3);
+      for (const colour of theme.palette) {
+        const [red, green, blue] = parseColor(colour);
+        const underFill = over([red, green, blue, theme.territoryFillAlpha], background);
+        expect(contrastRatio(ring, underFill), `${colour} over ${page}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});
+
 it("no longer carries the fields slice D replaced", () => {
   for (const field of ["territoryFill", "territoryStroke", "visited", "unvisited"]) {
     expect(DEFAULT_THEME).not.toHaveProperty(field);

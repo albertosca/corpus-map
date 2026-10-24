@@ -2,6 +2,7 @@ import { paintFocusedNode, paintFocusedTerritory } from "../a11y/paintFocus";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
+import { paintSelection } from "../points/paintSelection";
 import { paintTerritories } from "../territories/paintTerritories";
 import type { Viewport } from "../viewport/viewport";
 import { NO_DIMMED } from "./dimmed";
@@ -36,11 +37,13 @@ export interface Frame {
   groupAlpha?: number | undefined;
   /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
   dimmed?: ReadonlySet<string> | undefined;
+  /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
+  selected?: string | null | undefined;
 }
 
 /**
  * The single place that decides paint order: the territory fill layer
- * (largest first), territory outlines, points, the keyboard-focus outline,
+ * (largest first), territory outlines, points (with the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -60,6 +63,7 @@ export function paint(
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);
+    if (typeof frame.selected === "string") paintSelection(surface, scene, viewport, theme, frame.selected);
     surface.globalAlpha(1);
   }
   if (typeof frame.focusedTerritory === "string")

@@ -77,4 +77,34 @@ describe("paint order (slice D)", () => {
     ]);
     expect(territoryOutlines.every((outline) => outline.width === 1.5)).toBe(true);
   });
+
+  it("paints the selection ring last inside the point layer, under the focus and the names", () => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      scene,
+      spec,
+      { scale: 40, tx: 0, ty: 0 },
+      { regime: "mid", pointAlpha: 0.5, width: 400, height: 400, selected: "b" },
+      DEFAULT_THEME,
+    );
+    const pointsStart = surface.calls.indexOf("alpha");
+    const pointsEnd = surface.calls.lastIndexOf("alpha");
+    expect(surface.calls.slice(pointsStart + 1, pointsEnd).length).toBe(4);
+    expect(surface.calls[pointsEnd - 1]).toBe("ring");
+    expect(surface.alphas).toEqual([0.5, 1]);
+  });
+
+  it("paints no selection ring at far", () => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      scene,
+      spec,
+      { scale: 40, tx: 0, ty: 0 },
+      { regime: "far", pointAlpha: 0, width: 400, height: 400, selected: "b" },
+      DEFAULT_THEME,
+    );
+    expect(surface.rings).toEqual([]);
+  });
 });

@@ -844,6 +844,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         presentation,
         groupAlpha,
         dimmed,
+        selected,
       },
       theme,
     );
@@ -861,6 +862,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     presentation,
     groupAlpha,
     dimmed,
+    selected,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the

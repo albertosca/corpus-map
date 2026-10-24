@@ -19,6 +19,8 @@ export interface Theme {
   focusOutline: string;
   /** Line width of that outline, in CSS pixels. */
   focusOutlineWidth: number;
+  /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
+  selectionRing?: string | undefined;
   /**
    * Categorical colours for territories, assigned so that territories whose
    * visible borders touch get different colours (`territories/colour.ts`).
