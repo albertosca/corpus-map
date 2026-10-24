@@ -7,6 +7,7 @@ import { type Presentation, type PresentationSetting } from "./shared/presentati
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
 import { type Tuning } from "./shared/tuning";
+import { type MapViewport, type ViewportChangeReason } from "./viewport/publicViewport";
 /** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
 export interface CorpusMapHandle {
     /** One wheel notch's zoom-in factor about the box centre, clamped to the wheel band. */
@@ -64,6 +65,13 @@ export interface CorpusMapProps {
     } | undefined;
     theme?: Theme | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
+    /** Present, even `null`, means controlled (spec slice C §3). An id whose node is dimmed or absent reads as no selection. */
+    selectedId?: string | null | undefined;
+    defaultSelectedId?: string | null | undefined;
+    /** Fired only when the selected id changes, `null` included: a press on a point, a press on no point, Escape, a tree item. */
+    onSelectedChange?: ((id: string | null) => void) | undefined;
+    /** The territory, not dimmed, whose shape holds the box centre while the regime is near; `null` otherwise. Fired only on a change, starting from `null` (spec slice C §3). */
+    onOpenTerritoryChange?: ((id: string | null) => void) | undefined;
     /** Fired once on mount with the initial regime, then on every change. */
     onRegimeChange?: ((regime: Regime) => void) | undefined;
     /**
@@ -74,6 +82,22 @@ export interface CorpusMapProps {
      * one commit per frame (metric 13).
      */
     onViewChange?: ((view: CorpusMapView) => void) | undefined;
+    /**
+     * Present means controlled: the map draws this view and only proposes
+     * changes through `onViewportChange` (spec slice C §3). Invalid values
+     * draw the fit; a zoom outside 1/8–64 of the fit is clamped.
+     */
+    viewport?: MapViewport | undefined;
+    /** The initial view, for the first spec only; later specs refit. */
+    defaultViewport?: MapViewport | undefined;
+    /**
+     * Fired in both modes for every real change, never for a box change:
+     * `"interaction"`, `"fit"` (`fit()`, Back to overview) or `"spec"` (the
+     * fit a new spec proposes). Never called during render.
+     */
+    onViewportChange?: ((viewport: MapViewport, details: {
+        reason: ViewportChangeReason;
+    }) => void) | undefined;
     /** The map surface's accessible name. Defaults to "Map of N items", also when blank. */
     label?: string | undefined;
     /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
@@ -146,6 +170,8 @@ export interface AccessibleTreeProps {
     theme?: Pick<Theme, "cardBackground" | "territoryLabel" | "focusOutline" | "focusOutlineWidth"> | undefined;
     onFocusTerritory?: ((territory: Territory) => void) | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
+    /** The selected item's id; its button carries `aria-current="true"` (spec slice C §5). */
+    selectedId?: string | null | undefined;
     onOverview?: (() => void) | undefined;
     onUnassigned?: (() => void) | undefined;
     /** Called when a focused control unmounted and the new tree has none to take its place. */
@@ -272,6 +298,7 @@ export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 export type { TerritoryGroup } from "./territories/groups";
 export { deriveTerritoryGroups } from "./territories/groups";
+export type { MapViewport, ViewportChangeReason } from "./viewport/publicViewport";
 
 // labels/contrast.d.ts
 export type Rgba = [number, number, number, number];
@@ -659,6 +686,22 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  */
 export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number): void;
 
+// points/paintSelection.d.ts
+import type { Scene } from "../shared/scene";
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import { type Viewport } from "../viewport/viewport";
+/** Clear space between the keyboard focus ring's outer edge and the selection ring. */
+export declare const SELECTION_RING_GAP = 3;
+export declare const SELECTION_RING_WIDTH = 2;
+/**
+ * The selected item: the point, a gap, then a ring outside where the
+ * keyboard focus ring sits, so the two differ by shape and position, not
+ * only by colour (WCAG 2.2 SC 1.4.1; spec slice C §5). Drawn inside the
+ * point layer, so it fades with the points and is absent at far.
+ */
+export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel">, id: string): void;
+
 // shared/corner.d.ts
 /** A corner of the map's box, where an overlay (minimap, legend) sits. */
 export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -711,10 +754,12 @@ export interface Frame {
     groupAlpha?: number | undefined;
     /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
     dimmed?: ReadonlySet<string> | undefined;
+    /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
+    selected?: string | null | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
- * (largest first), territory outlines, points, the keyboard-focus outline,
+ * (largest first), territory outlines, points (with the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -922,6 +967,8 @@ export interface Theme {
     focusOutline: string;
     /** Line width of that outline, in CSS pixels. */
     focusOutlineWidth: number;
+    /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
+    selectionRing?: string | undefined;
     /**
      * Categorical colours for territories, assigned so that territories whose
      * visible borders touch get different colours (`territories/colour.ts`).
@@ -1209,6 +1256,30 @@ export declare function keyboardCommand(input: KeyInput): KeyboardCommand | null
  * below wins, and nothing when none is (or at far).
  */
 export declare function regimeOutRatio(regime: Regime, ratio: number, thresholds: LodThresholds): number | null;
+
+// viewport/publicViewport.d.ts
+import { type Viewport } from "./viewport";
+/** Box-independent view: the world point at the box centre, and the scale relative to the fitted view. */
+export interface MapViewport {
+    centre: [number, number];
+    zoom: number;
+}
+/** Why `onViewportChange` fired: a reader's action, an explicit fit, or the fit a new spec proposes. */
+export type ViewportChangeReason = "interaction" | "fit" | "spec";
+/** The zoom range a public view is clamped to, relative to the fit. */
+export interface ZoomBand {
+    minimum: number;
+    maximum: number;
+}
+export declare function toPublic(viewport: Viewport, fitScale: number, width: number, height: number): MapViewport;
+export declare function fromPublic(view: MapViewport, fitScale: number, width: number, height: number): Viewport;
+/** A usable view, the zoom clamped to `band`; `null` for anything that cannot be drawn (the map then draws the fit). */
+export declare function sanitise(view: {
+    centre?: unknown;
+    zoom?: unknown;
+} | null | undefined, band: ZoomBand): MapViewport | null;
+/** Equal within a relative 1e-9: a round trip through pixels is never a change. */
+export declare function sameView(left: MapViewport, right: MapViewport): boolean;
 
 // viewport/useElementSize.d.ts
 import { type RefObject } from "react";
