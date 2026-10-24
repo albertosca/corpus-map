@@ -36,6 +36,14 @@ import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition 
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
+import {
+  fromPublic,
+  type MapViewport,
+  sameView,
+  sanitise,
+  toPublic,
+  type ViewportChangeReason,
+} from "./viewport/publicViewport";
 import { useElementSize } from "./viewport/useElementSize";
 import {
   panBy,
@@ -114,6 +122,20 @@ export interface CorpusMapProps {
    * one commit per frame (metric 13).
    */
   onViewChange?: ((view: CorpusMapView) => void) | undefined;
+  /**
+   * Present means controlled: the map draws this view and only proposes
+   * changes through `onViewportChange` (spec slice C §3). Invalid values
+   * draw the fit; a zoom outside 1/8–64 of the fit is clamped.
+   */
+  viewport?: MapViewport | undefined;
+  /** The initial view, for the first spec only; later specs refit. */
+  defaultViewport?: MapViewport | undefined;
+  /**
+   * Fired in both modes for every real change, never for a box change:
+   * `"interaction"`, `"fit"` (`fit()`, Back to overview) or `"spec"` (the
+   * fit a new spec proposes). Never called during render.
+   */
+  onViewportChange?: ((viewport: MapViewport, details: { reason: ViewportChangeReason }) => void) | undefined;
   /** The map surface's accessible name. Defaults to "Map of N items", also when blank. */
   label?: string | undefined;
   /** The level (2–6, default 3) of every heading the map renders, in the accessible tree and the legend; pick the one that fits the host page's outline. */
@@ -161,6 +183,27 @@ const FIT_PADDING = 24;
  */
 const MAXIMUM_ZOOM_OUT = 8;
 const MAXIMUM_ZOOM_IN = 64;
+
+/** The wheel's own zoom band, relative to the fit: what a public `zoom` is clamped to (spec slice C §3). */
+const ZOOM_BAND = { minimum: 1 / MAXIMUM_ZOOM_OUT, maximum: MAXIMUM_ZOOM_IN };
+
+/** The view to open on: a valid `defaultViewport`, else the fit. */
+function startingView(
+  defaultViewport: MapViewport | undefined,
+  fit: Viewport,
+  width: number,
+  height: number,
+): Viewport {
+  const view = sanitise(defaultViewport, ZOOM_BAND);
+  return view === null ? fit : fromPublic(view, fit.scale, width, height);
+}
+
+type ViewportUpdate = Viewport | ((previous: Viewport) => Viewport);
+/** A regime reset a view change carries (a fit, a keyboard regime step), applied when that view is drawn. */
+interface RegimeReset {
+  regime: Regime;
+  refit: boolean;
+}
 
 /** How long keyboard movement must rest before the on-screen count is announced (spec slice B §4). */
 const COUNT_ANNOUNCEMENT_DELAY = 500;
@@ -360,8 +403,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // The fitted view is ratio 1; it shows group names only when that is far.
   const groupNamesAtFit = regimeAt(1, thresholds, "far", tuning.hysteresis) === "far";
-  const [viewport, setViewport] = useState<Viewport>(() =>
-    fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+  const [ownViewport, setOwnViewport] = useState<Viewport>(() =>
+    startingView(
+      properties.defaultViewport,
+      fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+      width,
+      height,
+    ),
   );
   // A theme or font change rebuilds the scene and so moves `fitted` (and
   // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
@@ -370,6 +418,18 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     [spec, scene, width, height, groupNamesAtFit],
   );
   const fitScale = fitted.scale;
+  // The controlled view, rebuilt from primitives so a fresh object literal
+  // with the same numbers costs nothing (spec slice C §5).
+  const viewportControlled = properties.viewport !== undefined;
+  const controlledHorizontal: unknown = properties.viewport?.centre?.[0];
+  const controlledVertical: unknown = properties.viewport?.centre?.[1];
+  const controlledZoom: unknown = properties.viewport?.zoom;
+  const controlledViewport = useMemo(() => {
+    if (!viewportControlled) return fitted;
+    const view = sanitise({ centre: [controlledHorizontal, controlledVertical], zoom: controlledZoom }, ZOOM_BAND);
+    return view === null ? fitted : fromPublic(view, fitted.scale, width, height);
+  }, [viewportControlled, controlledHorizontal, controlledVertical, controlledZoom, fitted, width, height]);
+  const viewport = viewportControlled ? controlledViewport : ownViewport;
   // Hysteresis regime; declared before the refit below (rather than nearer
   // where `ratio`/`next` are computed) so a spec/box swap can reset it in
   // the same render-phase adjustment that resets `viewport`, not just `viewport` alone.
@@ -403,6 +463,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // through as props is that case, not a different one. A consumer who
   // wants a refit after a box change calls `fit()` on the handle obtained
   // through the `ref` prop (`CorpusMapHandle`, showcase Task 3).
+  //
+  // Controlled (spec slice C §4): the library never moves the view on its
+  // own. A new spec leaves the drawn view where the prop puts it, and an
+  // effect below proposes the fit with `reason: "spec"`; a box change needs
+  // nothing here, since `controlledViewport` keeps the public zoom against
+  // the new fit. The first spec opens on `defaultViewport` when it is valid.
   const [fitBasis, setFitBasis] = useState<{ spec: MapSpec; width: number; height: number } | null>(
     ready ? { spec, width, height } : null,
   );
@@ -412,15 +478,22 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // view change; the demo clears its indicator on a corpus switch and
   // waits for that call).
   const [refits, setRefits] = useState(0);
+  // Counts spec swaps after the first, for the `"spec"` proposal below.
+  const [, setSpecChanges] = useState(0);
   if (ready) {
     if (fitBasis === null || fitBasis.spec !== spec) {
       setFitBasis({ spec, width, height });
-      if (fitBasis !== null) setRefits((count) => count + 1);
-      setViewport(fitted);
-      setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+      if (fitBasis !== null) setSpecChanges((count) => count + 1);
+      if (!viewportControlled) {
+        if (fitBasis !== null) setRefits((count) => count + 1);
+        const initial = fitBasis === null ? startingView(properties.defaultViewport, fitted, width, height) : fitted;
+        setOwnViewport(initial);
+        setRegime(regimeAt(initial.scale / fitted.scale, thresholds, "far", tuning.hysteresis));
+      }
     } else if (fitBasis.width !== width || fitBasis.height !== height) {
       setFitBasis({ spec, width, height });
-      setViewport(recenterOnBoxChange(viewport, fitBasis.width, fitBasis.height, width, height));
+      if (!viewportControlled)
+        setOwnViewport(recenterOnBoxChange(ownViewport, fitBasis.width, fitBasis.height, width, height));
     }
   }
   const fitScaleReference = useRef(fitScale);
@@ -431,12 +504,59 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useEffect(() => {
     tuningReference.current = tuning;
   }, [tuning]);
+  // One gate for every view change (spec slice C §5). Reads refs only, so it
+  // is stable and safe inside the `[]` wheel listener and the rAF flush.
+  // `requestedReference` holds the last request since the last commit, so
+  // two updaters before a re-render compose instead of the second one
+  // basing on the stale drawn view; every commit clears it, so a consumer
+  // that ignores a request is asked again from what is actually drawn.
+  const drawnReference = useRef({ viewport, fitScale, width, height, controlled: viewportControlled });
+  const requestedReference = useRef<Viewport | null>(null);
+  // A regime reset (a fit) proposed to a controlled consumer, applied once the
+  // drawn view is that fit: the regime follows the drawn view (spec slice C §4).
+  const pendingResetReference = useRef<{ view: MapViewport; reset: RegimeReset } | null>(null);
+  const onViewportChangeReference = useRef(properties.onViewportChange);
+  useLayoutEffect(() => {
+    onViewportChangeReference.current = properties.onViewportChange;
+    drawnReference.current = { viewport, fitScale, width, height, controlled: viewportControlled };
+    requestedReference.current = null;
+  });
+  useLayoutEffect(() => {
+    const pendingReset = pendingResetReference.current;
+    if (pendingReset && sameView(toPublic(viewport, fitScale, width, height), pendingReset.view)) {
+      pendingResetReference.current = null;
+      setRegime(pendingReset.reset.regime);
+      if (pendingReset.reset.refit) setRefits((count) => count + 1);
+    }
+  }, [viewport, fitScale, width, height]);
+  const requestViewport = useCallback((update: ViewportUpdate, reason: ViewportChangeReason, reset?: RegimeReset) => {
+    const drawn = drawnReference.current;
+    const base = requestedReference.current ?? drawn.viewport;
+    const target = typeof update === "function" ? update(base) : update;
+    const view = toPublic(target, drawn.fitScale, drawn.width, drawn.height);
+    const same = sameView(view, toPublic(base, drawn.fitScale, drawn.width, drawn.height));
+    const applyReset = (applied: RegimeReset) => {
+      setRegime(applied.regime);
+      if (applied.refit) setRefits((count) => count + 1);
+    };
+    if (drawn.controlled) {
+      if (reset === undefined) pendingResetReference.current = null;
+      else if (same) applyReset(reset);
+      else pendingResetReference.current = { view, reset };
+    } else {
+      if (!same) setOwnViewport(target);
+      if (reset !== undefined) applyReset(reset);
+    }
+    if (same) return;
+    requestedReference.current = target;
+    onViewportChangeReference.current?.(view, { reason });
+  }, []);
   const canvasReference = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Press | null>(null);
   const pending = useRef<Pending | null>(null);
   // A world point from a minimap press/drag (showcase Task 4), flushed in
   // the same rAF-coalesced frame as `pending`'s drag delta, through the same
-  // `setViewport` — never its own, separately-scheduled commit.
+  // `requestViewport` — never its own, separately-scheduled commit.
   const pendingCentre = useRef<{ wx: number; wy: number } | null>(null);
   const rafId = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
@@ -590,8 +710,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const onLegendEntry = (id: string) => {
     const bounds = ringBounds(scene.shapes.get(id) ?? []);
     if (bounds === null) return;
-    setViewport(
+    requestViewport(
       fitClamped(bounds, width, height, FIT_PADDING, fitScale / MAXIMUM_ZOOM_OUT, fitScale * MAXIMUM_ZOOM_IN),
+      "interaction",
     );
   };
   // Lands in near by construction (spec slice B §5, amended): the loose
@@ -606,14 +727,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const nearScale = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
     const view = fitClamped(bounds, width, height, FIT_PADDING, nearScale, fitScale * MAXIMUM_ZOOM_IN);
     if (fitBounds(bounds, width, height, FIT_PADDING).scale >= nearScale) {
-      setViewport(view);
+      requestViewport(view, "interaction");
       return;
     }
     const middleHorizontal = (bounds.minX + bounds.maxX) / 2;
     const middleVertical = (bounds.minY + bounds.maxY) / 2;
     const distance = (node: (typeof loose)[number]) => Math.hypot(node.x - middleHorizontal, node.y - middleVertical);
     const nearest = loose.reduce((best, node) => (distance(node) < distance(best) ? node : best));
-    setViewport({ scale: view.scale, tx: width / 2 - nearest.x * view.scale, ty: height / 2 - nearest.y * view.scale });
+    requestViewport(
+      { scale: view.scale, tx: width / 2 - nearest.x * view.scale, ty: height / 2 - nearest.y * view.scale },
+      "interaction",
+    );
   };
   const onLegendEntryReference = useRef(onLegendEntry);
   useEffect(() => {
@@ -627,7 +751,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // *object* they build is not something to key an effect on by identity
   // (fix round 1, finding 2 — the project's own rule: never key an
   // expensive memo or effect on an object's identity, key on the values
-  // used): `viewport` is minted fresh by every `setViewport`, including ones an
+  // used): `viewport` is minted fresh by every view change, including ones an
   // unrelated commit (a hover update, a freshly-literal `theme`/`tuning`
   // prop) never touches, so a plain object literal here changed identity —
   // and re-triggered the minimap's whole repaint — on every commit, not
@@ -717,7 +841,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // again when `next`/`ratio`/`visibleCount` differ from the previous
   // commit's, or after a refit (`refits`). Being tied to commits is what
   // keeps it to at most once per animation frame during a drag: the drag's
-  // own accumulated pan is already flushed into a single `setViewport` per frame
+  // own accumulated pan is already flushed into a single `requestViewport` per frame
   // (metric 13), so there is at most one commit per frame for this effect
   // to react to.
   const onViewChangeReference = useRef(onViewChange);
@@ -738,10 +862,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   const zoomStep = (direction: "in" | "out") => {
     const factor = wheelZoomFactor({ deltaY: direction === "in" ? -120 : 120, deltaMode: 0, ctrlKey: false }, tuning);
-    setViewport((previous) => {
+    requestViewport((previous) => {
       const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
       return zoomTo(previous, width / 2, height / 2, target);
-    });
+    }, "interaction");
   };
   // Resets the regime hysteresis the same way a `spec` change does (the
   // `fitBasis` branch above): a fit is an explicit "back to the
@@ -750,18 +874,19 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // had zoomed to could stay "near"/"mid" even though the view is back
   // at the fitted one — the same staleness the `fitBasis` comment
   // documents for a corpus swap, reproduced here by an explicit fit
-  // instead of a new spec (see this file's `.handle.test.tsx`).
-  const fitView = () => {
-    setViewport(fitted);
-    setRefits((count) => count + 1);
-    setRegime(regimeAt(1, thresholds, "far", tuning.hysteresis));
+  // instead of a new spec (see this file's `.handle.test.tsx`). Controlled,
+  // the reset waits in the gate until the consumer draws the fit. `reason`
+  // is "fit" for an explicit fit (the handle, the fit key, back to overview)
+  // and "interaction" when Escape's regime-out happens to land on the fit.
+  const fitView = (reason: ViewportChangeReason = "fit") => {
+    requestViewport(fitted, reason, { regime: regimeAt(1, thresholds, "far", tuning.hysteresis), refit: true });
   };
 
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is
   // rebuilt every commit and its closures — `viewport`/`fitScale`/`fitted`/
   // `tuning`/`width`/`height`/`thresholds` — are always the ones from the
   // render that just committed, never a stale render from before a spec or
-  // box change. `zoomStep` uses `setViewport`'s functional-update form
+  // box change. `zoomStep` uses `requestViewport`'s functional-update form
   // (not the closed-over `viewport` directly) so a burst of calls made between
   // renders — the showcase's zoom button held down, or this file's own
   // 200-calls test — each sees the previous call's result, not the same
@@ -769,7 +894,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useImperativeHandle(handleReference, () => ({
     zoomIn: () => zoomStep("in"),
     zoomOut: () => zoomStep("out"),
-    fit: fitView,
+    fit: () => fitView("fit"),
     focus: () => rootReference.current?.focus(),
   }));
 
@@ -806,14 +931,19 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     if (command.kind === "regimeOut") {
       const target = regimeOutRatio(next, ratio, thresholds);
       if (target === null) return;
-      if (target === 1) fitView();
-      else {
-        setViewport((previous) => zoomTo(previous, width / 2, height / 2, fitScale * target));
-        setRegime(regimeAt(target, thresholds, "far", tuning.hysteresis));
-      }
-    } else if (command.kind === "fit") fitView();
+      if (target === 1) fitView("interaction");
+      else
+        requestViewport((previous) => zoomTo(previous, width / 2, height / 2, fitScale * target), "interaction", {
+          regime: regimeAt(target, thresholds, "far", tuning.hysteresis),
+          refit: false,
+        });
+    } else if (command.kind === "fit") fitView("fit");
     else if (command.kind === "zoom") zoomStep(command.direction);
-    else setViewport((previous) => panBy(previous, -command.horizontal * width, -command.vertical * height));
+    else
+      requestViewport(
+        (previous) => panBy(previous, -command.horizontal * width, -command.vertical * height),
+        "interaction",
+      );
     event.preventDefault();
     setSurfaceFocusVisible(true);
     if (hoverReference.current !== null) setHover(null);
@@ -834,11 +964,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         { deltaY: event.deltaY, deltaMode: event.deltaMode, ctrlKey: event.ctrlKey },
         tuningReference.current,
       );
-      setViewport((previous) => {
+      requestViewport((previous) => {
         const fit = fitScaleReference.current;
         const target = zoomStepScale(previous.scale, factor, fit, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
         return zoomTo(previous, event.clientX - rect.left, event.clientY - rect.top, target);
-      });
+      }, "interaction");
       // A wheel zoom moves every on-screen point, so a hover name resolved
       // against the pre-zoom viewport is now anchored to the wrong screen
       // position; there is no guarantee of a further pointer move to
@@ -850,7 +980,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [requestViewport]);
 
   // A press anywhere inside the root, including the minimap and the legend
   // that stop the event before it bubbles here, marks the focus it causes as
@@ -956,7 +1086,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // Schedules the one rAF flush a burst of pointer moves, or a minimap
   // press/drag, coalesces into (metric 13) — both routes share this single
   // `rafId`, so a move and a minimap press arriving in the same frame still
-  // cost one commit, through the same `setViewport`. A no-op if a flush is
+  // cost one commit, through the same `requestViewport`. A no-op if a flush is
   // already pending.
   const scheduleFrame = () => {
     if (rafId.current !== null) return;
@@ -964,20 +1094,23 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       rafId.current = null;
       const accumulated = pending.current;
       pending.current = null;
-      if (accumulated) setViewport((previous) => panBy(previous, accumulated.dx, accumulated.dy));
+      if (accumulated) requestViewport((previous) => panBy(previous, accumulated.dx, accumulated.dy), "interaction");
       // A minimap press/drag (showcase Task 4): centres the main view on
-      // the pressed world point through the very same `setViewport` a drag pans
+      // the pressed world point through the very same `requestViewport` a drag pans
       // with, just landing on an absolute `tx`/`ty` instead of an
       // accumulated delta — so `onViewChange` reacts to it exactly as it
       // would to any other committed view change, with no separate wiring.
       const centre = pendingCentre.current;
       pendingCentre.current = null;
       if (centre) {
-        setViewport((previous) => ({
-          scale: previous.scale,
-          tx: width / 2 - centre.wx * previous.scale,
-          ty: height / 2 - centre.wy * previous.scale,
-        }));
+        requestViewport(
+          (previous) => ({
+            scale: previous.scale,
+            tx: width / 2 - centre.wx * previous.scale,
+            ty: height / 2 - centre.wy * previous.scale,
+          }),
+          "interaction",
+        );
       }
       const hoverPosition = hoverPoint.current;
       // A press or a `pointerleave` already cleared `hover` synchronously at
@@ -1014,8 +1147,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // The minimap's press/drag callback (showcase Task 4): queues a world
   // point to centre on and reuses `scheduleFrame`, so it is frame-coalesced
-  // and lands through the same `setViewport` the drag above uses — never a
-  // separate, uncoalesced `setViewport` call of its own.
+  // and lands through the same `requestViewport` the drag above uses — never a
+  // separate, uncoalesced view change of its own.
   const onMinimapPoint = (worldHorizontal: number, worldVertical: number) => {
     pendingCentre.current = { wx: worldHorizontal, wy: worldVertical };
     scheduleFrame();
@@ -1229,14 +1362,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               const [centreHorizontal, centreVertical] = territory.centroid;
               const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
               const scale = Math.min(fitScale * MAXIMUM_ZOOM_IN, Math.max(fitScale / MAXIMUM_ZOOM_OUT, target));
-              setViewport({ scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale });
+              requestViewport(
+                { scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale },
+                "interaction",
+              );
             }}
             onSelect={onSelect}
             groups={scene.groups}
             hidden={dimmed}
             heading={headingTag}
             theme={theme}
-            onOverview={fitView}
+            onOverview={() => fitView("fit")}
             onUnassigned={onUnassigned}
             onFocusFallback={() => rootReference.current?.focus()}
             onTerritoryFocusChange={setFocusedTerritory}
