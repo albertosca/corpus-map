@@ -117,6 +117,8 @@ export interface CorpusMapProps {
   defaultSelectedId?: string | null | undefined;
   /** Fired only when the selected id changes, `null` included: a press on a point, a press on no point, Escape, a tree item. */
   onSelectedChange?: ((id: string | null) => void) | undefined;
+  /** The territory, not dimmed, whose shape holds the box centre while the regime is near; `null` otherwise. Fired only on a change, starting from `null` (spec slice C §3). */
+  onOpenTerritoryChange?: ((id: string | null) => void) | undefined;
   /** Fired once on mount with the initial regime, then on every change. */
   onRegimeChange?: ((regime: Regime) => void) | undefined;
   /**
@@ -730,6 +732,28 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
   // same count a maxed-out card cap would otherwise hide (showcase Task 3).
   const visibleCount = ready ? visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).length : 0;
+
+  // The open territory (spec slice C §5): only computed at near. Last of
+  // `territoriesAt` (most members first), so the innermost of nested ones.
+  const centreHorizontal = width / 2;
+  const centreVertical = height / 2;
+  const openCandidates =
+    ready && next === "near"
+      ? territoriesAt(scene, spec, toWorld(viewport, centreHorizontal, centreVertical), dimmed)
+      : [];
+  const openTerritory = openCandidates[openCandidates.length - 1] ?? null;
+  const onOpenTerritoryChangeReference = useRef(properties.onOpenTerritoryChange);
+  useEffect(() => {
+    onOpenTerritoryChangeReference.current = properties.onOpenTerritoryChange;
+  });
+  // Starts at null, so a map that opens outside near never fires; deduped on
+  // the value, so StrictMode's second run and an unrelated commit do not.
+  const firedOpenTerritory = useRef<string | null>(null);
+  useEffect(() => {
+    if (firedOpenTerritory.current === openTerritory) return;
+    firedOpenTerritory.current = openTerritory;
+    onOpenTerritoryChangeReference.current?.(openTerritory);
+  }, [openTerritory]);
 
   // `false`/absent (no prop, or `minimap={false}`) are identical: no corner,
   // no `Minimap`. `true` picks the default corner; `{ corner }` picks that
