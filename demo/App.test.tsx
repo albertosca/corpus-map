@@ -1413,8 +1413,12 @@ describe("App (showcase Task 5)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
       fireEvent.change(screen.getByLabelText(/Card width/), { target: { value: "280" } });
       fireEvent.change(screen.getByLabelText(/Card height/), { target: { value: "140" } });
-      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
+      // The smallest size the control allows: any non-default value proves the
+      // reset, and each change regenerates and repaints the corpus, which at
+      // 9000 nodes ran this test close to its 15 s timeout under suite load.
+      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "1000" } });
       fireEvent.change(screen.getByLabelText(/Seed/), { target: { value: "77" } });
+      expect((screen.getByLabelText(/Synthetic size/) as HTMLInputElement).value).toBe("1000");
       expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("280");
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("77");
 
