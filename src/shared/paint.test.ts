@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { generateCorpus } from "../../fixtures/synthetic/generate";
+import { nestedSpec, singleChildSpec } from "../../test/specs";
 import { estimateText } from "../labels/placement";
 import { DEFAULT_THRESHOLDS, type Regime } from "../lod/lod";
 import { UNVISITED_RING_WIDTH } from "../points/paintPoints";
-import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
+import { GROUP_OUTLINE_WIDTH, TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { fitSpec, worldBounds } from "../viewport/fit";
 import { DIMMED_ALPHA } from "./dimmed";
 import { type Frame, paint } from "./paint";
@@ -591,5 +592,64 @@ describe("dimmed territories", () => {
     paintSpec(spec, after, "mid", { dimmed: new Set() });
     expect(after.calls).toEqual(before.calls);
     expect(after.alphas).toEqual(before.alphas);
+  });
+});
+
+describe("families (spec slice E §4)", () => {
+  const nested = nestedSpec();
+  const nestedScene = buildScene(nested, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const frameAt = (groupAlpha: number) => ({
+    regime: "far" as const,
+    pointAlpha: 0,
+    width: 800,
+    height: 600,
+    groupAlpha,
+  });
+  const record = (groupAlpha: number, target = nested, targetScene = nestedScene, dimmed?: ReadonlySet<string>) => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      targetScene,
+      target,
+      fitSpec(target, 800, 600, 24),
+      { ...frameAt(groupAlpha), dimmed },
+      DEFAULT_THEME,
+    );
+    return surface;
+  };
+
+  it("paints only the families below the threshold, each outlined as a frame", () => {
+    const surface = record(1);
+    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
+    expect(surface.outlines.length).toBeGreaterThan(0);
+    expect(surface.outlines.every((outline) => outline.width === GROUP_OUTLINE_WIDTH)).toBe(true);
+    expect(surface.outlines.every((outline) => outline.color === nestedScene.groupColours.get("p"))).toBe(true);
+  });
+
+  it("paints the leaves inside their family's frame above it", () => {
+    const surface = record(0);
+    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
+    expect(surface.outlines.some((outline) => outline.width === GROUP_OUTLINE_WIDTH)).toBe(true);
+    expect(surface.outlines.some((outline) => outline.width === TERRITORY_OUTLINE_WIDTH)).toBe(true);
+    const lastLeaf = surface.outlines.map((outline) => outline.width).lastIndexOf(TERRITORY_OUTLINE_WIDTH);
+    const firstFrame = surface.outlines.findIndex((outline) => outline.width === GROUP_OUTLINE_WIDTH);
+    expect(firstFrame).toBeGreaterThan(lastLeaf);
+  });
+
+  it("cross-fades the two fill layers inside the band", () => {
+    const surface = record(0.25);
+    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha * 0.75, DEFAULT_THEME.territoryFillAlpha * 0.25]);
+  });
+
+  it("paints a family of one child once in the fill layer", () => {
+    const single = singleChildSpec();
+    const surface = record(1, single, buildScene(single, DEFAULT_TUNING, DEFAULT_THEME, estimateText));
+    expect(surface.layers).toHaveLength(1);
+  });
+
+  it("dims a family whose every leaf is dimmed", () => {
+    const surface = record(1, nested, nestedScene, new Set(["a", "b"]));
+    expect(surface.alphas).toContain(DIMMED_ALPHA);
+    expect(record(1, nested, nestedScene, new Set(["a"])).alphas).not.toContain(DIMMED_ALPHA);
   });
 });

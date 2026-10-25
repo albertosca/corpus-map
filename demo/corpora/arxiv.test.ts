@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
-import { fade, regimeAt } from "../../src/lod/regime";
+import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
 import { paint } from "../../src/shared/paint";
 import { buildScene, type Scene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
@@ -284,6 +284,63 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
       // names across the canvas edge, where a position-dependent rule pops.
       expect(compared).toBeGreaterThan(0);
       expect(crossedEdge).toBeGreaterThan(0);
+    });
+  }
+});
+
+/**
+ * Spec slice E §4 on the real corpus: zooming from the fitted view to twice
+ * it, the family layer hands over to the leaf layer as a cross-fade, so no
+ * fill layer's alpha jumps by more than half the fill between frames.
+ */
+describe("metric 18: no pop at the family swap (arXiv, painted)", () => {
+  const spec = validateSpec(rawSpec);
+  const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const options = {
+    midAt: DEFAULT_THRESHOLDS.midAt,
+    groupNamesUntil: DEFAULT_TUNING.groupNamesUntil,
+    fadeBand: DEFAULT_TUNING.fadeBand,
+    hysteresis: DEFAULT_TUNING.hysteresis,
+  };
+  const steps = 40;
+
+  for (const [width, height] of [
+    [1440, 900],
+    [375, 812],
+  ] as const) {
+    it(`metric 18: no pop at the family swap at ${width}x${height}`, () => {
+      const fit = fitScene(spec, scene, width, height, 24);
+      let regime = regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis);
+      let previous: number[] | null = null;
+      const jumps: string[] = [];
+      for (let index = 0; index <= steps; index += 1) {
+        const ratio = 2 ** (index / steps);
+        regime = regimeAt(ratio, DEFAULT_THRESHOLDS, regime, DEFAULT_TUNING.hysteresis);
+        const groupAlpha = groupNameAlpha(ratio, regime, options);
+        const viewport = { scale: fit.scale * ratio, tx: fit.tx, ty: fit.ty };
+        const surface = new RecordingSurface();
+        paint(surface, scene, spec, viewport, { regime, pointAlpha: 0, width, height, groupAlpha }, DEFAULT_THEME);
+        // Leaves first, families second: a missing layer counts as alpha 0.
+        const layers =
+          surface.layers.length === 2
+            ? surface.layers
+            : groupAlpha >= 1
+              ? [0, surface.layers[0] ?? 0]
+              : [surface.layers[0] ?? 0, 0];
+        if (previous !== null)
+          for (const [layer, alpha] of layers.entries()) {
+            const jump = Math.abs(alpha - (previous[layer] ?? 0));
+            if (jump > DEFAULT_THEME.territoryFillAlpha * 0.5)
+              jumps.push(`ratio ${ratio.toFixed(3)} layer ${layer}: ${jump}`);
+          }
+        previous = layers;
+      }
+      expect(jumps).toEqual([]);
+      // The sweep crosses the swap: it starts on families alone and ends on leaves.
+      expect(groupNameAlpha(1, "far", options)).toBe(1);
+      expect(
+        groupNameAlpha(2, regimeAt(2, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis), options),
+      ).toBeLessThan(1);
     });
   }
 });

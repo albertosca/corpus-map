@@ -31,7 +31,7 @@ import { leafTerritories, type MapNode, type MapSpec, validateSpec } from "./sha
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
-import { onScreenTerritories, territoriesAt } from "./territories/hitTest";
+import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
@@ -293,7 +293,7 @@ interface Pending {
  */
 type HoverState =
   | { kind: "point"; id: string; label: string; x: number; y: number }
-  | { kind: "territories"; ids: string[]; x: number; y: number };
+  | { kind: "territories"; level: "family" | "territory"; ids: string[]; x: number; y: number };
 
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -403,6 +403,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       theme.territoryLabel,
     ],
   );
+
+  const groupsById = useMemo(() => new Map(scene.groups.map((group) => [group.id, group] as const)), [scene.groups]);
 
   // Each territory's group name, for the territory balloon's last line.
   const groupOf = useMemo(() => {
@@ -705,7 +707,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     hover !== null &&
     dimmed.size > 0 &&
     (hover.kind === "territories"
-      ? hover.ids.some((id) => dimmed.has(id))
+      ? hover.level === "family"
+        ? hover.ids.some((id) => (groupsById.get(id)?.members ?? []).every((member) => dimmed.has(member)))
+        : hover.ids.some((id) => dimmed.has(id))
       : dimmed.has(nodesById.get(hover.id)?.territory ?? ""))
   )
     setHover(null);
@@ -1192,20 +1196,29 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       }
       return;
     }
+    // Below the family threshold the families are what is painted, so they are what is named (spec slice E §4).
+    const level = scene.groups.length > 0 && groupAlpha >= 0.5 ? "family" : "territory";
+    const world = toWorld(viewport, position.x, position.y);
     const ids =
-      visibleCardAt(position.clientX, position.clientY) === null
-        ? territoriesAt(scene, spec, toWorld(viewport, position.x, position.y), dimmed)
-        : [];
+      visibleCardAt(position.clientX, position.clientY) !== null
+        ? []
+        : level === "family"
+          ? familiesAt(scene, world, dimmed)
+          : territoriesAt(scene, spec, world, dimmed);
     if (ids.length === 0) {
       if (previousHover !== null) setHover(null);
       return;
     }
-    if (previousHover?.kind === "territories" && JSON.stringify(previousHover.ids) === JSON.stringify(ids)) {
+    if (
+      previousHover?.kind === "territories" &&
+      previousHover.level === level &&
+      JSON.stringify(previousHover.ids) === JSON.stringify(ids)
+    ) {
       hoverReference.current = { ...previousHover, x: position.x, y: position.y };
       placeTooltip(tooltipReference.current as HTMLDivElement, position.x, position.y, width, height);
       return;
     }
-    setHover({ kind: "territories", ids, x: position.x, y: position.y });
+    setHover({ kind: "territories", level, ids, x: position.x, y: position.y });
   };
 
   // Schedules the one rAF flush a burst of pointer moves, or a minimap
@@ -1441,7 +1454,26 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
                 maxWidth: 260,
               }}
             >
-              {hover.ids.slice(0, TOOLTIP_ROW_LIMIT).map((id) => (
+              {hover.level === "family"
+                ? hover.ids.slice(0, TOOLTIP_ROW_LIMIT).map((id) => {
+                    const count = groupsById.get(id)?.members.length ?? 0;
+                    return (
+                      <div key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            flex: "none",
+                            borderRadius: 2,
+                            background: scene.groupColours.get(id) ?? theme.pointNeutral,
+                          }}
+                        />
+                        <span>{`${groupsById.get(id)?.name} · ${count} ${count === 1 ? "territory" : "territories"}`}</span>
+                      </div>
+                    );
+                  })
+                : null}
+              {(hover.level === "family" ? [] : hover.ids.slice(0, TOOLTIP_ROW_LIMIT)).map((id) => (
                 <div key={id}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span

@@ -422,3 +422,51 @@ describe("territory tooltip contrast", () => {
     }
   });
 });
+
+describe("territory tooltip below the family threshold (spec slice E §4)", () => {
+  const family = validateSpec({
+    version: "1",
+    territories: [
+      { id: "p", name: "Parent", members: [], centroid: [11, 5], boundary: square(-2, -2, 26) },
+      { id: "a", name: "Alpha", members: ["a0", "a1"], centroid: [5, 5], boundary: square(0, 0, 10), parent: "p" },
+      { id: "b", name: "Beta", members: ["b0"], centroid: [17, 5], boundary: square(12, 0, 10), parent: "p" },
+      { id: "solo", name: "Solo", members: ["s0"], centroid: [45, 5], boundary: square(40, 0, 10) },
+    ],
+    nodes: [
+      { id: "a0", label: "a0", x: 2, y: 2, territory: "a" },
+      { id: "a1", label: "a1", x: 8, y: 8, territory: "a" },
+      { id: "b0", label: "b0", x: 17, y: 5, territory: "b" },
+      { id: "s0", label: "s0", x: 45, y: 5, territory: "solo" },
+    ],
+  });
+
+  it("names the family and its child count over a child at the fit", () => {
+    const { container, surface } = mount({}, family);
+    hoverAt(surface, screenAt(family, [5, 5]));
+    const tooltip = container.querySelector("[data-hover-territories]");
+    expect(tooltip?.getAttribute("data-hover-territories")).toBe("p");
+    expect(tooltip?.textContent).toContain("Parent");
+    expect(tooltip?.textContent).toContain("2 territories");
+    expect(tooltip?.textContent).not.toContain("Alpha");
+  });
+
+  it("names the family over its bare fill between two children", () => {
+    const { container, surface } = mount({}, family);
+    hoverAt(surface, screenAt(family, [11, 5]));
+    expect(container.querySelector("[data-hover-territories]")?.getAttribute("data-hover-territories")).toBe("p");
+  });
+
+  it("counts a family of one as 1 territory", () => {
+    const { container, surface } = mount({}, family);
+    hoverAt(surface, screenAt(family, [45, 5]));
+    const tooltip = container.querySelector("[data-hover-territories]");
+    expect(tooltip?.textContent).toContain("1 territory");
+    expect(tooltip?.textContent).not.toContain("1 territories");
+  });
+
+  it("names nothing over a family whose every child is hidden", () => {
+    const { container, surface } = mount({ hiddenTerritories: ["a", "b"] }, family);
+    hoverAt(surface, screenAt(family, [11, 5]));
+    expect(container.querySelector("[data-hover-territories]")).toBeNull();
+  });
+});

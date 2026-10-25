@@ -43,7 +43,8 @@ export interface Frame {
 
 /**
  * The single place that decides paint order: the territory fill layer
- * (largest first), territory outlines, points (with the selection ring), the keyboard-focus outline,
+ * (largest first; with groups, the leaves' and the families' layers
+ * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (with the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -59,7 +60,7 @@ export function paint(
   surface.clear();
   const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
   const dimmed = frame.dimmed ?? NO_DIMMED;
-  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed);
+  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);

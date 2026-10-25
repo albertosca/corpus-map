@@ -108,3 +108,41 @@ describe("paint order (slice D)", () => {
     expect(surface.rings).toEqual([]);
   });
 });
+
+describe("a spec without groups", () => {
+  it("paints exactly the calls it painted before families existed (spec slice E §4)", () => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      scene,
+      spec,
+      { scale: 40, tx: 0, ty: 0 },
+      { regime: "far", pointAlpha: 0, width: 400, height: 400, groupAlpha: 1 },
+      DEFAULT_THEME,
+    );
+    expect({
+      calls: surface.calls,
+      layers: surface.layers,
+      outlines: surface.outlines.length,
+      alphas: surface.alphas,
+    }).toMatchInlineSnapshot(`
+      {
+        "alphas": [],
+        "calls": [
+          "clear",
+          "layer",
+          "polygon",
+          "polygon",
+          "layerEnd",
+          "outline",
+          "outline",
+          "text",
+        ],
+        "layers": [
+          0.2,
+        ],
+        "outlines": 2,
+      }
+    `);
+  });
+});

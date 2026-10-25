@@ -96,7 +96,10 @@ describe("accessibility audit (spec slice B §7)", () => {
       for (const callback of frames.splice(0)) callback(0);
     });
     animationFrame.mockRestore();
-    expect(container.querySelector("[data-hover-territories]")?.getAttribute("data-hover-territories")).toBe("t5");
+    // At fit the grid's derived families are what is painted, so the balloon names them (spec slice E §4).
+    expect(container.querySelector("[data-hover-territories]")?.getAttribute("data-hover-territories")).toMatch(
+      /^group:/,
+    );
     await expectClean(container);
   });
 });
