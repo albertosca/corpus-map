@@ -31,6 +31,11 @@ describe("parseGroupNames", () => {
     expect(parseGroupNames(answer({ "group:a": name, "group:b": "Systems" }), GROUPS).get("group:a")).toBe(name);
   });
 
+  it("reads bare JSON whose names contain backticks", () => {
+    const names = parseGroupNames(answer({ "group:a": "A```b```", "group:b": "Systems" }), GROUPS);
+    expect(names.get("group:a")).toBe("A```b```");
+  });
+
   const failures: Array<[string, string, RegExp]> = [
     ["an answer that is not JSON", "Machine learning, Systems", /not JSON/],
     ["an answer without a names object", JSON.stringify({ groups: {} }), /no "names" object/],
@@ -42,6 +47,7 @@ describe("parseGroupNames", () => {
     ],
     ["a name that is not a string", answer({ "group:a": 3, "group:b": "B" }), /group:a is not a string/],
     ["a name empty after trimming", answer({ "group:a": "  ", "group:b": "B" }), /group:a is empty/],
+    ["a name of invisible characters only", answer({ "group:a": "\u200b\u2060", "group:b": "B" }), /group:a is empty/],
     [
       "a name one character too long",
       answer({ "group:a": "x".repeat(GROUP_NAME_MAXIMUM_LENGTH + 1), "group:b": "B" }),

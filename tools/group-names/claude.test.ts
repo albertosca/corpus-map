@@ -99,12 +99,15 @@ describe("requestGroupNames", () => {
   });
 
   it("surfaces the API's own error message and never the key", async () => {
-    const failure = { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } };
+    const failure = {
+      type: "error",
+      error: { type: "authentication_error", message: "invalid authentication credentials" },
+    };
     const thrown = await requestGroupNames(clientAnswering(401, failure), "p", GROUPS, { model: "m" }).catch(
       (error: unknown) => error,
     );
     expect(thrown).toBeInstanceOf(Error);
-    expect(String((thrown as Error).message)).toContain("invalid x-api-key");
+    expect(String((thrown as Error).message)).toContain("invalid authentication credentials");
     expect(JSON.stringify(thrown)).not.toContain(API_KEY);
     expect(String((thrown as Error).message)).not.toContain(API_KEY);
   });

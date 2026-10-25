@@ -1,4 +1,6 @@
+import { validateSpec } from "../../src/shared/spec";
 import type { TerritoryGroup } from "../../src/territories/groups";
+import { staleGroups } from "./stale";
 
 /**
  * Names for a corpus's derived groups, written once by the group-names tool
@@ -36,30 +38,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFresh(body: Record<string, unknown>, file: GroupNamesFile): boolean {
+  // Naming never reads edges, and a corpus may ship them compact (arXiv does).
+  const { edges: _edges, ...rest } = body;
+  try {
+    return staleGroups(validateSpec(rest), file).length === 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The corpus body with `group` set on every territory from the file, before
  * `validateSpec` (spec slice F §4). Returns the body itself when it already
- * declares `group` or `parent` (a supplied grouping wins) or when the file
- * does not cover every territory exactly once: a stale file leaves the
- * provisional names in place rather than taking the demo down, and the
- * corpus's staleness test fails instead.
+ * declares `group` or `parent` (a supplied grouping wins), when it is not a
+ * valid spec, or when `staleGroups` finds any difference between the file and
+ * what the body derives today: a stale file leaves the provisional names in
+ * place rather than taking the demo down or painting a grouping the map no
+ * longer has, and the corpus's staleness test fails instead.
  */
 export function withGroupNames(body: unknown, file: GroupNamesFile): unknown {
   if (!isRecord(body) || !Array.isArray(body.territories)) return body;
   const territories: unknown[] = body.territories;
   if (!territories.every(isRecord)) return body;
   if (territories.some((territory) => territory.group !== undefined || territory.parent !== undefined)) return body;
+  if (!isFresh(body, file)) return body;
 
   const groupOf = new Map<unknown, string>();
-  for (const group of file.groups) {
-    for (const member of group.members) {
-      if (groupOf.has(member)) return body;
-      groupOf.set(member, group.name);
-    }
-  }
-  if (groupOf.size !== territories.length || !territories.every((territory) => groupOf.has(territory.id))) {
-    return body;
-  }
+  for (const group of file.groups) for (const member of group.members) groupOf.set(member, group.name);
   return {
     ...body,
     territories: territories.map((territory) => ({ ...territory, group: groupOf.get(territory.id) })),

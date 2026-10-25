@@ -72,7 +72,7 @@ export ANTHROPIC_API_KEY=...   # or: set -a; source ~/.config/anthropic/api.env;
 bun tools/group-names/main.ts corpus.json corpus.groups.json [--model claude-opus-5-5]
 ```
 
-Each name is checked before anything is written (at most 24 characters, distinct, never "Other"); a run that fails writes nothing. Apply the file when the corpus loads with `withGroupNames(body, file)` from `tools/group-names/groupNamesFile.ts`, which writes `group` onto every territory and leaves the body untouched when the file no longer covers it exactly; `staleGroups(spec, file)` lists what changed after the corpus is re-exported, so a test can fail on stale names. The tool runs offline once, never in the browser: a key in a browser is a leaked key, and the same corpus would render different names on two visits.
+Each name is checked before anything is written (at most 24 characters, distinct, never "Other"); a run that fails writes nothing. Apply the file when the corpus loads with `withGroupNames(body, file)`, which writes `group` onto every territory and leaves the body untouched when the file is stale (the corpus no longer derives exactly those groups, or a name breaks a rule); `staleGroups(spec, file)` lists what changed after the corpus is re-exported, so a test can fail on stale names. Both live in this repository's `tools/group-names/` (`groupNamesFile.ts` and `stale.ts`), not in the npm package: copy them, or write `group` into your corpus directly. The tool runs offline once, never in the browser: a key in a browser is a leaked key, and the same corpus would render different names on two visits.
 
 ## Usage
 

@@ -3,7 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_GROUP_NAMES_MODEL } from "./claude";
-import { type GroupNamesIo, runGroupNames, USAGE } from "./cli";
+import { type GroupNamesIo, localDate, runGroupNames, USAGE } from "./cli";
 import type { GroupNamesFile } from "./groupNamesFile";
 import { GROUP_NAMES_PROMPT_VERSION } from "./prompt";
 
@@ -84,6 +84,17 @@ describe("runGroupNames", () => {
     },
   );
 
+  it.each([[["spec.json", "spec.json"]], [["spec.json", "./spec.json"]], [["./spec.json", "spec.json"]]])(
+    "refuses to overwrite the corpus it reads, on arguments %j",
+    async (argv) => {
+      const { io, printed, written, requests } = harness();
+      expect(await runGroupNames(argv, io)).toBe(2);
+      expect(printed.join("\n")).toMatch(/would overwrite the corpus/);
+      expect(written.size).toBe(0);
+      expect(requests).toHaveLength(0);
+    },
+  );
+
   it("refuses without ANTHROPIC_API_KEY", async () => {
     const { io, printed, written, requests } = harness({ environment: {} });
     expect(await runGroupNames(["spec.json", "out.json"], io)).toBe(1);
@@ -141,5 +152,14 @@ describe("runGroupNames", () => {
     expect(await runGroupNames(["spec.json", "out.json"], io)).toBe(1);
     expect(printed.join("\n")).toContain('"Other"');
     expect(written.size).toBe(0);
+  });
+});
+
+describe("localDate", () => {
+  it.each([
+    [new Date(2026, 9, 25, 23, 30), "2026-10-25"],
+    [new Date(2026, 0, 5, 0, 15), "2026-01-05"],
+  ])("formats %s as the local calendar day", (date, expected) => {
+    expect(localDate(date)).toBe(expected);
   });
 });

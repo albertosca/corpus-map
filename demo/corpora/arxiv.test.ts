@@ -167,17 +167,6 @@ function crossesEdge(box: DrawnBox, width: number, height: number): boolean {
   );
 }
 
-/**
- * Acceptance 2 of the showcase spec, automated: the demo opens on the real
- * arXiv corpus at the fitted view, in the far regime, with names drawn and
- * no two of them overlapping. Built through the same pipeline `CorpusMap`
- * uses (`buildScene`, `fitScene` with its 24 px padding, `paint`), with
- * `estimateText` standing in for a real browser's text metrics.
- *
- * `fitScene` fits the territory shapes and the names drawn at the fitted
- * scale, so at both desktop and phone width every drawn name is whole on
- * the canvas: none crosses its edge.
- */
 /** Spec slice F: the group names Claude wrote, applied by the demo at load. */
 describe("the arXiv group names", () => {
   const file = groupNamesJson;
@@ -206,6 +195,17 @@ describe("the arXiv group names", () => {
   });
 });
 
+/**
+ * Acceptance 2 of the showcase spec, automated: the demo opens on the real
+ * arXiv corpus at the fitted view, in the far regime, with names drawn and
+ * no two of them overlapping. Built through the same pipeline `CorpusMap`
+ * uses (`buildScene`, `fitScene` with its 24 px padding, `paint`), with
+ * `estimateText` standing in for a real browser's text metrics.
+ *
+ * `fitScene` fits the territory shapes and the names drawn at the fitted
+ * scale, so at both desktop and phone width every drawn name is whole on
+ * the canvas: none crosses its edge.
+ */
 describe("acceptance 2: the fitted arXiv view", () => {
   const spec = shippedSpec;
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);

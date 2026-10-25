@@ -1,34 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type MapSpec, validateSpec } from "../../src/shared/spec";
 import { deriveTerritoryGroups } from "../../src/territories/groups";
 import type { GroupNamesFile } from "./groupNamesFile";
 import { staleGroups } from "./stale";
-
-/** Twelve territories in three tight clumps far apart: three derived groups. */
-function clumps(): MapSpec {
-  const territories = Array.from({ length: 12 }, (_unused, index) => {
-    const id = `t${String(index).padStart(2, "0")}`;
-    return {
-      id,
-      name: id,
-      members: Array.from({ length: 12 - index }, (_item, item) => `${id}-${item}`),
-      centroid: [Math.floor(index / 4) * 1000 + (index % 4), 0] as [number, number],
-    };
-  });
-  const nodes = territories.flatMap((territory) =>
-    territory.members.map((id) => ({ id, label: id, x: 0, y: 0, territory: territory.id })),
-  );
-  return validateSpec({ version: "1", territories, nodes });
-}
-
-function freshFile(spec: MapSpec): GroupNamesFile {
-  return {
-    model: "claude-opus-5-5",
-    namedAt: "2026-10-25",
-    promptVersion: 1,
-    groups: deriveTerritoryGroups(spec).map((group, index) => ({ name: `Name ${index}`, members: group.members })),
-  };
-}
+import { clumps, freshFile, renamed } from "./testCorpus";
 
 describe("staleGroups", () => {
   const spec = clumps();
@@ -73,5 +47,40 @@ describe("staleGroups", () => {
       "derived group group:t08 (t08, t09, t10, t11) has no name",
       '"Gone" (z1) no longer derives',
     ]);
+  });
+
+  it("does not match a named group that repeats a member to a derived group of the same size", () => {
+    const file = freshFile(spec);
+    const repeated: GroupNamesFile = {
+      ...file,
+      groups: [{ name: "Name 0", members: ["t00", "t00", "t01", "t02"] }, ...file.groups.slice(1)],
+    };
+    expect(staleGroups(spec, repeated)).toEqual([
+      '"Name 0" changed members: was t00, t00, t01, t02; now t00, t01, t02, t03',
+    ]);
+  });
+
+  it("matches each derived group to one named group only", () => {
+    const file = freshFile(spec);
+    const twice: GroupNamesFile = {
+      ...file,
+      groups: [...file.groups, { name: "Again", members: ["t00", "t01", "t02", "t03"] }],
+    };
+    expect(staleGroups(spec, twice)).toEqual(['"Again" (t00, t01, t02, t03) no longer derives']);
+  });
+
+  it.each([
+    ["empty", "", /is empty/],
+    ["invisible", "\u200b ", /is empty/],
+    ["too long", "x".repeat(25), /longer than 24/],
+    ["Other", "other", /"Other"/],
+  ])("reports a name the rules refuse: %s", (_case, name, message) => {
+    const problems = staleGroups(spec, renamed(freshFile(spec), 0, name));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(message);
+  });
+
+  it("reports two names equal ignoring case", () => {
+    expect(staleGroups(spec, renamed(freshFile(spec), 1, "NAME 0"))).toEqual(['"Name 0" and "NAME 0" share a name']);
   });
 });

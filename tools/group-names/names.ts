@@ -10,12 +10,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseJson(text: string): unknown {
-  const body = FENCED.exec(text)?.[1] ?? text;
-  try {
-    return JSON.parse(body.trim());
-  } catch {
-    throw new Error("The answer is not JSON");
+  // Bare JSON first: a name may itself contain backticks that look like a fence.
+  for (const body of [text, FENCED.exec(text)?.[1]]) {
+    if (body === undefined) continue;
+    try {
+      return JSON.parse(body.trim());
+    } catch {
+      // Try the fenced block next.
+    }
   }
+  throw new Error("The answer is not JSON");
+}
+
+/**
+ * The rule a single, already normalised name breaks, as a predicate ("is
+ * empty"), or undefined. Shared by the parser and the staleness check, so a
+ * hand-edited names file meets the rules an answer has to.
+ */
+export function groupNameProblem(name: string): string | undefined {
+  // Invisible format characters (zero-width space, word joiner) paint nothing.
+  if (name.replace(/[\s\p{Cf}]/gu, "") === "") return "is empty";
+  if ([...name].length > GROUP_NAME_MAXIMUM_LENGTH) return `is longer than ${GROUP_NAME_MAXIMUM_LENGTH} characters`;
+  if (name.toLowerCase() === OTHER_GROUP.toLowerCase()) return `is "${OTHER_GROUP}", which names ungrouped territories`;
+  return undefined;
 }
 
 /**
@@ -37,14 +54,9 @@ export function parseGroupNames(text: string, groups: readonly Pick<TerritoryGro
     if (raw === undefined) throw new Error(`No name for group ${id}`);
     if (typeof raw !== "string") throw new Error(`The name for group ${id} is not a string`);
     const name = raw.trim().replace(/\s+/g, " ");
-    if (name === "") throw new Error(`The name for group ${id} is empty`);
-    if ([...name].length > GROUP_NAME_MAXIMUM_LENGTH) {
-      throw new Error(`The name for group ${id} ("${name}") is longer than ${GROUP_NAME_MAXIMUM_LENGTH} characters`);
-    }
+    const problem = groupNameProblem(name);
+    if (problem !== undefined) throw new Error(`The name "${name}" for group ${id} ${problem}`);
     const folded = name.toLowerCase();
-    if (folded === OTHER_GROUP.toLowerCase()) {
-      throw new Error(`The name for group ${id} is "${OTHER_GROUP}", which names ungrouped territories`);
-    }
     const earlier = byFoldedName.get(folded);
     if (earlier !== undefined) throw new Error(`Groups ${earlier} and ${id} share the name "${name}"`);
     byFoldedName.set(folded, id);

@@ -1,6 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { type MapSpec, validateSpec } from "../../src/shared/spec";
-import { deriveTerritoryGroups } from "../../src/territories/groups";
+import {
+  deriveTerritoryGroups,
+  MAXIMUM_DERIVED_TERRITORIES,
+  MINIMUM_DERIVED_TERRITORIES,
+} from "../../src/territories/groups";
 import { DEFAULT_GROUP_NAMES_MODEL, requestGroupNames } from "./claude";
 import { toGroupNamesFile } from "./groupNamesFile";
 import { buildGroupNamesPrompt, GROUP_NAMES_PROMPT_VERSION } from "./prompt";
@@ -36,6 +40,14 @@ function parseArguments(argv: readonly string[]): { specPath: string; outputPath
   if (positional.length !== 2 || specPath === undefined || outputPath === undefined) return undefined;
   return { specPath, outputPath, model };
 }
+
+/** YYYY-MM-DD in the local calendar: a run at 23:30 in Brasília is dated that day, not UTC's next one. */
+export function localDate(date: Date): string {
+  const twoDigits = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`;
+}
+
+const withoutDotSlash = (path: string) => path.replace(/^(\.\/)+/, "");
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -74,6 +86,12 @@ export async function runGroupNames(argv: readonly string[], io: GroupNamesIo): 
     io.print(USAGE);
     return 2;
   }
+  if (withoutDotSlash(parsed.specPath) === withoutDotSlash(parsed.outputPath)) {
+    io.print(
+      `${parsed.outputPath} is the spec being read: writing it would overwrite the corpus. Pick another output.`,
+    );
+    return 2;
+  }
   const apiKey = io.environment.ANTHROPIC_API_KEY;
   if (apiKey === undefined || apiKey === "") {
     io.print("ANTHROPIC_API_KEY is not set; export it (for example from ~/.config/anthropic/api.env) and run again.");
@@ -86,7 +104,9 @@ export async function runGroupNames(argv: readonly string[], io: GroupNamesIo): 
   }
   const groups = deriveTerritoryGroups(spec);
   if (groups.length === 0) {
-    io.print(`${parsed.specPath} derives no groups (it needs 10 to 400 territories): there is nothing to name`);
+    io.print(
+      `${parsed.specPath} derives no groups (it needs ${MINIMUM_DERIVED_TERRITORIES} to ${MAXIMUM_DERIVED_TERRITORIES} territories): there is nothing to name`,
+    );
     return 1;
   }
   try {

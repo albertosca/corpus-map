@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { runGroupNames } from "./cli";
+import { localDate, runGroupNames } from "./cli";
 
 // The runtime entry of the group-names tool: `bun tools/group-names/main.ts`.
 // The package has no @types/node on purpose (a browser library; node types
@@ -22,5 +22,5 @@ process.exitCode = await runGroupNames(process.argv.slice(2), {
   environment: process.env,
   print: (line) => console.log(line),
   createClient: (apiKey) => new Anthropic({ apiKey }),
-  today: () => new Date().toISOString().slice(0, 10),
+  today: () => localDate(new Date()),
 });
