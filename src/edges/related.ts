@@ -1,3 +1,4 @@
+import { compareIds } from "../shared/compareIds";
 import type { MapNode, MapSpec } from "../shared/spec";
 
 /** One end of an undirected edge, seen from the other end (spec slice E §6). */
@@ -11,7 +12,7 @@ function heavierFirst(first: RelatedEdge, second: RelatedEdge): number {
   const firstWeight = first.weight ?? Number.NEGATIVE_INFINITY;
   const secondWeight = second.weight ?? Number.NEGATIVE_INFINITY;
   if (firstWeight !== secondWeight) return secondWeight > firstWeight ? 1 : -1;
-  return first.neighbour < second.neighbour ? -1 : first.neighbour > second.neighbour ? 1 : 0;
+  return compareIds(first.neighbour, second.neighbour);
 }
 
 /** Every item's related items, both directions of each undirected edge, heaviest first, absent weights last, ties by id. */

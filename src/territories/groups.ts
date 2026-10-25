@@ -1,3 +1,4 @@
+import { compareIds } from "../shared/compareIds";
 import { leafTerritories, type MapSpec, parentIds, type Territory } from "../shared/spec";
 
 /** Territories shown together in the legend and named together on the far map (spec categories §3). */
@@ -28,10 +29,6 @@ interface Draft {
   name: string;
   members: Territory[];
   colour?: string;
-}
-
-function compareIds(first: string, second: string): number {
-  return first < second ? -1 : first > second ? 1 : 0;
 }
 
 function largestFirst(first: Territory, second: Territory): number {

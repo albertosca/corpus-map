@@ -1,12 +1,9 @@
+import { compareIds } from "../shared/compareIds";
 import type { Territory } from "../shared/spec";
 import { type Ring, ringArea } from "./shape";
 
 /** Cells along the longer side of the raster `visibleBorders` draws the shapes onto. */
 export const COLOUR_GRID_CELLS = 256;
-
-function compareIds(first: string, second: string): number {
-  return first < second ? -1 : first > second ? 1 : 0;
-}
 
 function drawable(rings: readonly Ring[] | undefined): Ring[] {
   return (rings ?? []).filter((ring) => ring.length >= 3);

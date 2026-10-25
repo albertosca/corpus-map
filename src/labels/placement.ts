@@ -1,3 +1,4 @@
+import { compareIds } from "../shared/compareIds";
 import type { Point } from "../territories/shape";
 
 export type LabelClass = "large" | "medium" | "small";
@@ -68,7 +69,7 @@ export function placeLabels(
 ): PlacedLabel[] {
   const classes = labelClasses(inputs, cut);
   const ordered = [...inputs].sort(
-    (first, second) => second.members - first.members || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
+    (first, second) => second.members - first.members || compareIds(first.id, second.id),
   );
   const placed: PlacedLabel[] = [];
   for (const input of ordered) {

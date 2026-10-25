@@ -1,3 +1,4 @@
+import { compareIds } from "../shared/compareIds";
 import type { Scene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
 import type { Bounds } from "../viewport/fit";
@@ -26,10 +27,7 @@ export function territoriesAt(
       // A box exists only for a territory with rings, so its shape is there too.
       return (scene.shapes.get(territory.id) as Ring[]).some((ring) => contains(ring, point));
     })
-    .sort(
-      (first, second) =>
-        second.members.length - first.members.length || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
-    )
+    .sort((first, second) => second.members.length - first.members.length || compareIds(first.id, second.id))
     .map((territory) => territory.id);
 }
 
@@ -51,10 +49,7 @@ export function familiesAt(
         return false;
       return (scene.groupShapes.get(group.id) as Ring[]).some((ring) => contains(ring, point));
     })
-    .sort(
-      (first, second) =>
-        second.members.length - first.members.length || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
-    )
+    .sort((first, second) => second.members.length - first.members.length || compareIds(first.id, second.id))
     .map((group) => group.id);
 }
 

@@ -1,3 +1,4 @@
+import { compareIds } from "../shared/compareIds";
 import type { Corner } from "../shared/corner";
 import type { Territory } from "../shared/spec";
 
@@ -6,10 +7,6 @@ export interface LegendEntry {
   name: string;
   colour: string;
   members: number;
-}
-
-function compareIds(first: string, second: string): number {
-  return first < second ? -1 : first > second ? 1 : 0;
 }
 
 /** Every territory, most members first (ties by id), each with its painted colour (spec categories §6). */

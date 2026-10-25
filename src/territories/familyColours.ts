@@ -1,4 +1,5 @@
 import { contrastRatio, parseColor } from "../labels/contrast";
+import { compareIds } from "../shared/compareIds";
 import type { Territory } from "../shared/spec";
 import type { Theme } from "../shared/theme";
 import { assignTerritoryColours, largestFirst, visibleBorders } from "./colour";
@@ -15,10 +16,6 @@ import { TINT_STEPS, tint, tintBand } from "./tint";
 export function tintDirection(theme: Pick<Theme, "territoryLabel">): 1 | -1 {
   const label = parseColor(theme.territoryLabel);
   return contrastRatio(label, parseColor("#000000")) > contrastRatio(label, parseColor("#ffffff")) ? 1 : -1;
-}
-
-function compareIds(first: string, second: string): number {
-  return first < second ? -1 : first > second ? 1 : 0;
 }
 
 /**
