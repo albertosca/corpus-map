@@ -115,6 +115,11 @@ describe("scene bounds", () => {
     expect(sceneBounds(spec, shapes)).toEqual({ minX: -5, minY: -5, maxX: 5, maxY: 5 });
   });
 
+  it("takes a ring too long to spread into an argument list", () => {
+    const ring: Ring = Array.from({ length: 300_000 }, (_unused, index) => [index % 7, index === 150_000 ? 40 : 0]);
+    expect(sceneBounds(spec, new Map([["t", [ring]]])).maxY).toBe(40);
+  });
+
   it("keeps worldBounds' behaviour for nodes only, including the degenerate widening", () => {
     expect(sceneBounds(spec, new Map())).toEqual(worldBounds(spec));
     expect(boundsOf([])).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 });

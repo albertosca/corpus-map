@@ -48,7 +48,9 @@ function drawableRings(rings: readonly Ring[]): Ring[] {
 /** The nodes plus every drawable territory ring: what a fitted view must show whole (spec slice D §4). */
 export function sceneBounds(spec: MapSpec, shapes: ReadonlyMap<string, readonly Ring[]>): Bounds {
   const points: Array<readonly [number, number]> = spec.nodes.map((node) => [node.x, node.y] as const);
-  for (const rings of shapes.values()) for (const ring of drawableRings(rings)) points.push(...ring);
+  // One push per point: spreading a long producer boundary into push overflows the call stack.
+  for (const rings of shapes.values())
+    for (const ring of drawableRings(rings)) for (const point of ring) points.push(point);
   return boundsOf(points);
 }
 

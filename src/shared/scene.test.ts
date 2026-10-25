@@ -315,3 +315,17 @@ describe("buildScene: families", () => {
     for (const territory of spec.territories) expect(DEFAULT_THEME.palette).toContain(scene.colours.get(territory.id));
   });
 });
+
+describe("buildScene: edges", () => {
+  it("takes the heaviest edge weight of a list too long to spread into Math.max", () => {
+    const base = nestedSpec();
+    const [first, second] = base.nodes;
+    const edges = Array.from({ length: 300_000 }, (_unused, index) => ({
+      source: (first as { id: string }).id,
+      target: (second as { id: string }).id,
+      weight: index === 123_456 ? 0.97 : 0.5,
+    }));
+    const scene = buildScene({ ...base, edges }, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.maximumEdgeWeight).toBe(0.97);
+  });
+});

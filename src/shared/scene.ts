@@ -180,6 +180,7 @@ export function buildScene(
     groupBounds: boxes(groupShapes),
     groupColours: families.groupColours,
     related: buildRelated(spec),
-    maximumEdgeWeight: Math.max(0, ...(spec.edges ?? []).map((edge) => edge.weight ?? 0)),
+    // A fold, not a spread: spreading a long edge list into Math.max overflows the call stack.
+    maximumEdgeWeight: (spec.edges ?? []).reduce((heaviest, edge) => Math.max(heaviest, edge.weight ?? 0), 0),
   };
 }
