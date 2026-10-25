@@ -32,29 +32,34 @@ def clean_title(raw: str) -> str:
     return " ".join(raw.split())
 
 
-def build_spec(papers: Sequence[Paper], xy: npt.NDArray[np.float64]) -> dict[str, object]:
-    """Build a corpus-map `MapSpec` from `papers` and their parallel `xy` coordinates.
+def build_spec(
+    papers: Sequence[Paper],
+    coordinates: npt.NDArray[np.float64],
+    edges: Sequence[tuple[int, int, int]] | None = None,
+) -> dict[str, object]:
+    """Build a corpus-map `MapSpec` from `papers` and their parallel `coordinates`.
 
     One territory per category present among `papers` (sorted by code); its `members` are
     the ids of that category's papers, in the same order they appear in `papers`, and its
-    `centroid` is the mean of their (unrounded) `xy` rows, rounded to 3 decimals. One node
+    `centroid` is the mean of their (unrounded) `coordinates` rows, rounded to 3 decimals. One node
     per paper, in `papers` order, with `x`/`y` each rounded to 3 decimals and `meta` holding
-    only `year` and the arXiv abstract-page `url` -- never an author.
+    only `year` and the arXiv abstract-page `url` -- never an author. `edges`, when given, are
+    `(low, high, weight)` node-index triples, written as lists.
     """
-    if len(papers) != len(xy):
-        raise ValueError(f"papers and xy must be the same length, got {len(papers)} and {len(xy)}")
+    if len(papers) != len(coordinates):
+        raise ValueError(f"papers and coordinates must be the same length, got {len(papers)} and {len(coordinates)}")
 
     indices_by_territory: dict[str, list[int]] = {}
     nodes: list[dict[str, object]] = []
 
-    for i, paper in enumerate(papers):
-        indices_by_territory.setdefault(paper.category, []).append(i)
+    for index, paper in enumerate(papers):
+        indices_by_territory.setdefault(paper.category, []).append(index)
         nodes.append(
             {
                 "id": paper.id,
                 "label": clean_title(paper.title),
-                "x": round(float(xy[i, 0]), 3),
-                "y": round(float(xy[i, 1]), 3),
+                "x": round(float(coordinates[index, 0]), 3),
+                "y": round(float(coordinates[index, 1]), 3),
                 "territory": paper.category,
                 "meta": {
                     "year": paper.year,
@@ -66,18 +71,21 @@ def build_spec(papers: Sequence[Paper], xy: npt.NDArray[np.float64]) -> dict[str
     territories: list[dict[str, object]] = []
     for code in sorted(indices_by_territory):
         indices = indices_by_territory[code]
-        member_ids = [papers[i].id for i in indices]
-        centroid_xy = xy[indices].mean(axis=0)
+        member_ids = [papers[index].id for index in indices]
+        centroid = coordinates[indices].mean(axis=0)
         territories.append(
             {
                 "id": code,
                 "name": name_of(code),
                 "members": member_ids,
-                "centroid": [round(float(centroid_xy[0]), 3), round(float(centroid_xy[1]), 3)],
+                "centroid": [round(float(centroid[0]), 3), round(float(centroid[1]), 3)],
             }
         )
 
-    return {"version": "1", "territories": territories, "nodes": nodes}
+    spec: dict[str, object] = {"version": "1", "territories": territories, "nodes": nodes}
+    if edges is not None:
+        spec["edges"] = [list(edge) for edge in edges]
+    return spec
 
 
 def check_spec(spec: dict[str, object]) -> None:
@@ -119,24 +127,42 @@ def check_spec(spec: dict[str, object]) -> None:
             if member not in node_ids:
                 raise ValueError(f"territory {territory_id}: member {member!r} does not resolve")
 
+    for edge in cast("list[object]", spec.get("edges", [])):
+        _check_edge(edge, len(nodes))
+
+
+def _check_edge(edge: object, node_count: int) -> None:
+    """An edge is `[low, high, weight]`: integers, `0 <= low < high < node_count`, weight 0-100."""
+    if not isinstance(edge, list) or len(edge) != 3 or not all(_is_integer(part) for part in edge):
+        raise ValueError(f"edge {edge!r} is not an integer triple")
+    low, high, weight = edge
+    if not 0 <= low < high < node_count:
+        raise ValueError(f"edge {edge!r}: node indices out of range or not ordered")
+    if not 0 <= weight <= 100:
+        raise ValueError(f"edge {edge!r}: weight outside 0-100")
+
+
+def _is_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
 
 def _is_finite(value: object) -> bool:
     return isinstance(value, int | float) and math.isfinite(value)
 
 
-def write_outputs(spec: dict[str, object], meta: dict[str, object], out_dir: Path) -> None:
+def write_outputs(spec: dict[str, object], meta: dict[str, object], out_directory: Path) -> None:
     """Check `spec`, then write `arxiv.json` (compact) and `arxiv.meta.json` (indented).
 
-    Both files go into `out_dir`, created if needed. Nothing is written if `check_spec`
+    Both files go into `out_directory`, created if needed. Nothing is written if `check_spec`
     raises.
     """
     check_spec(spec)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "arxiv.json").write_text(
+    out_directory.mkdir(parents=True, exist_ok=True)
+    (out_directory / "arxiv.json").write_text(
         json.dumps(spec, separators=(",", ":"), ensure_ascii=False),
         encoding="utf-8",
     )
-    (out_dir / "arxiv.meta.json").write_text(
+    (out_directory / "arxiv.meta.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )

@@ -51,5 +51,10 @@
     "cs.SI": 133
   },
   "attribution": "Thank you to arXiv for use of its open access interoperability.",
-  "license_note": "Metadata from arXiv, CC0 1.0; no full text; no author names."
+  "license_note": "Metadata from arXiv, CC0 1.0; no full text; no author names.",
+  "edges": {
+    "floor": 0.8,
+    "per_paper": 3,
+    "count": 7283
+  }
 }

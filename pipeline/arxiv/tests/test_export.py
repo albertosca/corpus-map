@@ -75,11 +75,11 @@ def test_build_spec_creates_one_territory_per_category_present_sorted_by_code() 
         make_paper("b", "Title B", "cs.CL"),
         make_paper("c", "Title C", "cs.CL"),
     ]
-    xy = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    coordinates = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
 
-    spec = build_spec(papers, xy)
+    spec = build_spec(papers, coordinates)
 
-    assert [t["id"] for t in _territories(spec)] == ["cs.CL", "cs.LG"]
+    assert [territory["id"] for territory in _territories(spec)] == ["cs.CL", "cs.LG"]
 
 
 def test_build_spec_territory_name_comes_from_the_categories_module() -> None:
@@ -93,19 +93,19 @@ def test_build_spec_territory_members_are_in_paper_order() -> None:
         make_paper("a", "Title A", "cs.LG"),
         make_paper("c", "Title C", "cs.CL"),
     ]
-    xy = np.array([[0.0, 0.0], [5.0, 5.0], [2.0, 2.0]])
+    coordinates = np.array([[0.0, 0.0], [5.0, 5.0], [2.0, 2.0]])
 
-    spec = build_spec(papers, xy)
+    spec = build_spec(papers, coordinates)
 
-    cl = next(t for t in _territories(spec) if t["id"] == "cs.CL")
-    assert cl["members"] == ["b", "c"]
+    computation_and_language = next(territory for territory in _territories(spec) if territory["id"] == "cs.CL")
+    assert computation_and_language["members"] == ["b", "c"]
 
 
 def test_build_spec_centroid_is_the_mean_of_members_xy_rounded_to_three_decimals() -> None:
     papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.CL"), make_paper("c", "C", "cs.CL")]
-    xy = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0]])
+    coordinates = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0]])
 
-    spec = build_spec(papers, xy)
+    spec = build_spec(papers, coordinates)
 
     assert _territories(spec)[0]["centroid"] == [0.333, 0.333]
 
@@ -145,17 +145,17 @@ def test_build_spec_node_territory_is_the_paper_category() -> None:
 
 def test_build_spec_raises_when_papers_and_xy_lengths_differ() -> None:
     papers = [make_paper("a", "A", "cs.CL")]
-    xy = np.array([[0.0, 0.0], [1.0, 1.0]])
+    coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
 
     with pytest.raises(ValueError, match="same length"):
-        build_spec(papers, xy)
+        build_spec(papers, coordinates)
 
 
 def test_build_spec_never_contains_an_author_or_authors_key_anywhere() -> None:
     papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
-    xy = np.array([[0.0, 0.0], [1.0, 1.0]])
+    coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
 
-    spec = build_spec(papers, xy)
+    spec = build_spec(papers, coordinates)
 
     keys = set(_walk_keys(spec))
     assert "author" not in keys
@@ -167,8 +167,8 @@ def test_build_spec_never_contains_an_author_or_authors_key_anywhere() -> None:
 
 def _valid_spec() -> dict[str, object]:
     papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
-    xy = np.array([[0.0, 0.0], [1.0, 1.0]])
-    return build_spec(papers, xy)
+    coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
+    return build_spec(papers, coordinates)
 
 
 def test_check_spec_accepts_a_well_formed_spec() -> None:
@@ -223,7 +223,7 @@ def test_check_spec_rejects_a_node_whose_territory_does_not_list_it_as_a_member(
     for territory in _territories(spec):
         if territory["id"] == node_territory:
             copy = dict(territory)
-            copy["members"] = [m for m in cast("list[str]", territory["members"]) if m != node_id]
+            copy["members"] = [member for member in cast("list[str]", territory["members"]) if member != node_id]
             patched_territories.append(copy)
         else:
             patched_territories.append(territory)
@@ -272,11 +272,11 @@ def test_write_outputs_checks_the_spec_before_writing_anything(tmp_path: Path) -
 
 
 def test_write_outputs_creates_the_output_directory(tmp_path: Path) -> None:
-    out_dir = tmp_path / "nested" / "out"
+    out_directory = tmp_path / "nested" / "out"
 
-    write_outputs(_valid_spec(), {}, out_dir)
+    write_outputs(_valid_spec(), {}, out_directory)
 
-    assert (out_dir / "arxiv.json").exists()
+    assert (out_directory / "arxiv.json").exists()
 
 
 # --- constants ---
@@ -285,3 +285,44 @@ def test_write_outputs_creates_the_output_directory(tmp_path: Path) -> None:
 def test_attribution_and_license_note_match_spec_wording() -> None:
     assert ATTRIBUTION == "Thank you to arXiv for use of its open access interoperability."
     assert LICENSE_NOTE == "Metadata from arXiv, CC0 1.0; no full text; no author names."
+
+
+# --- edges ---
+
+
+def test_build_spec_carries_the_given_edges_as_lists() -> None:
+    papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
+    coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
+
+    spec = build_spec(papers, coordinates, edges=[(0, 1, 87)])
+
+    assert spec["edges"] == [[0, 1, 87]]
+    check_spec(spec)
+
+
+def test_build_spec_without_edges_has_no_edges_key() -> None:
+    assert "edges" not in _valid_spec()
+    papers = [make_paper("a", "A", "cs.CL")]
+    assert "edges" not in build_spec(papers, np.array([[0.0, 0.0]]), edges=None)
+
+
+@pytest.mark.parametrize(
+    ("edge", "message"),
+    [
+        ([0, 2, 80], "out of range"),
+        ([1, 0, 80], "out of range"),
+        ([0, 0, 80], "out of range"),
+        ([-1, 1, 80], "out of range"),
+        ([0, 1, 101], "weight"),
+        ([0, 1, -1], "weight"),
+        ([0, 1], "triple"),
+        ([0.5, 1, 80], "triple"),
+        ([0, 1, True], "triple"),
+    ],
+)
+def test_check_spec_rejects_a_malformed_edge(edge: list[object], message: str) -> None:
+    spec = _valid_spec()
+    spec["edges"] = [edge]
+
+    with pytest.raises(ValueError, match=message):
+        check_spec(spec)

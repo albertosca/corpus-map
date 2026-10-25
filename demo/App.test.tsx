@@ -50,8 +50,11 @@ const TINY_ARXIV_SPEC: MapSpec = {
   ],
 };
 
+/** The shipped arXiv corpus's territories; its edges ship compact (`demo/corpora/edges.ts`), so the file as a whole is not a `MapSpec`. */
+const ARXIV_TERRITORIES = { territories: arxivJson.territories } as Pick<MapSpec, "territories">;
+
 /** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name>, <count> item(s)"`. */
-function territoryButtonText(spec: MapSpec, index = 0): string {
+function territoryButtonText(spec: Pick<MapSpec, "territories">, index = 0): string {
   const territory = spec.territories[index];
   if (!territory) throw new Error(`spec has no territory at index ${index}`);
   const count = territory.members.length;
@@ -628,14 +631,14 @@ describe("App (showcase Task 5)", () => {
   it("passes the accessibility audit with the real arXiv corpus loaded", async () => {
     const { container } = await renderApp(arxivJson);
     // The real corpus builds an 8000-item scene; under a loaded suite that takes longer than the default 1 s.
-    await screen.findByText(territoryButtonText(arxivJson as MapSpec), undefined, { timeout: 10_000 });
+    await screen.findByText(territoryButtonText(ARXIV_TERRITORIES), undefined, { timeout: 10_000 });
     expect(screen.getAllByRole("heading", { level: 2 }).length).toBeGreaterThan(0);
     expect(violationIds(await auditAccessibility(container))).toEqual([]);
   });
 
   it("puts the top bar before the map, so headings read h1 then h2 and Tab reaches the demo controls first", async () => {
     await renderApp(arxivJson);
-    await screen.findByText(territoryButtonText(arxivJson as MapSpec), undefined, { timeout: 10_000 });
+    await screen.findByText(territoryButtonText(ARXIV_TERRITORIES), undefined, { timeout: 10_000 });
     const title = screen.getByRole("heading", { level: 1 });
     const sectionHeadings = screen.getAllByRole("heading", { level: 2 });
     expect(sectionHeadings.length).toBeGreaterThan(0);
@@ -1008,6 +1011,35 @@ describe("App (showcase Task 5)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Another Tiny Paper" }));
       await screen.findByRole("dialog", { name: "Another Tiny Paper" });
       expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull();
+    });
+
+    it("lists the selected paper's related papers (compact edges from the payload) and opens one on press (slice E)", async () => {
+      const relatedSpec = {
+        ...SELECT_SPEC,
+        territories: [
+          { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "west"], centroid: [-0.5, 0] },
+          { id: "cs.SE", name: "Software Engineering", members: ["p2", "east"], centroid: [0.5, 0] },
+        ],
+        nodes: SELECT_SPEC.nodes.map((node) =>
+          node.id === "p2" || node.id === "east" ? { ...node, territory: "cs.SE" } : node,
+        ),
+        edges: [[0, 1, 90]],
+      };
+      await renderApp(relatedSpec);
+      await screen.findByText("Artificial Intelligence, 2 items");
+      zoomToNear();
+
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      expect(within(dialog).getByRole("heading", { name: "Related" })).not.toBeNull();
+      const relatedButtons = within(within(dialog).getByRole("list")).getAllByRole("button");
+      expect(relatedButtons).toHaveLength(1);
+      expect(relatedButtons[0]?.textContent).toContain("Another Tiny Paper");
+      expect(relatedButtons[0]?.textContent).toContain("tiny, paper");
+
+      fireEvent.click(relatedButtons[0] as HTMLElement);
+      await screen.findByRole("dialog", { name: "Another Tiny Paper" });
+      await waitFor(() => expect(window.location.hash).toContain("selected=p2"));
     });
 
     it("switching corpus while the drawer is open closes it — a stale selection from the corpus just left must never show", async () => {

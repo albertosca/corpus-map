@@ -7,6 +7,7 @@ import { DARK_THEME, DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { visibleBorders } from "../../src/territories/colour";
 import arxiv from "./arxiv.json";
+import { withExpandedEdges } from "./edges";
 
 /** Share of the visible border, in raster cells, where both sides got the same colour. */
 function conflictShare(spec: MapSpec, palette: string[]): number {
@@ -25,7 +26,7 @@ function conflictShare(spec: MapSpec, palette: string[]): number {
 
 describe("territory colouring on real corpora", () => {
   const corpora: Array<[string, MapSpec, number]> = [
-    ["arXiv", validateSpec(arxiv), 0.001],
+    ["arXiv", validateSpec(withExpandedEdges(arxiv)), 0.001],
     ["synthetic 10,000", generateCorpus({ seed: 1, size: 10_000 }), 0],
   ];
 

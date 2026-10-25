@@ -26,7 +26,7 @@ const ELEMENT_NODE: MapNode = {
 function renderWithReturnTarget(node: MapNode | null, extra: Partial<Parameters<typeof Drawer>[0]> = {}) {
   const returnFocusTo = createRef<HTMLButtonElement>();
   const onClose = vi.fn();
-  const utils = render(
+  const rendered = render(
     <>
       <button type="button" ref={returnFocusTo}>
         map surface stand-in
@@ -37,11 +37,13 @@ function renderWithReturnTarget(node: MapNode | null, extra: Partial<Parameters<
         isArxiv={false}
         onClose={onClose}
         returnFocusTo={returnFocusTo}
+        related={[]}
+        onOpenRelated={vi.fn()}
         {...extra}
       />
     </>,
   );
-  return { ...utils, returnFocusTo, onClose };
+  return { ...rendered, returnFocusTo, onClose };
 }
 
 describe("Drawer (showcase Task 6)", () => {
@@ -130,6 +132,8 @@ describe("Drawer (showcase Task 6)", () => {
           isArxiv={false}
           onClose={onClose}
           returnFocusTo={returnFocusTo}
+          related={[]}
+          onOpenRelated={vi.fn()}
         />
       </>,
     );
@@ -175,6 +179,38 @@ describe("Drawer (showcase Task 6)", () => {
       renderWithReturnTarget(ARXIV_NODE, { isArxiv: true, territoryName: "Artificial Intelligence" });
       const link = screen.getByRole("link", { name: "Open on arXiv" });
       expect(link.getAttribute("href")).toBe("https://arxiv.org/abs/2609.26779");
+    });
+  });
+
+  describe("Related (slice E)", () => {
+    const NEIGHBOUR: MapNode = { ...ARXIV_NODE, id: "2609.00001", label: "Compaction for Agents", territory: "cs.SE" };
+    const OTHER: MapNode = { ...ARXIV_NODE, id: "2609.00002", label: "Long-Horizon Planning", territory: "cs.RO" };
+
+    it("lists each related item as a button with its reason, and opens it on press", () => {
+      const onOpenRelated = vi.fn();
+      renderWithReturnTarget(ARXIV_NODE, {
+        isArxiv: true,
+        related: [
+          { node: NEIGHBOUR, weight: 0.9, reason: "compaction, agents" },
+          { node: OTHER, weight: 0.8, reason: undefined },
+        ],
+        onOpenRelated,
+      });
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("heading", { name: "Related" })).not.toBeNull();
+      const list = within(dialog).getByRole("list");
+      const buttons = within(list).getAllByRole("button");
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0]?.textContent).toContain("Compaction for Agents");
+      expect(buttons[0]?.textContent).toContain("compaction, agents");
+      expect(buttons[0]?.style.maxWidth).toBe("100%");
+      fireEvent.click(buttons[1] as HTMLElement);
+      expect(onOpenRelated).toHaveBeenCalledWith("2609.00002");
+    });
+
+    it("shows no Related section when the item has none", () => {
+      renderWithReturnTarget(ARXIV_NODE, { isArxiv: true });
+      expect(screen.queryByRole("heading", { name: "Related" })).toBeNull();
     });
   });
 });

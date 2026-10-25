@@ -1,4 +1,4 @@
-import type { MapNode } from "corpus-map";
+import type { MapNode, RelatedItem } from "corpus-map";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef } from "react";
 import { token } from "../tokens";
@@ -15,6 +15,10 @@ export interface DrawerProps {
   returnFocusTo: RefObject<HTMLElement | null>;
   /** Where the drawer starts from the top: the top bar's measured height, so the corpus picker and Tuning stay usable while it is open. */
   topInset?: number | undefined;
+  /** The selected item's related items (`relatedItems`), heaviest first; the section is left out when empty. */
+  related: readonly RelatedItem[];
+  /** Called with a related item's id when its button is pressed. */
+  onOpenRelated: (id: string) => void;
 }
 
 const ANIMATION_STYLE = `
@@ -96,7 +100,7 @@ const linkStyle: CSSProperties = {
   color: token("link"),
 };
 
-const dlStyle: CSSProperties = {
+const definitionListStyle: CSSProperties = {
   margin: 0,
   display: "grid",
   gridTemplateColumns: "auto 1fr",
@@ -104,13 +108,50 @@ const dlStyle: CSSProperties = {
   rowGap: 4,
 };
 
-const dtStyle: CSSProperties = {
+const termStyle: CSSProperties = {
   margin: 0,
   color: token("textMuted"),
 };
 
-const ddStyle: CSSProperties = {
+const definitionStyle: CSSProperties = {
   margin: 0,
+};
+
+const relatedHeadingStyle: CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: 14,
+  fontWeight: 600,
+};
+
+const relatedListStyle: CSSProperties = {
+  margin: 0,
+  padding: 0,
+  listStyle: "none",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const relatedButtonStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: 2,
+  width: "100%",
+  maxWidth: "100%",
+  padding: "6px 8px",
+  borderRadius: 4,
+  border: `1px solid ${token("border")}`,
+  background: token("surface"),
+  color: token("text"),
+  font: "inherit",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const relatedReasonStyle: CSSProperties = {
+  color: token("textMuted"),
+  fontSize: 12,
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -123,11 +164,11 @@ function GenericMeta({ meta }: { meta: unknown }): ReactElement | null {
   const entries = Object.entries(meta);
   if (entries.length === 0) return null;
   return (
-    <dl style={dlStyle}>
+    <dl style={definitionListStyle}>
       {entries.map(([key, value]) => (
         <div key={key} style={{ display: "contents" }}>
-          <dt style={dtStyle}>{key}</dt>
-          <dd style={ddStyle}>{String(value)}</dd>
+          <dt style={termStyle}>{key}</dt>
+          <dd style={definitionStyle}>{String(value)}</dd>
         </div>
       ))}
     </dl>
@@ -197,6 +238,8 @@ export function Drawer({
   onClose,
   returnFocusTo,
   topInset = 0,
+  related,
+  onOpenRelated,
 }: DrawerProps): ReactElement | null {
   const titleId = useId();
   const closeButtonReference = useRef<HTMLButtonElement>(null);
@@ -271,6 +314,21 @@ export function Drawer({
           </button>
         </div>
         {body}
+        {related.length > 0 ? (
+          <>
+            <h3 style={relatedHeadingStyle}>Related</h3>
+            <ul style={relatedListStyle}>
+              {related.map((item) => (
+                <li key={item.node.id}>
+                  <button type="button" style={relatedButtonStyle} onClick={() => onOpenRelated(item.node.id)}>
+                    <span>{item.node.label}</span>
+                    {item.reason ? <span style={relatedReasonStyle}>{item.reason}</span> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
       </aside>
     </>
   );

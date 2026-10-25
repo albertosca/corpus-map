@@ -7,6 +7,7 @@ import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../demo/App";
 import arxiv from "../demo/corpora/arxiv.json";
+import { withExpandedEdges } from "../demo/corpora/edges";
 import { CorpusMap } from "../src/CorpusMap";
 import { validateSpec } from "../src/shared/spec";
 
@@ -86,7 +87,7 @@ describe("commit cost", () => {
     const record: ProfilerOnRenderCallback = (_id, phase, actualDuration) => {
       if (phase !== "mount") durations.push(actualDuration);
     };
-    const spec = validateSpec(arxiv);
+    const spec = validateSpec(withExpandedEdges(arxiv));
     const { container } = render(
       <Profiler id="map" onRender={record}>
         <CorpusMap spec={spec} renderCard={() => null} width={1280} height={800} />
@@ -102,7 +103,7 @@ describe("commit cost", () => {
   it("prints the demo App's share of a drag frame on arXiv, zoomed in so the indicator changes", async () => {
     vi.stubGlobal("ResizeObserver", FixedResizeObserver);
     vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
-    const spec = validateSpec(arxiv);
+    const spec = validateSpec(withExpandedEdges(arxiv));
     // At the fitted far view every node stays on screen while panning, so the
     // indicator's count never changes and `App` never re-renders: zooming in
     // first makes points enter and leave, which is the case the rule is about.

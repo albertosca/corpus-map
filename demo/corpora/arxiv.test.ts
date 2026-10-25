@@ -17,8 +17,9 @@ import { toScreen, type Viewport } from "../../src/viewport/viewport";
 // every one of the 8,000 nodes.
 import rawSpecJson from "./arxiv.json";
 import metaJson from "./arxiv.meta.json";
+import { withExpandedEdges } from "./edges";
 
-const rawSpec: unknown = rawSpecJson;
+const rawSpec: unknown = withExpandedEdges(rawSpecJson);
 const meta: Record<string, unknown> = metaJson;
 
 const ATTRIBUTION = "Thank you to arXiv for use of its open access interoperability.";
@@ -87,6 +88,20 @@ describe("the arXiv corpus", () => {
       expect(Number.isFinite(territory.centroid[0])).toBe(true);
       expect(Number.isFinite(territory.centroid[1])).toBe(true);
     }
+  });
+
+  it("ships edges, every one across two territories, at most six per item", () => {
+    const spec = validateSpec(rawSpec);
+    const territoryOf = new Map(spec.nodes.map((node) => [node.id, node.territory]));
+    const degrees = new Map<string, number>();
+    const edges = spec.edges ?? [];
+    expect(edges.length).toBeGreaterThan(0);
+    for (const edge of edges) {
+      expect(territoryOf.get(edge.source)).not.toBe(territoryOf.get(edge.target));
+      degrees.set(edge.source, (degrees.get(edge.source) ?? 0) + 1);
+      degrees.set(edge.target, (degrees.get(edge.target) ?? 0) + 1);
+    }
+    expect(Math.max(...degrees.values())).toBeLessThanOrEqual(6);
   });
 
   it("arxiv.meta.json's attribution is exactly the arXiv sentence", () => {

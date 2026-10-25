@@ -1,6 +1,7 @@
 import type { MapSpec } from "corpus-map";
 import { validateSpec } from "corpus-map";
 import { constellationsSpec } from "./constellations";
+import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
 import { syntheticSpec } from "./synthetic";
 
@@ -26,7 +27,7 @@ async function fetchArxiv(): Promise<MapSpec> {
   const response = await fetch(arxivUrl);
   if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
   const body: unknown = await response.json();
-  return validateSpec(body);
+  return validateSpec(withExpandedEdges(body));
 }
 
 /**

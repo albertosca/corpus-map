@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import arxiv from "../demo/corpora/arxiv.json";
+import { withExpandedEdges } from "../demo/corpora/edges";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { visibleNodes } from "../src/lod/visible";
 import { validateSpec } from "../src/shared/spec";
@@ -16,7 +17,7 @@ function medianOf(values: number[]): number {
 
 describe("visibleNodes", () => {
   for (const [name, spec] of [
-    ["arXiv 8,000", validateSpec(arxiv)],
+    ["arXiv 8,000", validateSpec(withExpandedEdges(arxiv))],
     ["synthetic 10,000", generateCorpus({ seed: 1, size: 10_000 })],
   ] as const) {
     it(`costs under 1 ms per pass on ${name} at the fitted 1280 x 800 view`, () => {

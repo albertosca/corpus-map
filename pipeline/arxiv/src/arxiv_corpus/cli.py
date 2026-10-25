@@ -24,15 +24,16 @@ from pathlib import Path
 import numpy as np
 
 from arxiv_corpus.categories import CATEGORIES
+from arxiv_corpus.edges import EDGE_FLOOR, EDGES_PER_PAPER, cross_category_edges
 from arxiv_corpus.embed import BgeEmbedder, Embedder
 from arxiv_corpus.export import ATTRIBUTION, LICENSE_NOTE, build_spec, write_outputs
 from arxiv_corpus.fetch import BASE_URL, Client, Paper, http_get
 from arxiv_corpus.project import Projector, UmapProjector, rescale
 from arxiv_corpus.sample import quotas
 
-STAGES = ("fetch", "embed", "project", "export", "all")
+STAGES = ("fetch", "embed", "project", "edges", "export", "all")
 
-DEFAULT_N = 8000
+DEFAULT_PAPER_COUNT = 8000
 DEFAULT_FLOOR = 20
 
 # The query shape actually used, minus `start` (which varies per page) and with `category`
@@ -59,14 +60,14 @@ class Dependencies:
     umap_params: dict[str, object]
 
 
-def make_dependencies(cache_dir: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
+def make_dependencies(cache_directory: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
     """The real factory: a throttled network client, the real embedder and projector.
 
     `model_name` and `umap_params` are read off `BgeEmbedder`/`UmapProjector` themselves,
     the single source of truth `__init__` also reads from -- so meta can never drift from
     what actually ran (M-2).
     """
-    client = Client(get=http_get, sleep=time.sleep, now=time.monotonic, cache_dir=cache_dir / "responses")
+    client = Client(get=http_get, sleep=time.sleep, now=time.monotonic, cache_dir=cache_directory / "responses")
     return Dependencies(
         client=client,
         embedder=BgeEmbedder,
@@ -118,36 +119,44 @@ def _resolve_out(out: Path | None) -> Path:
     return out if out is not None else default_out_dir()
 
 
-def _resolve_cache_dir(cache_dir: Path | None) -> Path:
-    return cache_dir if cache_dir is not None else default_cache_dir()
+def _resolve_cache_dir(cache_directory: Path | None) -> Path:
+    return cache_directory if cache_directory is not None else default_cache_dir()
 
 
-def _stage_dir(cache_dir: Path) -> Path:
-    return cache_dir / "stages"
+def _stage_dir(cache_directory: Path) -> Path:
+    return cache_directory / "stages"
 
 
-def _papers_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "papers.json"
+def _papers_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "papers.json"
 
 
-def _embeddings_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "embeddings.npy"
+def _embeddings_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "embeddings.npy"
 
 
-def _coordinates_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "coordinates.npy"
+def _coordinates_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "coordinates.npy"
 
 
-def _papers_fingerprint_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "papers.fingerprint"
+def _papers_fingerprint_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "papers.fingerprint"
 
 
-def _embeddings_fingerprint_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "embeddings.fingerprint"
+def _embeddings_fingerprint_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "embeddings.fingerprint"
 
 
-def _coordinates_fingerprint_path(cache_dir: Path) -> Path:
-    return _stage_dir(cache_dir) / "coordinates.fingerprint"
+def _coordinates_fingerprint_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "coordinates.fingerprint"
+
+
+def _edges_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "edges.json"
+
+
+def _edges_fingerprint_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "edges.fingerprint"
 
 
 def _dependency_version(distribution: str) -> str | None:
@@ -179,7 +188,7 @@ def _require_cached(path: Path, prior_stage: str, what: str) -> None:
         raise ValueError(f"no cached {what} at {path} — run 'arxiv-corpus {prior_stage}' first")
 
 
-def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
+def run_fetch(deps: Dependencies, cache_directory: Path, paper_count: int, floor: int) -> None:
     """Count and sample every `cs.*` category, then cache the resulting papers.
 
     A category arXiv itself reports as empty (`total == 0`) is skipped and named in a
@@ -193,13 +202,13 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
     inside `n`, but a non-positive `n` or a negative `floor` would otherwise reach it and
     produce a confusing downstream error instead of a message naming the bad flag.
     """
-    if n <= 0:
-        raise ValueError(f"--n must be a positive integer, got {n}")
+    if paper_count <= 0:
+        raise ValueError(f"--n must be a positive integer, got {paper_count}")
     if floor < 0:
         raise ValueError(f"--floor must be zero or a positive integer, got {floor}")
 
     totals = {code: deps.client.total(code) for code in sorted(CATEGORIES)}
-    quota = quotas(totals, n=n, floor=floor)
+    quota = quotas(totals, n=paper_count, floor=floor)
 
     dropped = sorted(code for code in quota if totals[code] == 0)
     if dropped:
@@ -219,63 +228,111 @@ def run_fetch(deps: Dependencies, cache_dir: Path, n: int, floor: int) -> None:
         raise ValueError(f"short fetch, quota not met: {detail}")
 
     payload = {
-        "n": n,
+        "n": paper_count,
         "floor": floor,
         "fetched_at": deps.today().isoformat(),
         "papers": [asdict(paper) for paper in papers],
     }
     payload_text = json.dumps(payload)
-    stage_dir = _stage_dir(cache_dir)
-    stage_dir.mkdir(parents=True, exist_ok=True)
-    _papers_path(cache_dir).write_text(payload_text, encoding="utf-8")
-    _papers_fingerprint_path(cache_dir).write_text(_fingerprint(payload_text.encode("utf-8")), encoding="utf-8")
+    stage_directory = _stage_dir(cache_directory)
+    stage_directory.mkdir(parents=True, exist_ok=True)
+    _papers_path(cache_directory).write_text(payload_text, encoding="utf-8")
+    _papers_fingerprint_path(cache_directory).write_text(_fingerprint(payload_text.encode("utf-8")), encoding="utf-8")
 
 
-def run_embed(deps: Dependencies, cache_dir: Path) -> None:
+def run_embed(deps: Dependencies, cache_directory: Path) -> None:
     """Embed the cached papers' abstracts and cache the resulting vectors.
 
     The fingerprint of the papers actually consumed travels along in a sidecar, so `export`
     can later tell whether the coordinates it is about to read trace back to today's
     `papers.json` or to a fetch that has since been replaced.
     """
-    papers_path = _papers_path(cache_dir)
+    papers_path = _papers_path(cache_directory)
     _require_cached(papers_path, prior_stage="fetch", what="papers")
-    fingerprint_path = _papers_fingerprint_path(cache_dir)
+    fingerprint_path = _papers_fingerprint_path(cache_directory)
     _require_cached(fingerprint_path, prior_stage="fetch", what="papers fingerprint")
     payload = json.loads(papers_path.read_text(encoding="utf-8"))
     abstracts = [paper["abstract"] for paper in payload["papers"]]
     vectors = deps.embedder().embed(abstracts)
-    np.save(_embeddings_path(cache_dir), vectors)
-    _embeddings_fingerprint_path(cache_dir).write_text(fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8")
+    np.save(_embeddings_path(cache_directory), vectors)
+    _embeddings_fingerprint_path(cache_directory).write_text(
+        fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
 
-def run_project(deps: Dependencies, cache_dir: Path) -> None:
+def run_project(deps: Dependencies, cache_directory: Path) -> None:
     """Project the cached embeddings to 2D, rescale them, and cache the coordinates.
 
     Copies `embed`'s fingerprint sidecar forward unchanged -- see `run_embed`.
     """
-    embeddings_path = _embeddings_path(cache_dir)
+    embeddings_path = _embeddings_path(cache_directory)
     _require_cached(embeddings_path, prior_stage="embed", what="embeddings")
-    fingerprint_path = _embeddings_fingerprint_path(cache_dir)
+    fingerprint_path = _embeddings_fingerprint_path(cache_directory)
     _require_cached(fingerprint_path, prior_stage="embed", what="embeddings fingerprint")
     vectors = np.load(embeddings_path)
-    xy = rescale(deps.projector().project(vectors))
-    np.save(_coordinates_path(cache_dir), xy)
-    _coordinates_fingerprint_path(cache_dir).write_text(fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8")
+    coordinates = rescale(deps.projector().project(vectors))
+    np.save(_coordinates_path(cache_directory), coordinates)
+    _coordinates_fingerprint_path(cache_directory).write_text(
+        fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
 
-def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
+def run_edges(cache_directory: Path) -> None:
+    """Link each cached paper to its nearest neighbours in other categories, and cache them.
+
+    Rows are normalised here (a zero row stays zero and links to nothing), so the stage does
+    not depend on the embedder having normalised them. Copies `embed`'s fingerprint sidecar
+    forward, as `project` does, so `export` can refuse edges from a replaced fetch.
+    """
+    papers_path = _papers_path(cache_directory)
+    _require_cached(papers_path, prior_stage="fetch", what="papers")
+    embeddings_path = _embeddings_path(cache_directory)
+    _require_cached(embeddings_path, prior_stage="embed", what="embeddings")
+    fingerprint_path = _embeddings_fingerprint_path(cache_directory)
+    _require_cached(fingerprint_path, prior_stage="embed", what="embeddings fingerprint")
+    payload = json.loads(papers_path.read_text(encoding="utf-8"))
+    categories = [paper["category"] for paper in payload["papers"]]
+    vectors = np.load(embeddings_path).astype(np.float32)
+    if len(vectors) != len(categories):
+        raise ValueError(
+            f"{len(vectors)} embeddings for {len(categories)} papers — run 'arxiv-corpus embed' to refresh them"
+        )
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    unit_rows = np.divide(vectors, norms, out=np.zeros_like(vectors), where=norms > 0)
+    edges = cross_category_edges(unit_rows, categories)
+    _edges_path(cache_directory).write_text(
+        json.dumps([list(edge) for edge in edges], separators=(",", ":")), encoding="utf-8"
+    )
+    _edges_fingerprint_path(cache_directory).write_text(fingerprint_path.read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"{len(edges)} edges")
+
+
+def _cached_edges(cache_directory: Path, current_fingerprint: str) -> list[tuple[int, int, int]] | None:
+    """The cached edges, `None` when the edges stage never ran, refused when they are stale."""
+    edges_path = _edges_path(cache_directory)
+    if not edges_path.exists():
+        return None
+    fingerprint_path = _edges_fingerprint_path(cache_directory)
+    if not fingerprint_path.exists() or fingerprint_path.read_text(encoding="utf-8") != current_fingerprint:
+        raise ValueError(
+            "the cached edges were produced from a different papers.json than the one now in the "
+            "cache — run 'arxiv-corpus edges' to refresh them before exporting"
+        )
+    return [(low, high, weight) for low, high, weight in json.loads(edges_path.read_text(encoding="utf-8"))]
+
+
+def run_export(deps: Dependencies, cache_directory: Path, out_directory: Path) -> None:
     """Build the checked `MapSpec` from the cached papers and coordinates, and write it.
 
     Refuses, before reading anything else, if the cached coordinates were produced from a
     different `papers.json` than the one sitting in the cache now -- a refetch (same length
     or not) must not get silently paired with stale coordinates from the fetch it replaced.
     """
-    papers_path = _papers_path(cache_dir)
+    papers_path = _papers_path(cache_directory)
     _require_cached(papers_path, prior_stage="fetch", what="papers")
-    coordinates_path = _coordinates_path(cache_dir)
+    coordinates_path = _coordinates_path(cache_directory)
     _require_cached(coordinates_path, prior_stage="project", what="projected coordinates")
-    coordinates_fingerprint_path = _coordinates_fingerprint_path(cache_dir)
+    coordinates_fingerprint_path = _coordinates_fingerprint_path(cache_directory)
     _require_cached(coordinates_fingerprint_path, prior_stage="project", what="coordinates fingerprint")
 
     payload_text = papers_path.read_text(encoding="utf-8")
@@ -287,11 +344,12 @@ def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
             "cache — run 'arxiv-corpus embed' (then 'project') to refresh them before exporting"
         )
 
+    edges = _cached_edges(cache_directory, current_fingerprint)
     payload = json.loads(payload_text)
     papers = [Paper(**fields) for fields in payload["papers"]]
-    xy = np.load(coordinates_path)
+    coordinates = np.load(coordinates_path)
 
-    spec = build_spec(papers, xy)
+    spec = build_spec(papers, coordinates, edges=edges)
     per_category = dict(sorted(Counter(paper.category for paper in papers).items()))
     meta: dict[str, object] = {
         "fetched_at": payload["fetched_at"],
@@ -308,38 +366,42 @@ def run_export(deps: Dependencies, cache_dir: Path, out_dir: Path) -> None:
         "attribution": ATTRIBUTION,
         "license_note": LICENSE_NOTE,
     }
-    write_outputs(spec, meta, out_dir)
+    if edges is not None:
+        meta["edges"] = {"floor": EDGE_FLOOR, "per_paper": EDGES_PER_PAPER, "count": len(edges)}
+    write_outputs(spec, meta, out_directory)
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="arxiv-corpus")
     subparsers = parser.add_subparsers(dest="stage", required=True)
     for name in STAGES:
-        sub = subparsers.add_parser(name)
-        sub.add_argument("--out", type=Path, default=None)
-        sub.add_argument("--cache-dir", type=Path, default=None)
-        sub.add_argument("--n", type=int, default=DEFAULT_N)
-        sub.add_argument("--floor", type=int, default=DEFAULT_FLOOR)
+        subparser = subparsers.add_parser(name)
+        subparser.add_argument("--out", type=Path, default=None)
+        subparser.add_argument("--cache-dir", type=Path, default=None)
+        subparser.add_argument("--n", type=int, default=DEFAULT_PAPER_COUNT)
+        subparser.add_argument("--floor", type=int, default=DEFAULT_FLOOR)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parse_args(argv)
-    cache_dir = _resolve_cache_dir(args.cache_dir)
-    out_dir = _resolve_out(args.out)
-    deps = make_dependencies(cache_dir)
+    arguments = _parse_args(argv)
+    cache_directory = _resolve_cache_dir(arguments.cache_dir)
+    out_directory = _resolve_out(arguments.out)
+    deps = make_dependencies(cache_directory)
 
     try:
-        if args.stage in {"fetch", "all"}:
-            run_fetch(deps, cache_dir, args.n, args.floor)
-        if args.stage in {"embed", "all"}:
-            run_embed(deps, cache_dir)
-        if args.stage in {"project", "all"}:
-            run_project(deps, cache_dir)
-        if args.stage in {"export", "all"}:
-            run_export(deps, cache_dir, out_dir)
-    except ValueError as err:
-        print(str(err), file=sys.stderr)
+        if arguments.stage in {"fetch", "all"}:
+            run_fetch(deps, cache_directory, arguments.n, arguments.floor)
+        if arguments.stage in {"embed", "all"}:
+            run_embed(deps, cache_directory)
+        if arguments.stage in {"project", "all"}:
+            run_project(deps, cache_directory)
+        if arguments.stage in {"edges", "all"}:
+            run_edges(cache_directory)
+        if arguments.stage in {"export", "all"}:
+            run_export(deps, cache_directory, out_directory)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
         return 2
 
     return 0

@@ -47,8 +47,8 @@ def _fixture_get(url: str) -> str:
     return (FIXTURES / "page.atom").read_text(encoding="utf-8")
 
 
-def make_fake_dependencies(cache_dir: Path) -> cli.Dependencies:
-    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_dir)
+def make_fake_dependencies(cache_directory: Path) -> cli.Dependencies:
+    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_directory)
     return cli.Dependencies(
         client=client,
         embedder=HashEmbedder,
@@ -70,38 +70,40 @@ def fake_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_all_produces_a_spec_that_passes_check_spec(
     fake_dependencies: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
 
-    exit_code = cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "3", "--floor", "1"])
+    exit_code = cli.main(
+        ["all", "--out", str(out_directory), "--cache-dir", str(cache_directory), "--n", "3", "--floor", "1"]
+    )
 
     assert exit_code == 0
-    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    spec = json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
     export.check_spec(spec)
 
 
 def test_all_output_spans_at_least_two_territories_from_the_fixture(fake_dependencies: None, tmp_path: Path) -> None:
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
 
-    cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "3", "--floor", "1"])
+    cli.main(["all", "--out", str(out_directory), "--cache-dir", str(cache_directory), "--n", "3", "--floor", "1"])
 
-    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
-    assert {t["id"] for t in spec["territories"]} == {"cs.CL", "cs.LG"}
+    spec = json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
+    assert {territory["id"] for territory in spec["territories"]} == {"cs.CL", "cs.LG"}
     assert len(spec["nodes"]) == 3
 
 
 def test_all_writes_meta_with_the_injected_and_computed_fields(
     fake_dependencies: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
     fake_versions = {"sentence-transformers": "9.9.9", "umap-learn": None}
     monkeypatch.setattr(cli, "_dependency_version", lambda distribution: fake_versions[distribution])
 
-    cli.main(["all", "--out", str(out_dir), "--cache-dir", str(cache_dir), "--n", "3", "--floor", "1"])
+    cli.main(["all", "--out", str(out_directory), "--cache-dir", str(cache_directory), "--n", "3", "--floor", "1"])
 
-    meta = json.loads((out_dir / "arxiv.meta.json").read_text(encoding="utf-8"))
+    meta = json.loads((out_directory / "arxiv.meta.json").read_text(encoding="utf-8"))
     assert meta["fetched_at"] == "2026-09-23"
     assert meta["query"] == cli.QUERY_SHAPE
     assert meta["n"] == 3
@@ -146,13 +148,13 @@ def _fixture_get_with_an_empty_category(url: str) -> str:
 
 
 def test_run_fetch_skips_fetching_a_category_whose_quota_is_zero(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
+    cache_directory = tmp_path / "cache"
     client = Client(
         get=_fixture_get_with_an_empty_category,
         sleep=lambda _seconds: None,
         now=lambda: 0.0,
         gap=0.0,
-        cache_dir=cache_dir,
+        cache_dir=cache_directory,
     )
     deps = cli.Dependencies(
         client=client,
@@ -163,9 +165,9 @@ def test_run_fetch_skips_fetching_a_category_whose_quota_is_zero(tmp_path: Path)
         umap_params={"fake": True},
     )
 
-    cli.run_fetch(deps, cache_dir, n=2, floor=1)
+    cli.run_fetch(deps, cache_directory, paper_count=2, floor=1)
 
-    payload = json.loads((cache_dir / "stages" / "papers.json").read_text(encoding="utf-8"))
+    payload = json.loads((cache_directory / "stages" / "papers.json").read_text(encoding="utf-8"))
     categories = {paper["category"] for paper in payload["papers"]}
     assert "cs.LG" not in categories
     assert "cs.CL" in categories
@@ -174,10 +176,10 @@ def test_run_fetch_skips_fetching_a_category_whose_quota_is_zero(tmp_path: Path)
 def test_run_fetch_warns_on_stderr_for_every_zero_total_category(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_directory)
 
-    cli.run_fetch(deps, cache_dir, n=3, floor=1)
+    cli.run_fetch(deps, cache_directory, paper_count=3, floor=1)
 
     captured = capsys.readouterr()
     warning_line = next(line for line in captured.err.splitlines() if line.startswith("dropped:"))
@@ -191,10 +193,10 @@ def test_run_fetch_prints_no_warning_when_every_category_has_papers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cli, "CATEGORIES", {"cs.CL": "Computation and Language", "cs.LG": "Machine Learning"})
-    cache_dir = tmp_path / "cache"
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_directory)
 
-    cli.run_fetch(deps, cache_dir, n=3, floor=1)
+    cli.run_fetch(deps, cache_directory, paper_count=3, floor=1)
 
     captured = capsys.readouterr()
     assert "dropped:" not in captured.err
@@ -214,16 +216,16 @@ def _fixture_get_with_cs_cl_undercounted(url: str) -> str:
 def test_main_exits_2_naming_a_category_that_comes_back_short_of_its_quota(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
 
-    def fake_make_dependencies(cache_dir: Path) -> cli.Dependencies:
+    def fake_make_dependencies(cache_directory: Path) -> cli.Dependencies:
         client = Client(
             get=_fixture_get_with_cs_cl_undercounted,
             sleep=lambda _seconds: None,
             now=lambda: 0.0,
             gap=0.0,
-            cache_dir=cache_dir,
+            cache_dir=cache_directory,
         )
         return cli.Dependencies(
             client=client,
@@ -236,45 +238,47 @@ def test_main_exits_2_naming_a_category_that_comes_back_short_of_its_quota(
 
     monkeypatch.setattr(cli, "make_dependencies", fake_make_dependencies)
 
-    exit_code = cli.main(["fetch", "--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "5", "--floor", "1"])
+    exit_code = cli.main(
+        ["fetch", "--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "5", "--floor", "1"]
+    )
 
     assert exit_code == 2
     captured = capsys.readouterr()
     assert "cs.CL" in captured.err
     assert "2/5" in captured.err
-    assert not (cache_dir / "stages" / "papers.json").exists()
+    assert not (cache_directory / "stages" / "papers.json").exists()
 
 
 def test_each_stage_can_be_rerun_alone_from_cached_intermediates(fake_dependencies: None, tmp_path: Path) -> None:
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
-    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "1"]
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "3", "--floor", "1"]
 
     assert cli.main(["fetch", *common]) == 0
-    stage_dir = cache_dir / "stages"
-    assert (stage_dir / "papers.json").exists()
-    assert not (stage_dir / "embeddings.npy").exists()
+    stage_directory = cache_directory / "stages"
+    assert (stage_directory / "papers.json").exists()
+    assert not (stage_directory / "embeddings.npy").exists()
 
     assert cli.main(["embed", *common]) == 0
-    assert (stage_dir / "embeddings.npy").exists()
-    assert not (stage_dir / "coordinates.npy").exists()
+    assert (stage_directory / "embeddings.npy").exists()
+    assert not (stage_directory / "coordinates.npy").exists()
 
     assert cli.main(["project", *common]) == 0
-    assert (stage_dir / "coordinates.npy").exists()
-    assert not (out_dir / "arxiv.json").exists()
+    assert (stage_directory / "coordinates.npy").exists()
+    assert not (out_directory / "arxiv.json").exists()
 
     # export alone, reading only the cached project output from the run above
     assert cli.main(["export", *common]) == 0
-    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    spec = json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
     export.check_spec(spec)
 
 
 def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
-    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "1"]
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "3", "--floor", "1"]
 
     monkeypatch.setattr(cli, "make_dependencies", make_fake_dependencies)
     cli.main(["fetch", *common])
@@ -284,8 +288,8 @@ def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_n
     def failing_get(_url: str) -> str:
         raise AssertionError("export must not call the network")
 
-    def failing_dependencies(cache_dir: Path) -> cli.Dependencies:
-        client = Client(get=failing_get, sleep=lambda _s: None, now=lambda: 0.0, cache_dir=cache_dir)
+    def failing_dependencies(cache_directory: Path) -> cli.Dependencies:
+        client = Client(get=failing_get, sleep=lambda _s: None, now=lambda: 0.0, cache_dir=cache_directory)
         return cli.Dependencies(
             client=client,
             embedder=HashEmbedder,
@@ -298,16 +302,16 @@ def test_export_alone_reads_cached_papers_and_coordinates_without_touching_the_n
     monkeypatch.setattr(cli, "make_dependencies", failing_dependencies)
 
     assert cli.main(["export", *common]) == 0
-    spec = json.loads((out_dir / "arxiv.json").read_text(encoding="utf-8"))
+    spec = json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
     export.check_spec(spec)
 
 
 def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -> None:
     """A stage split invites `export` running on a later day than `fetch` did; meta must
     still record when the papers were actually fetched, not export's clock."""
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
-    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_dir)
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    client = Client(get=_fixture_get, sleep=lambda _seconds: None, now=lambda: 0.0, gap=0.0, cache_dir=cache_directory)
 
     fetch_deps = cli.Dependencies(
         client=client,
@@ -317,9 +321,9 @@ def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -
         model_name="hash-embedder-test",
         umap_params={"fake": True},
     )
-    cli.run_fetch(fetch_deps, cache_dir, n=3, floor=1)
-    cli.run_embed(fetch_deps, cache_dir)
-    cli.run_project(fetch_deps, cache_dir)
+    cli.run_fetch(fetch_deps, cache_directory, paper_count=3, floor=1)
+    cli.run_embed(fetch_deps, cache_directory)
+    cli.run_project(fetch_deps, cache_directory)
 
     export_deps = cli.Dependencies(
         client=client,
@@ -329,9 +333,9 @@ def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -
         model_name="hash-embedder-test",
         umap_params={"fake": True},
     )
-    cli.run_export(export_deps, cache_dir, out_dir)
+    cli.run_export(export_deps, cache_directory, out_directory)
 
-    meta = json.loads((out_dir / "arxiv.meta.json").read_text(encoding="utf-8"))
+    meta = json.loads((out_directory / "arxiv.meta.json").read_text(encoding="utf-8"))
     assert meta["fetched_at"] == "2026-01-01"
 
 
@@ -341,31 +345,35 @@ def test_meta_fetched_at_is_the_fetch_date_not_the_export_date(tmp_path: Path) -
 def test_main_exits_2_for_a_non_positive_n(
     fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
 
-    exit_code = cli.main(["fetch", "--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "0", "--floor", "1"])
+    exit_code = cli.main(
+        ["fetch", "--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "0", "--floor", "1"]
+    )
 
     assert exit_code == 2
     captured = capsys.readouterr()
     assert "--n" in captured.err
     assert "0" in captured.err
-    assert not (cache_dir / "stages" / "papers.json").exists()
+    assert not (cache_directory / "stages" / "papers.json").exists()
 
 
 def test_main_exits_2_for_a_negative_floor(
     fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
 
-    exit_code = cli.main(["fetch", "--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "-1"])
+    exit_code = cli.main(
+        ["fetch", "--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "3", "--floor", "-1"]
+    )
 
     assert exit_code == 2
     captured = capsys.readouterr()
     assert "--floor" in captured.err
     assert "-1" in captured.err
-    assert not (cache_dir / "stages" / "papers.json").exists()
+    assert not (cache_directory / "stages" / "papers.json").exists()
 
 
 # --- provenance (I-2) ---
@@ -375,16 +383,16 @@ def test_export_refuses_coordinates_from_a_different_fetch(
     fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A refetch (same length or not) must not silently pair with stale coordinates."""
-    out_dir = tmp_path / "out"
-    cache_dir = tmp_path / "cache"
-    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "1"]
+    out_directory = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "3", "--floor", "1"]
 
     assert cli.main(["all", *common]) == 0
 
-    papers_path = cache_dir / "stages" / "papers.json"
+    papers_path = cache_directory / "stages" / "papers.json"
     payload = json.loads(papers_path.read_text(encoding="utf-8"))
-    for i, paper in enumerate(payload["papers"]):
-        paper["id"] = f"9999.{i:05d}"
+    for index, paper in enumerate(payload["papers"]):
+        paper["id"] = f"9999.{index:05d}"
     papers_path.write_text(json.dumps(payload), encoding="utf-8")
 
     exit_code = cli.main(["export", *common])
@@ -397,88 +405,88 @@ def test_export_refuses_coordinates_from_a_different_fetch(
 def test_run_embed_without_a_papers_fingerprint_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
     """A `papers.json` with no fingerprint sidecar (e.g. a pre-existing cache) is as unusable
     as a missing `papers.json` -- `embed` has nothing trustworthy to copy forward."""
-    cache_dir = tmp_path / "cache"
-    stage_dir = cache_dir / "stages"
-    stage_dir.mkdir(parents=True)
-    (stage_dir / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    stage_directory = cache_directory / "stages"
+    stage_directory.mkdir(parents=True)
+    (stage_directory / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"papers fingerprint.*run 'arxiv-corpus fetch' first"):
-        cli.run_embed(deps, cache_dir)
+        cli.run_embed(deps, cache_directory)
 
 
 def test_run_project_without_an_embeddings_fingerprint_names_embed_as_the_predecessor(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
-    stage_dir = cache_dir / "stages"
-    stage_dir.mkdir(parents=True)
-    np.save(stage_dir / "embeddings.npy", np.zeros((1, 2), dtype=np.float32))
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    stage_directory = cache_directory / "stages"
+    stage_directory.mkdir(parents=True)
+    np.save(stage_directory / "embeddings.npy", np.zeros((1, 2), dtype=np.float32))
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"embeddings fingerprint.*run 'arxiv-corpus embed' first"):
-        cli.run_project(deps, cache_dir)
+        cli.run_project(deps, cache_directory)
 
 
 def test_run_export_without_a_coordinates_fingerprint_names_project_as_the_predecessor(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
-    stage_dir = cache_dir / "stages"
-    stage_dir.mkdir(parents=True)
-    (stage_dir / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
-    np.save(stage_dir / "coordinates.npy", np.zeros((0, 2), dtype=np.float64))
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    stage_directory = cache_directory / "stages"
+    stage_directory.mkdir(parents=True)
+    (stage_directory / "papers.json").write_text(json.dumps({"n": 1, "floor": 1, "papers": []}), encoding="utf-8")
+    np.save(stage_directory / "coordinates.npy", np.zeros((0, 2), dtype=np.float64))
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"coordinates fingerprint.*run 'arxiv-corpus project' first"):
-        cli.run_export(deps, cache_dir, out_dir)
+        cli.run_export(deps, cache_directory, out_directory)
 
 
 # --- missing predecessor stage ---
 
 
 def test_run_embed_without_cached_papers_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"run 'arxiv-corpus fetch' first"):
-        cli.run_embed(deps, cache_dir)
+        cli.run_embed(deps, cache_directory)
 
 
 def test_run_project_without_cached_embeddings_names_embed_as_the_predecessor(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"run 'arxiv-corpus embed' first"):
-        cli.run_project(deps, cache_dir)
+        cli.run_project(deps, cache_directory)
 
 
 def test_run_export_without_cached_papers_names_fetch_as_the_predecessor(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
-    deps = make_fake_dependencies(cache_dir)
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    deps = make_fake_dependencies(cache_directory)
 
     with pytest.raises(ValueError, match=r"run 'arxiv-corpus fetch' first"):
-        cli.run_export(deps, cache_dir, out_dir)
+        cli.run_export(deps, cache_directory, out_directory)
 
 
 def test_run_export_without_cached_projection_names_project_as_the_predecessor(
     fake_dependencies: None, tmp_path: Path
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
-    common = ["--cache-dir", str(cache_dir), "--out", str(out_dir), "--n", "3", "--floor", "1"]
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory), "--n", "3", "--floor", "1"]
     cli.main(["fetch", *common])  # papers cached; embeddings/coordinates deliberately not
 
-    deps = make_fake_dependencies(cache_dir)
+    deps = make_fake_dependencies(cache_directory)
     with pytest.raises(ValueError, match=r"run 'arxiv-corpus project' first"):
-        cli.run_export(deps, cache_dir, out_dir)
+        cli.run_export(deps, cache_directory, out_directory)
 
 
 def test_main_prints_the_missing_predecessor_message_to_stderr_and_returns_nonzero(
     fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cache_dir = tmp_path / "cache"
-    out_dir = tmp_path / "out"
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
 
-    exit_code = cli.main(["embed", "--cache-dir", str(cache_dir), "--out", str(out_dir)])
+    exit_code = cli.main(["embed", "--cache-dir", str(cache_directory), "--out", str(out_directory)])
 
     assert exit_code == 2
     captured = capsys.readouterr()
@@ -538,3 +546,129 @@ def test_default_cache_dir_points_at_the_package_cache_dir_not_cwd(
 def test_package_root_raises_when_no_pyproject_toml_is_found_above(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match=r"pyproject\.toml"):
         cli._package_root(tmp_path / "nested" / "module.py")
+
+
+# --- edges ---
+
+
+def _seed_cache(cache_directory: Path, embeddings: np.ndarray, categories: list[str]) -> None:
+    """A fetch + embed + project cache written by hand: one paper per row, fingerprints agreeing."""
+    papers = [
+        {"id": f"p{index}", "title": f"Paper {index}", "abstract": "an abstract", "category": category, "year": 2026}
+        for index, category in enumerate(categories)
+    ]
+    payload_text = json.dumps({"n": len(papers), "floor": 0, "fetched_at": "2026-10-25", "papers": papers})
+    stage_directory = cache_directory / "stages"
+    stage_directory.mkdir(parents=True, exist_ok=True)
+    (stage_directory / "papers.json").write_text(payload_text, encoding="utf-8")
+    fingerprint = cli._fingerprint(payload_text.encode("utf-8"))
+    np.save(stage_directory / "embeddings.npy", embeddings)
+    np.save(stage_directory / "coordinates.npy", np.asarray([[float(index), 0.0] for index in range(len(papers))]))
+    for name in ("papers", "embeddings", "coordinates"):
+        (stage_directory / f"{name}.fingerprint").write_text(fingerprint, encoding="utf-8")
+
+
+# Rows 0 and 2 (and 1 and 2) are near-identical across categories; row 3 points elsewhere.
+SEED_EMBEDDINGS = np.asarray([[1, 0], [1, 0.01], [1, 0.02], [0, 1]], dtype=np.float32)
+SEED_CATEGORIES = ["cs.CL", "cs.CL", "cs.LG", "cs.LG"]
+
+
+def test_edges_stage_writes_index_triples_and_prints_the_count(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+
+    assert cli.main(["edges", "--cache-dir", str(cache_directory), "--out", str(tmp_path / "out")]) == 0
+
+    edges = json.loads((cache_directory / "stages" / "edges.json").read_text(encoding="utf-8"))
+    assert edges == [[0, 2, 100], [1, 2, 100]]
+    assert "2 edges" in capsys.readouterr().out
+
+
+def test_edges_stage_normalises_rows_that_are_not_unit_length(fake_dependencies: None, tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS * 7, SEED_CATEGORIES)
+
+    assert cli.main(["edges", "--cache-dir", str(cache_directory), "--out", str(tmp_path / "out")]) == 0
+
+    edges = json.loads((cache_directory / "stages" / "edges.json").read_text(encoding="utf-8"))
+    assert edges == [[0, 2, 100], [1, 2, 100]]
+
+
+def test_export_writes_the_cached_edges_and_their_meta(fake_dependencies: None, tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory)]
+
+    assert cli.main(["edges", *common]) == 0
+    assert cli.main(["export", *common]) == 0
+
+    spec = json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
+    assert spec["edges"] == [[0, 2, 100], [1, 2, 100]]
+    meta = json.loads((out_directory / "arxiv.meta.json").read_text(encoding="utf-8"))
+    assert meta["edges"] == {"floor": 0.8, "per_paper": 3, "count": 2}
+
+
+def test_export_without_cached_edges_writes_neither_edges_nor_their_meta(
+    fake_dependencies: None, tmp_path: Path
+) -> None:
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+
+    assert cli.main(["export", "--cache-dir", str(cache_directory), "--out", str(out_directory)]) == 0
+
+    assert "edges" not in json.loads((out_directory / "arxiv.json").read_text(encoding="utf-8"))
+    assert "edges" not in json.loads((out_directory / "arxiv.meta.json").read_text(encoding="utf-8"))
+
+
+def test_export_refuses_edges_from_a_different_fetch(
+    fake_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+    common = ["--cache-dir", str(cache_directory), "--out", str(out_directory)]
+    assert cli.main(["edges", *common]) == 0
+    (cache_directory / "stages" / "edges.fingerprint").write_text("stale", encoding="utf-8")
+
+    assert cli.main(["export", *common]) == 2
+
+    assert "arxiv-corpus edges" in capsys.readouterr().err
+    assert not (out_directory / "arxiv.json").exists()
+
+
+def test_run_edges_without_cached_embeddings_names_embed_as_the_predecessor(tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+    (cache_directory / "stages" / "embeddings.npy").unlink()
+
+    with pytest.raises(ValueError, match="arxiv-corpus embed"):
+        cli.run_edges(cache_directory)
+
+
+def test_run_edges_without_an_embeddings_fingerprint_names_embed_as_the_predecessor(tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS, SEED_CATEGORIES)
+    (cache_directory / "stages" / "embeddings.fingerprint").unlink()
+
+    with pytest.raises(ValueError, match="arxiv-corpus embed"):
+        cli.run_edges(cache_directory)
+
+
+def test_run_edges_refuses_embeddings_that_do_not_match_the_papers(tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_cache(cache_directory, SEED_EMBEDDINGS[:3], SEED_CATEGORIES)
+
+    with pytest.raises(ValueError, match="3 embeddings for 4 papers"):
+        cli.run_edges(cache_directory)
+
+
+def test_all_runs_the_edges_stage(fake_dependencies: None, tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+
+    cli.main(["all", "--out", str(tmp_path / "out"), "--cache-dir", str(cache_directory), "--n", "3", "--floor", "1"])
+
+    assert (cache_directory / "stages" / "edges.json").exists()

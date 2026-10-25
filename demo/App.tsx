@@ -5,6 +5,7 @@ import {
   DEFAULT_THEME,
   DEFAULT_THRESHOLDS,
   DEFAULT_TUNING,
+  relatedItems,
   resolveThresholds,
   resolveTuning,
 } from "corpus-map";
@@ -492,6 +493,14 @@ export function App({ loadArxiv }: AppProps = {}) {
       ? (current.spec.territories.find((territory) => territory.id === selected.territory)?.name ?? null)
       : null;
 
+  // The drawer's Related list (slice E): one index over the spec's edges, kept
+  // while the spec and the selection stay the same.
+  const currentSpec = current?.spec;
+  const related = useMemo(
+    () => (currentSpec && selectedId !== null ? relatedItems(currentSpec, selectedId) : []),
+    [currentSpec, selectedId],
+  );
+
   return (
     <div data-app-shell style={shellStyle}>
       {/* First in the DOM: the h1 precedes the map's h2s, and Tab meets the demo controls before the map. */}
@@ -556,6 +565,11 @@ export function App({ loadArxiv }: AppProps = {}) {
         onClose={() => setSelectedId(null)}
         returnFocusTo={mapFocusTarget}
         topInset={topBarHeight}
+        related={related}
+        onOpenRelated={(id) => {
+          setSelectedId(id);
+          mapReference.current?.reveal(id);
+        }}
       />
       <TuningPanel
         open={panelOpen}

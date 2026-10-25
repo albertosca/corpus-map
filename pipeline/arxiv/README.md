@@ -2,11 +2,17 @@
 
 # arXiv corpus pipeline
 
-`fetch → embed → project → export` — flags: `--n` (papers, default 8000), `--floor` (minimum per category, default 20), `--out` (default `demo/corpora`), `--cache-dir` (default `.cache`). Run any stage alone, or `all` for the whole thing: `uv run arxiv-corpus <fetch|embed|project|export|all> [flags]`.
+`fetch → embed → project → edges → export` — flags: `--n` (papers, default 8000), `--floor` (minimum per category, default 20), `--out` (default `demo/corpora`), `--cache-dir` (default `.cache`). Run any stage alone, or `all` for the whole thing: `uv run arxiv-corpus <fetch|embed|project|edges|export|all> [flags]`.
 
 ## What it builds
 
 This package fetches a sample of `cs.*` (computer science) papers from the live arXiv API, embeds each abstract into a 384-dimensional vector with a small local model, projects those vectors to 2D with UMAP, and writes `demo/corpora/arxiv.json` — a corpus-map `MapSpec`, checked twice: once by this package's own `export.py`, and once by the library's `validateSpec` in `demo/corpora/arxiv.test.ts`, which is the test that proves the demo can actually load it. `demo/corpora/arxiv.meta.json` records how that file was produced: the date, the query shape, the model, the UMAP parameters, and the per-category paper counts. Every arXiv category becomes a territory on the map; every paper becomes a node, positioned by how semantically similar its abstract is to every other abstract in the sample — papers about similar topics cluster together, and the named territories are the `cs.*` categories arXiv itself assigns.
+
+## Edges: related papers across categories
+
+The `edges` stage (spec slice E §8) links each paper to its nearest neighbours in *other* categories: cosine similarity over the cached embeddings, computed in blocks of 512 rows so the 8000 × 8000 matrix never sits in memory at once. A pair is kept only at similarity 0.80 or above, and each paper ends with at most three edges — every paper proposes its three best, then the heaviest pairs are kept first while both ends still have room, so a paper many others resemble (a hub) cannot collect dozens. Pairs inside one category are left out on purpose: the map already shows those by position. A paper whose embedding is all zeros links to nothing.
+
+`export` writes the edges into `arxiv.json` as compact `[sourceIndex, targetIndex, weightPercent]` triples (indexes into `nodes`, the lower first) and records `floor`, `per_paper` and `count` under `edges` in `arxiv.meta.json`; the demo expands them into `MapEdge`s when it loads the file, writing each edge's reason from the words the two titles share (`demo/corpora/edges.ts`), so the file does not carry that text twice. `edges.json` carries the embeddings' fingerprint, and `export` refuses an `edges.json` from different embeddings — re-run `edges` after `embed`. Without an `edges.json`, `export` writes a spec with no edges.
 
 ## Source, license, and attribution
 
@@ -63,4 +69,4 @@ rm -rf .cache/responses
 uv run arxiv-corpus all --n 8000 --floor 20
 ```
 
-`fetch` asks for the *newest* papers in each category, so once the response cache is gone, the next run picks up whatever was submitted to arXiv since. `embed`, `project` and `export` all key off a fingerprint of the papers `fetch` actually wrote, so a refresh cannot silently pair new papers with old coordinates (or vice versa) even when the refreshed corpus happens to have the exact same number of papers per category. UMAP's layout is also not guaranteed bit-reproducible across machines even with a fixed `random_state` — `arxiv.meta.json` records the parameters used, not a promise that another machine's UMAP build reproduces the same coordinates. The committed `arxiv.json` is the artifact; nothing in the demo or the test suite depends on its exact coordinates.
+`fetch` asks for the *newest* papers in each category, so once the response cache is gone, the next run picks up whatever was submitted to arXiv since. `embed`, `project`, `edges` and `export` all key off a fingerprint of the papers `fetch` actually wrote, so a refresh cannot silently pair new papers with old coordinates (or vice versa) even when the refreshed corpus happens to have the exact same number of papers per category. UMAP's layout is also not guaranteed bit-reproducible across machines even with a fixed `random_state` — `arxiv.meta.json` records the parameters used, not a promise that another machine's UMAP build reproduces the same coordinates. The committed `arxiv.json` is the artifact; nothing in the demo or the test suite depends on its exact coordinates.

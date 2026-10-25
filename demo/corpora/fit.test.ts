@@ -8,6 +8,7 @@ import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen } from "../../src/viewport/viewport";
 import arxiv from "./arxiv.json";
 import { constellationsSpec } from "./constellations";
+import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
 
 const BOXES: Array<[number, number]> = [
@@ -37,13 +38,13 @@ function cutNames(spec: MapSpec, width: number, height: number): string[] {
 
 describe("the fitted first view cuts no name", () => {
   const corpora: Array<[string, unknown]> = [
-    ["arXiv", arxiv],
+    ["arXiv", withExpandedEdges(arxiv)],
     ["elements", elementsSpec],
     ["constellations", constellationsSpec],
   ];
-  for (const [name, raw] of corpora) {
+  for (const [name, body] of corpora) {
     it.each(BOXES)(`${name} at %d x %d`, (width, height) => {
-      expect(cutNames(validateSpec(raw), width, height)).toEqual([]);
+      expect(cutNames(validateSpec(body), width, height)).toEqual([]);
     });
   }
 });
