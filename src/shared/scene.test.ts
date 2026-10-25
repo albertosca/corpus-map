@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import { generateCorpus, TERRITORY_COUNT } from "../../fixtures/synthetic/generate";
 import { nestedSpec, singleChildSpec } from "../../test/specs";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../labels/placement";
+import { tintDirection } from "../territories/familyColours";
 import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
 import { contains } from "../territories/shape";
+import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { fitSpec } from "../viewport/fit";
 import { paint } from "./paint";
 import { buildScene, GROUP_LETTER_SPACING } from "./scene";
 import { type MapSpec, validateSpec } from "./spec";
 import { RecordingSurface } from "./surface";
-import { DEFAULT_THEME } from "./theme";
+import { DARK_THEME, DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
 describe("buildScene", () => {
@@ -17,8 +19,14 @@ describe("buildScene", () => {
     const spec = generateCorpus({ seed: 1, size: 500 });
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     expect(new Set(scene.paintOrder)).toEqual(new Set(spec.territories.map((territory) => territory.id)));
-    for (const territory of spec.territories) {
-      expect(DEFAULT_THEME.palette).toContain(scene.colours.get(territory.id));
+    // 30 territories derive groups, so each is a tint of its family's colour (spec slice E §1, §5).
+    const direction = tintDirection(DEFAULT_THEME);
+    const band = tintBand(DEFAULT_THEME.palette, direction);
+    for (const group of scene.groups) {
+      const family = scene.groupColours.get(group.id) as string;
+      expect(DEFAULT_THEME.palette).toContain(family);
+      const tints = TINT_STEPS.map((step) => tint(family, step, direction, band));
+      for (const member of group.members) expect(tints).toContain(scene.colours.get(member));
     }
   });
 
@@ -277,5 +285,33 @@ describe("buildScene: families", () => {
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     expect(scene.groupShapes.size).toBe(0);
     expect(scene.groupBounds.size).toBe(0);
+  });
+
+  it.each([
+    ["light", DEFAULT_THEME],
+    ["dark", DARK_THEME],
+  ] as const)("colours a declared family from the palette and its children in tints of it (%s)", (_name, theme) => {
+    const scene = buildScene(nestedSpec(), DEFAULT_TUNING, theme, estimateText);
+    const family = scene.groupColours.get("p");
+    expect(theme.palette).toContain(family);
+    const direction = tintDirection(theme);
+    const band = tintBand(theme.palette, direction);
+    const tints = TINT_STEPS.map((step) => tint(family as string, step, direction, band));
+    for (const leaf of ["a", "b"]) expect(tints).toContain(scene.colours.get(leaf));
+    expect(scene.colours.has("p")).toBe(false);
+  });
+
+  it("keeps one palette colour per territory, and no family colours, without groups", () => {
+    const nested = nestedSpec();
+    const spec: MapSpec = {
+      ...nested,
+      territories: nested.territories
+        .filter((territory) => territory.id !== "p")
+        .map(({ parent: _parent, ...territory }) => territory),
+    };
+    expect(() => validateSpec(spec)).not.toThrow();
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.groupColours.size).toBe(0);
+    for (const territory of spec.territories) expect(DEFAULT_THEME.palette).toContain(scene.colours.get(territory.id));
   });
 });

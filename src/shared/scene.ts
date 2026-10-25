@@ -1,6 +1,7 @@
 import { type Measure, type PlacedLabel, placeLabels } from "../labels/placement";
 import { poleOfInaccessibility } from "../labels/pole";
 import { assignTerritoryColours, largestFirst } from "../territories/colour";
+import { familyColours, tintDirection } from "../territories/familyColours";
 import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import { type Bounds, ringBounds } from "../viewport/fit";
@@ -31,6 +32,8 @@ export interface Scene {
   groupShapes: ReadonlyMap<string, Ring[]>;
   /** Each group's world-space bounding box; a group without rings is absent. */
   groupBounds: ReadonlyMap<string, Bounds>;
+  /** Each family's colour, keyed by group id (spec slice E §5); empty without groups. */
+  groupColours: ReadonlyMap<string, string>;
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
@@ -83,7 +86,7 @@ function groupAnchor(
 export function buildScene(
   spec: MapSpec,
   tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
-  theme: Pick<Theme, "territoryFonts" | "palette">,
+  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">,
   measure: Measure,
 ): Scene {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
@@ -148,11 +151,17 @@ export function buildScene(
     }
     return result;
   };
+  // Every group is a family (spec slice E §1, "one mechanism"): declared by
+  // `parent`, by `group`, or derived; without groups, today's colouring.
+  const families =
+    groups.length > 0
+      ? familyColours(shapes, groupShapes, groups, leaves, theme.palette, tintDirection(theme))
+      : { colours: assignTerritoryColours(shapes, leaves, theme.palette), groupColours: new Map<string, string>() };
   return {
     byId,
     shapes,
     labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure),
-    colours: assignTerritoryColours(shapes, leaves, theme.palette),
+    colours: families.colours,
     paintOrder: largestFirst(shapes),
     groups,
     groupLabels: placeLabels(
@@ -164,5 +173,6 @@ export function buildScene(
     bounds: boxes(shapes),
     groupShapes,
     groupBounds: boxes(groupShapes),
+    groupColours: families.groupColours,
   };
 }

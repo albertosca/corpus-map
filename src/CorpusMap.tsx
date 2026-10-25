@@ -386,6 +386,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             small: theme.territoryFonts.small,
           },
           palette: paletteKey === "" ? [] : paletteKey.split("|"),
+          territoryLabel: theme.territoryLabel,
         },
         measure,
       ),
@@ -399,6 +400,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       theme.territoryFonts.medium,
       theme.territoryFonts.small,
       paletteKey,
+      theme.territoryLabel,
     ],
   );
 

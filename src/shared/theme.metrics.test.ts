@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ciede2000, simulate, type VisionMode } from "../../test/colourVision";
 import { contrastRatio, over, parseColor, type Rgba } from "../labels/contrast";
+import { tintDirection } from "../territories/familyColours";
+import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { DARK_THEME, DEFAULT_THEME, type Theme } from "./theme";
 
@@ -31,6 +33,29 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
               `${colour} at fill ${fillAlpha}`,
             ).toBeGreaterThanOrEqual(3);
           }
+        }
+      }
+    }
+  });
+
+  it("metric 15 and 16 hold for every family tint of every palette colour (spec slice E §5)", () => {
+    const direction = tintDirection(theme);
+    const band = tintBand(theme.palette, direction);
+    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
+    const label = parseColor(theme.territoryLabel);
+    for (const page of pages.map(parseColor)) {
+      for (const fillAlpha of fillAlphas) {
+        const beneath = [page, ...tints.map((colour) => over(withAlpha(parseColor(colour), fillAlpha), page))];
+        for (const background of beneath) {
+          for (const colour of tints)
+            expect(
+              contrastRatio(parseColor(colour), background),
+              `${colour} at fill ${fillAlpha}`,
+            ).toBeGreaterThanOrEqual(3);
+          if (fillAlpha === theme.territoryFillAlpha)
+            expect(contrastRatio(over(label, background), background)).toBeGreaterThanOrEqual(4.5);
+          for (const outline of [theme.focusOutline, theme.selectionRing ?? theme.territoryLabel])
+            expect(contrastRatio(parseColor(outline), background), `${outline} over a tint`).toBeGreaterThanOrEqual(3);
         }
       }
     }
