@@ -325,7 +325,10 @@ export declare const MARKER_GAP = 4;
  * One marker per drawn edge of `id` whose neighbour is off screen, placed
  * inside the box against the edge the line leaves through, centred on where
  * it leaves; markers on one edge are pushed apart along it, and stack back
- * from the end when they run past it.
+ * from the end when they run past it. A neighbour gets no marker when its
+ * segment never crosses the box (both ends off screen, the line passing
+ * outside it): nothing on screen points that way, so there is no edge to pin
+ * a marker to.
  */
 export declare function edgeMarkers(scene: Pick<Scene, "related" | "byId">, viewport: Viewport, options: {
     id: string;
@@ -355,7 +358,7 @@ export declare function drawnEdges(scene: Pick<Scene, "related" | "byId">, id: s
  * canvas, then a ring around each neighbour. Drawn at `alpha`, then the
  * point layer's `restoreAlpha` is put back.
  */
-export declare function paintEdges(surface: Surface, scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">, viewport: Viewport, theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth">, options: {
+export declare function paintEdges(surface: Surface, scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">, viewport: Viewport, theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel">, options: {
     id: string;
     width: number;
     height: number;
@@ -381,7 +384,11 @@ export interface RelatedItem {
     weight: number | undefined;
     reason: string | undefined;
 }
-/** `id`'s related items, heaviest first, absent weights last, then by id (spec slice E §6). */
+/**
+ * `id`'s related items, heaviest first, absent weights last, then by id (spec
+ * slice E §6). Each call indexes the whole edge list afresh, so a caller
+ * asking for many ids of one spec should memoize per spec.
+ */
 export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 
 // index.d.ts
@@ -541,6 +548,8 @@ export interface LegendProps {
     hidden: ReadonlySet<string>;
     presentation: Presentation;
     corner: Corner;
+    /** A CSS height ceiling (`legendMaximumHeight`), so the expanded list never runs over the minimap. */
+    maximumHeight: string;
     theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
     /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
     narrow: boolean;
@@ -565,7 +574,7 @@ export declare function LegendView(properties: LegendProps): ReactElement;
 export declare const Legend: import("react").MemoExoticComponent<typeof LegendView>;
 
 // legend/entries.d.ts
-import type { Corner } from "../shared/corner";
+import { type Corner } from "../shared/corner";
 import type { Territory } from "../shared/spec";
 export interface LegendEntry {
     id: string;
@@ -577,6 +586,12 @@ export interface LegendEntry {
 export declare function legendEntries(territories: readonly Territory[], colours: ReadonlyMap<string, string>, fallback: string): LegendEntry[];
 /** The requested corner, or the next one clockwise when the minimap already sits there. */
 export declare function legendCorner(requested: Corner, minimap: Corner | null): Corner;
+/**
+ * The legend's height ceiling: its column less the two margins, and less the
+ * minimap's height and one more margin when the minimap sits at the other end
+ * of the same side — an expanded legend otherwise runs down over it.
+ */
+export declare function legendMaximumHeight(legend: Corner, minimap: Corner | null, minimapHeight: number): string;
 
 // legend/model.d.ts
 import type { TerritoryGroup } from "../territories/groups";
@@ -813,6 +828,13 @@ export declare function compareIds(first: string, second: string): number;
 // shared/corner.d.ts
 /** A corner of the map's box, where an overlay (minimap, legend) sits. */
 export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+/**
+ * The stacking layer of the edge markers and the corner overlays. The legend
+ * and the minimap share it and come later in the DOM, so they paint above a
+ * marker — their own handlers stop the press, so a marker under them could
+ * be seen but never pressed.
+ */
+export declare const OVERLAY_LAYER = 2;
 /** Gap between a corner overlay and the box's edges, in CSS pixels. */
 export declare const CORNER_MARGIN = 12;
 /** Absolute-position offsets for each corner; plain numbers so this module stays free of React. */
@@ -1127,8 +1149,11 @@ export interface Theme {
     focusOutlineWidth: number;
     /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
     selectionRing?: string | undefined;
-    /** The related-item line and neighbour ring (spec slice E §6); opaque, at least 3:1 over every page and fill. */
-    edge: string;
+    /**
+     * The related-item line and neighbour ring (spec slice E §6); opaque, at
+     * least 3:1 over every page and fill. Absent falls back to `territoryLabel`.
+     */
+    edge?: string | undefined;
     /**
      * Categorical colours for territories, assigned so that territories whose
      * visible borders touch get different colours (`territories/colour.ts`).
