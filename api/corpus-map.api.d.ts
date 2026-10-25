@@ -18,6 +18,8 @@ export interface CorpusMapHandle {
     fit(): void;
     /** Focuses the map surface, so a consumer has an element to return focus to after a dialog (spec slice B §4). */
     focus(): void;
+    /** Centres the view on an item at the current zoom, without selecting it (reason `"interaction"`); an unknown id does nothing (spec slice E §6). */
+    reveal(id: string): void;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
@@ -151,8 +153,9 @@ export declare function CorpusMap({ ref: handleReference, ...properties }: Corpu
 
 // a11y/AccessibleTree.d.ts
 import type { ReactElement } from "react";
+import type { RelatedItem } from "../edges/related";
 import type { Regime } from "../lod/lod";
-import type { MapNode, MapSpec, Territory } from "../shared/spec";
+import { type MapNode, type MapSpec, type Territory } from "../shared/spec";
 import { type Theme } from "../shared/theme";
 import type { TerritoryGroup } from "../territories/groups";
 import type { Viewport } from "../viewport/viewport";
@@ -182,6 +185,10 @@ export interface AccessibleTreeProps {
     onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
     /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
     onNodeFocusChange?: ((id: string | null) => void) | undefined;
+    /** The selected item's live related items, listed at mid and near (spec slice E §6). */
+    related?: readonly RelatedItem[] | undefined;
+    /** Called when a related item's button is pressed. */
+    onRelated?: ((node: MapNode) => void) | undefined;
 }
 /** "1 item", "N items": the corpus-agnostic count the tree and the territory balloon share. */
 export declare function itemCount(count: number): string;
@@ -284,15 +291,110 @@ export declare function layoutCards(anchors: readonly CardAnchor[], size: {
     height: number;
 }, gap?: number): PlacedCard[];
 
+// edges/EdgeMarkers.d.ts
+import { type ReactElement } from "react";
+import type { Theme } from "../shared/theme";
+import { type EdgeMarker } from "./markers";
+/**
+ * The off-screen neighbour markers, above the cards. Hidden from assistive
+ * technology (the related list carries the same items) and transparent to
+ * the pointer: the surface resolves presses with `markerAt`.
+ */
+export declare const EdgeMarkers: import("react").MemoExoticComponent<({ markers, theme, }: {
+    markers: readonly EdgeMarker[];
+    theme: Pick<Theme, "hoverBackground" | "hoverText">;
+}) => ReactElement | null>;
+
+// edges/markers.d.ts
+import type { Scene } from "../shared/scene";
+import { type Viewport } from "../viewport/viewport";
+/** A box at the edge of the map naming a drawn neighbour that lies off screen (spec slice E §6). */
+export interface EdgeMarker {
+    id: string;
+    label: string;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+export declare const MARKER_HEIGHT = 22;
+export declare const MARKER_MAXIMUM_WIDTH = 160;
+export declare const MARKER_FONT = "12px system-ui, sans-serif";
+export declare const MARKER_GAP = 4;
+/**
+ * One marker per drawn edge of `id` whose neighbour is off screen, placed
+ * inside the box against the edge the line leaves through, centred on where
+ * it leaves; markers on one edge are pushed apart along it, and stack back
+ * from the end when they run past it.
+ */
+export declare function edgeMarkers(scene: Pick<Scene, "related" | "byId">, viewport: Viewport, options: {
+    id: string;
+    width: number;
+    height: number;
+    cap: number;
+    dimmed: ReadonlySet<string>;
+}): EdgeMarker[];
+/** The id of the topmost marker containing the box position, or null. */
+export declare function markerAt(markers: readonly EdgeMarker[], horizontal: number, vertical: number): string | null;
+
+// edges/paintEdges.d.ts
+import type { Scene } from "../shared/scene";
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import { type Viewport } from "../viewport/viewport";
+import type { RelatedEdge } from "./related";
+/** The part of the segment inside [0, width] × [0, height], or null when it misses the box (Liang–Barsky). */
+export declare function clipToBox(segmentStart: [number, number], segmentEnd: [number, number], width: number, height: number): [[number, number], [number, number]] | null;
+/** Line width of the ring drawn around each related item. */
+export declare const NEIGHBOUR_RING_WIDTH = 1.5;
+/** The edges drawn for `id`: the first `cap` whose neighbour is not in a dimmed territory. Shared with the markers. */
+export declare function drawnEdges(scene: Pick<Scene, "related" | "byId">, id: string, cap: number, dimmed: ReadonlySet<string>): RelatedEdge[];
+/**
+ * The related layer of item `id` (spec slice E §6): one line per drawn edge,
+ * `1 + 2 × weight / heaviest` px wide (2 px without weights), clipped to the
+ * canvas, then a ring around each neighbour. Drawn at `alpha`, then the
+ * point layer's `restoreAlpha` is put back.
+ */
+export declare function paintEdges(surface: Surface, scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">, viewport: Viewport, theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth">, options: {
+    id: string;
+    width: number;
+    height: number;
+    cap: number;
+    dimmed: ReadonlySet<string>;
+    alpha: number;
+    restoreAlpha: number;
+}): void;
+
+// edges/related.d.ts
+import type { MapNode, MapSpec } from "../shared/spec";
+/** One end of an undirected edge, seen from the other end (spec slice E §6). */
+export interface RelatedEdge {
+    neighbour: string;
+    weight: number | undefined;
+    reason: string | undefined;
+}
+/** Every item's related items, both directions of each undirected edge, heaviest first, absent weights last, ties by id. */
+export declare function buildRelated(spec: Pick<MapSpec, "edges">): Map<string, RelatedEdge[]>;
+/** A related item with the edge's weight and reason, as the related list and `relatedItems` give it. */
+export interface RelatedItem {
+    node: MapNode;
+    weight: number | undefined;
+    reason: string | undefined;
+}
+/** `id`'s related items, heaviest first, absent weights last, then by id (spec slice E §6). */
+export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
+
 // index.d.ts
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
+export type { RelatedItem } from "./edges/related";
+export { relatedItems } from "./edges/related";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS, resolveThresholds } from "./lod/lod";
 export type { MinimapCorner } from "./minimap/Minimap";
 export type { Presentation, PresentationSetting } from "./shared/presentation";
-export type { MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
+export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme } from "./shared/theme";
 export { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
@@ -704,6 +806,10 @@ export declare const SELECTION_RING_WIDTH = 2;
  */
 export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel">, id: string): void;
 
+// shared/compareIds.d.ts
+/** Orders ids by code unit, the tie-break every sorted list in the map uses so the order never depends on the input's. */
+export declare function compareIds(first: string, second: string): number;
+
 // shared/corner.d.ts
 /** A corner of the map's box, where an overlay (minimap, legend) sits. */
 export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -758,10 +864,15 @@ export interface Frame {
     dimmed?: ReadonlySet<string> | undefined;
     /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
     selected?: string | null | undefined;
+    /** The hovered item's id, whose edges are previewed at half the point alpha (spec slice E §6); absent or `null` means none. */
+    hovered?: string | null | undefined;
+    /** How many edges an item draws (`Tuning.edgesPerNode`); absent means none. */
+    edgesPerNode?: number | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
- * (largest first), territory outlines, points (with the selection ring), the keyboard-focus outline,
+ * (largest first; with groups, the leaves' and the families' layers
+ * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -790,11 +901,12 @@ export type PresentationSetting = "auto" | Presentation;
 export declare function resolvePresentation(requested: PresentationSetting, regime: Regime): Presentation;
 
 // shared/scene.d.ts
+import { type RelatedEdge } from "../edges/related";
 import { type Measure, type PlacedLabel } from "../labels/placement";
 import { type TerritoryGroup } from "../territories/groups";
 import { type Ring } from "../territories/shape";
 import { type Bounds } from "../viewport/fit";
-import type { MapNode, MapSpec } from "./spec";
+import { type MapNode, type MapSpec } from "./spec";
 import type { Theme } from "./theme";
 import type { Tuning } from "./tuning";
 /** Everything about a corpus that does not change with the viewport: computed once per spec. */
@@ -812,6 +924,20 @@ export interface Scene {
     groupLabels: readonly PlacedLabel[];
     /** Each territory's world-space bounding box; a territory without rings is absent. */
     bounds: ReadonlyMap<string, Bounds>;
+    /**
+     * Each group's region, keyed by group id (spec slice E §3): a declared
+     * parent's `boundary` when it has one, a group of one its leaf's shape,
+     * otherwise the disks outline of every member point. Empty without groups.
+     */
+    groupShapes: ReadonlyMap<string, Ring[]>;
+    /** Each group's world-space bounding box; a group without rings is absent. */
+    groupBounds: ReadonlyMap<string, Bounds>;
+    /** Each family's colour, keyed by group id (spec slice E §5); empty without groups. */
+    groupColours: ReadonlyMap<string, string>;
+    /** Each item's related items, heaviest first (spec slice E §6); empty without edges. */
+    related: ReadonlyMap<string, readonly RelatedEdge[]>;
+    /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
+    maximumEdgeWeight: number;
 }
 /** Extra space between a group name's letters, in CSS pixels; the painter draws with the same value. */
 export declare const GROUP_LETTER_SPACING = 1;
@@ -822,7 +948,7 @@ export declare const GROUP_LETTER_SPACING = 1;
  * every render for an inline literal prop) without depending on unstable
  * whole-object identity for fields it never uses.
  */
-export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette">, measure: Measure): Scene;
+export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">, measure: Measure): Scene;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
@@ -850,12 +976,32 @@ export interface Territory {
      * derived and the others fall under "Other" (spec categories §3).
      */
     group?: string;
+    /**
+     * The id of this territory's parent (spec slice E §3). A parent is any
+     * territory another one names here; it lists no members of its own, its
+     * members are its children's. Two levels only; a node belongs to a leaf.
+     */
+    parent?: string;
+}
+/** An undirected link between two items (spec slice E §6). */
+export interface MapEdge {
+    source: string;
+    target: string;
+    /** Finite and >= 0; heavier edges are drawn first and thicker. */
+    weight?: number;
+    /** Why the two are related, shown in the related list. */
+    reason?: string;
 }
 export interface MapSpec {
     version: "1";
     territories: Territory[];
     nodes: MapNode[];
+    edges?: MapEdge[];
 }
+/** Ids of the territories some other territory names as `parent`. */
+export declare function parentIds(spec: Pick<MapSpec, "territories">): Set<string>;
+/** The territories that hold items: every territory no other one names as `parent`, in spec order. */
+export declare function leafTerritories(spec: Pick<MapSpec, "territories">): Territory[];
 export declare class SpecError extends Error {
 }
 /**
@@ -864,7 +1010,8 @@ export declare class SpecError extends Error {
  * spec. Membership is checked in both directions — a node that claims a
  * territory must be listed in it, and a listed member must claim it — so the
  * painter (which walks `members`) and the tree (which walks `territory`)
- * agree on which nodes a territory holds. `meta` is never read.
+ * agree on which nodes a territory holds. Parents (two levels, nodes only
+ * in leaves) and edges are checked here too. `meta` is never read.
  */
 export declare function validateSpec(input: unknown): MapSpec;
 
@@ -883,6 +1030,8 @@ export interface Surface {
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
     /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
     hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
+    /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
+    line(start: [number, number], end: [number, number], colour: string, width: number): void;
     /**
      * Draws `draw`'s calls into one offscreen layer and composites it once at
      * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -935,7 +1084,13 @@ export declare class RecordingSurface implements Surface {
         colour: string;
         width: number;
     }>;
-    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd">;
+    lines: Array<{
+        from: [number, number];
+        to: [number, number];
+        colour: string;
+        width: number;
+    }>;
+    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
@@ -944,6 +1099,7 @@ export declare class RecordingSurface implements Surface {
     globalAlpha(alpha: number): void;
     outline(points: Array<[number, number]>, color: string, width: number): void;
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
+    line(start: [number, number], end: [number, number], colour: string, width: number): void;
     layer(alpha: number, draw: (surface: Surface) => void): void;
 }
 export declare function canvasSurface(context: CanvasRenderingContext2D): Surface;
@@ -971,6 +1127,8 @@ export interface Theme {
     focusOutlineWidth: number;
     /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
     selectionRing?: string | undefined;
+    /** The related-item line and neighbour ring (spec slice E §6); opaque, at least 3:1 over every page and fill. */
+    edge: string;
     /**
      * Categorical colours for territories, assigned so that territories whose
      * visible borders touch get different colours (`territories/colour.ts`).
@@ -1020,6 +1178,8 @@ export interface Tuning {
      * through all of far.
      */
     groupNamesUntil: number;
+    /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
+    edgesPerNode: number;
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
@@ -1057,14 +1217,40 @@ export declare function visibleBorders(shapes: ReadonlyMap<string, readonly Ring
  */
 export declare function assignTerritoryColours(shapes: ReadonlyMap<string, readonly Ring[]>, territories: readonly Territory[], palette: readonly string[]): Map<string, string>;
 
+// territories/familyColours.d.ts
+import type { Territory } from "../shared/spec";
+import type { Theme } from "../shared/theme";
+import type { TerritoryGroup } from "./groups";
+import type { Ring } from "./shape";
+/**
+ * Which way family tints move: towards the territory label's lightness, so
+ * away from the page (a dark label means a light page, so tints darken).
+ * Moving one way only keeps every tint at least as far from the page as its
+ * palette colour, which metric 15 needs (spec slice E §5).
+ */
+export declare function tintDirection(theme: Pick<Theme, "territoryLabel">): 1 | -1;
+/**
+ * Family colours from the palette, coloured over the family regions the way
+ * territories are coloured today, then each child a tint of its family's
+ * colour: leaves walk most-visible first and take the tint that shares the
+ * least visible border with their already coloured neighbours. A declared
+ * `colour` wins, on a parent and on a child (spec slice E §5).
+ */
+export declare function familyColours(shapes: ReadonlyMap<string, readonly Ring[]>, groupShapes: ReadonlyMap<string, readonly Ring[]>, groups: readonly TerritoryGroup[], territories: readonly Territory[], palette: readonly string[], direction: 1 | -1): {
+    colours: Map<string, string>;
+    groupColours: Map<string, string>;
+};
+
 // territories/groups.d.ts
-import type { MapSpec } from "../shared/spec";
+import { type MapSpec } from "../shared/spec";
 /** Territories shown together in the legend and named together on the far map (spec categories §3). */
 export interface TerritoryGroup {
     id: string;
     name: string;
     /** Territory ids, most members first, ties by id. */
     members: string[];
+    /** The declared parent's `colour`; absent otherwise (spec slice E §3). */
+    colour?: string;
 }
 /** Below this many territories nothing is derived: a short flat list needs no groups. */
 export declare const MINIMUM_DERIVED_TERRITORIES = 10;
@@ -1079,8 +1265,9 @@ export declare const OTHER_GROUP = "Other";
 /** round(√n) clamped to [3, 8]: 6 for the 38 arXiv categories. */
 export declare function derivedGroupCount(territoryCount: number): number;
 /**
- * The spec's groups: by `group` name when any territory carries one (the
- * rest under "Other"), otherwise derived from the centroids for 10 to 400
+ * The spec's groups: by declared parent when any territory has `parent`;
+ * by `group` name when any territory carries one (the rest under "Other");
+ * otherwise derived from the centroids for 10 to 400
  * territories, otherwise none. A pipeline can run this, name the groups and
  * write `group` back into its corpus: that is how derived groups get named.
  */
@@ -1099,6 +1286,11 @@ import { type Point } from "./shape";
  * move cheap at hundreds of territories.
  */
 export declare function territoriesAt(scene: Pick<Scene, "bounds" | "shapes">, spec: MapSpec, point: Point, dimmed: ReadonlySet<string>): string[];
+/**
+ * The families whose region holds `point` (world units), skipping a family
+ * whose every leaf is dimmed, most leaves first, ties by id (spec slice E §4).
+ */
+export declare function familiesAt(scene: Pick<Scene, "groups" | "groupShapes" | "groupBounds">, point: Point, dimmed: ReadonlySet<string>): string[];
 /** Ids of the territories whose bounding box meets the view, sorted; dimmed ones included (the legend shows them). */
 export declare function onScreenTerritories(bounds: ReadonlyMap<string, Bounds>, viewport: Viewport, width: number, height: number): string[];
 
@@ -1109,6 +1301,8 @@ import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
 /** Territory outline width in CSS pixels (spec slice D §3). */
 export declare const TERRITORY_OUTLINE_WIDTH = 1.5;
+/** A family's outline width in CSS pixels: the frame its children sit in (spec slice E §4). */
+export declare const GROUP_OUTLINE_WIDTH = 2.5;
 /**
  * Fills every territory opaque, largest first, into one layer composited at
  * `fillAlpha`, so each pixel shows the colour of the smallest territory
@@ -1116,8 +1310,15 @@ export declare const TERRITORY_OUTLINE_WIDTH = 1.5;
  * territory's full colour. A territory missing from `scene.colours` (an
  * empty palette) is painted in `theme.pointNeutral`. A dimmed territory's
  * fill and outline are drawn at `DIMMED_ALPHA`.
+ *
+ * With groups (spec slice E §4), `familyAlpha` (the frame's group-name
+ * alpha) picks the level: the leaves' layer at `fillAlpha * (1 -
+ * familyAlpha)` and their outlines at `1 - familyAlpha`, the families' layer
+ * at `fillAlpha * familyAlpha`, then every family's outline on top at
+ * `GROUP_OUTLINE_WIDTH` as the frame its children sit in. A family whose
+ * every leaf is dimmed is drawn at `DIMMED_ALPHA`.
  */
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
@@ -1149,6 +1350,33 @@ export declare function chaikin(ring: Ring): Ring;
 /** Even-odd point-in-polygon test. */
 export declare function contains(ring: Ring, [horizontal, vertical]: Point): boolean;
 export declare function ringArea(ring: Ring): number;
+
+// territories/tint.d.ts
+/** Lightness offsets in OKLab, one per sibling slot (spec slice E §5). */
+export declare const TINT_STEPS: readonly [0, 0.07, 0.14, 0.21, 0.28];
+/** OKLab lightness limits for any tint: past the ceiling a tint washes out the points drawn over its fill on a dark page. */
+export declare const TINT_FLOOR = 0.05;
+export declare const TINT_CEILING = 0.78;
+/** Kept between a tint and the palette's extreme on the page's side: hue moves luminance a little at equal lightness. */
+export declare const TINT_MARGIN = 0.02;
+/** OKLab lightness of `colour`. */
+export declare function lightness(colour: string): number;
+/**
+ * The lightness band family tints may use: from the palette's own extreme on
+ * the page's side (every palette colour already passes metric 15) to the
+ * limit on the label's side, so no tint ends up closer to the page than the
+ * palette colour nearest to it.
+ */
+export declare function tintBand(palette: readonly string[], direction: 1 | -1): readonly [number, number];
+/**
+ * `colour` moved `step` in OKLab lightness towards `direction` (1 lighter,
+ * -1 darker) inside `band`; when that side has less room than the largest
+ * step, the side with more room is used and every step is scaled into it, so
+ * siblings stay distinct and ordered. Chroma shrinks as lightness nears
+ * either end so the result stays in gamut; a colour's alpha is dropped.
+ * Step 0 returns the colour as `#rrggbb`.
+ */
+export declare function tint(colour: string, step: number, direction: 1 | -1, band?: readonly [number, number]): string;
 
 // territories/tooltipPosition.d.ts
 /** Gap between the cursor and the tooltip, in CSS pixels (spec categories §7). */

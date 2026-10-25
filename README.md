@@ -6,7 +6,7 @@ Coverage thresholds of 90% lines / 85% branches are enforced inside the `test` j
 
 ## What it is
 
-`corpus-map` is a React library that renders pre-computed coordinates and named territories as a zoomable landscape, where the zoom level is the level of abstraction — far out you see named regions, and as you zoom in a region opens into individual item cards. It is not a graph library: it draws no edges, runs no force simulation, and computes no layout — it receives coordinates and territory names that someone else already produced.
+`corpus-map` is a React library that renders pre-computed coordinates and named territories as a zoomable landscape, where the zoom level is the level of abstraction — far out you see named regions, and as you zoom in a region opens into individual item cards. It is not a graph library: it runs no force simulation and computes no layout — it receives coordinates and territory names that someone else already produced, and the optional edges it draws are links between items the producer already placed, shown for the hovered and the selected item, never a layout input.
 
 Libraries exist that draw named territories with boundaries, libraries exist that render rich DOM cards for individual items, and libraries exist that scale to millions of points, but prior-art research examining thirteen of them found none that treats the zoom level itself as the level of abstraction, swapping a territory for a card as the user zooms in. That composition — not any single piece — is what this library provides.
 
@@ -33,7 +33,8 @@ The library is agnostic about domain exactly to the extent that this contract is
       "name": "Alkali metals",
       "members": ["n1", "n2"],
       "centroid": [12.4, -3.1],
-      "boundary": [[10.0, -5.0], [14.2, -4.8]]  // optional
+      "boundary": [[10.0, -5.0], [14.2, -4.8]], // optional
+      "parent": "metals"                         // optional: another territory's id; that parent lists "members": []
     }
   ],
   "nodes": [
@@ -47,6 +48,9 @@ The library is agnostic about domain exactly to the extent that this contract is
       "badges": ["stable"],                       // opaque strings, styled by the consumer
       "meta": { "symbol": "Li", "atomicNumber": 3 } // opaque; the renderer NEVER interprets this
     }
+  ],
+  "edges": [                                     // optional
+    { "source": "n1", "target": "n2", "weight": 0.9, "reason": "same group" }
   ]
 }
 ```
@@ -55,6 +59,8 @@ The library is agnostic about domain exactly to the extent that this contract is
 - `territory` may be `null`: a node with no territory is normal (for example, noise points from density-based clustering), not an error, and still renders.
 - `boundary` is optional: when a territory has none, the renderer computes a hull from its members' coordinates; when present, the producer's boundary wins.
 - Membership is declared twice and must agree: every node with a `territory` is listed in that territory's `members`, and every member's node points back at that territory. `validateSpec` rejects a spec where the two disagree, naming the path.
+- `parent` nests territories two levels deep: a parent is any territory another one names as `parent`, it lists no members of its own (its members are its children's), a parent cannot itself have a parent, nodes belong to leaves only, and `parent` and `group` cannot be mixed in one spec. With parents, far views read as families (a palette colour per family, each child a lighter or darker tint of it) and near views as the leaves.
+- `edges` are undirected links between two different, existing nodes, at most one per pair; `weight` is a finite number `>= 0` (heavier draws first and thicker), `reason` a non-empty string shown in the related list. The map draws the first `tuning.edgesPerNode` edges of the hovered and the selected item, and, at mid and near, marks the selected item's off-screen neighbours at the box edge and lists its related items (those not in a dimmed territory) in the accessible tree; `relatedItems(spec, id)` gives the same list to a consumer.
 - **Territory identity must bind to the centroid or to the member set, never to a cluster index.** Clustering with the same input and a different seed returns the same partition under different integer labels, so a producer that names territories by cluster number silently renames them on every recomputation and the map the user learned stops existing.
 
 ## Usage
@@ -89,7 +95,7 @@ function renderCard(node: MapNode) {
 
 `<CorpusMap>` validates `spec` during render and throws a `SpecError` for a malformed one, which unmounts the nearest error boundary. Either wrap the map in an error boundary or, as above, call `validateSpec` yourself first and handle the error where the data comes from.
 
-`width` and `height` are optional. Pass both and the map fits to them immediately, with no `ResizeObserver`; leave either out and the root fills its parent (`100%` via CSS) instead, measured by a `ResizeObserver` (the `useElementSize` hook internally), painting nothing until the first measurement arrives. A box with zero width or height, from either source, counts as no box yet: the map paints nothing and fits to the first box whose sides are both positive. Either way, a later box change — a new measurement, or a later `width`/`height` prop change — keeps the current scale and keeps the world point that was at the old box's centre at the new box's centre, instead of refitting and discarding the user's zoom. Changing `spec` still refits the viewport to the new extent, as before; no `key=` remount is needed either way. To refit after a box change (a consumer's own layout changing the space available, for example), pass a `ref` typed `CorpusMapHandle` and call its `fit()` — the same handle also exposes `zoomIn()`/`zoomOut()`, one wheel notch each, clamped to the same zoom band the wheel handler itself uses.
+`width` and `height` are optional. Pass both and the map fits to them immediately, with no `ResizeObserver`; leave either out and the root fills its parent (`100%` via CSS) instead, measured by a `ResizeObserver` (the `useElementSize` hook internally), painting nothing until the first measurement arrives. A box with zero width or height, from either source, counts as no box yet: the map paints nothing and fits to the first box whose sides are both positive. Either way, a later box change — a new measurement, or a later `width`/`height` prop change — keeps the current scale and keeps the world point that was at the old box's centre at the new box's centre, instead of refitting and discarding the user's zoom. Changing `spec` still refits the viewport to the new extent, as before; no `key=` remount is needed either way. To refit after a box change (a consumer's own layout changing the space available, for example), pass a `ref` typed `CorpusMapHandle` and call its `fit()` — the same handle also exposes `zoomIn()`/`zoomOut()`, one wheel notch each, clamped to the same zoom band the wheel handler itself uses, and `reveal(id)`, which centres the view on an item at the current zoom without selecting it.
 
 `onRegimeChange` fires once on mount (once under `<StrictMode>` too) with the initial regime (`"far"`, `"mid"` or `"near"`, the `Regime` type is exported) and again on every crossing, so a consumer can, for example, show a legend only at the far regime. `onViewChange?: (view: CorpusMapView) => void` fires once on mount, again after any committed render whose regime, scale ratio to the fitted scale, or on-screen node count changed, and after every refit (a new `spec`, or `fit()`) even when those values match — at most once per animation frame during a drag, since drags are already coalesced to one commit per frame; `CorpusMapView` is exported.
 
@@ -120,7 +126,7 @@ Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so 
 
 ## The demo
 
-Run `npm run dev` to open the demo — a full-window showcase, not a component preview: the map fills the browser window (`CorpusMap` with no `width`/`height`, filling its parent), a top bar picks the corpus, a bottom-left minimap and indicator (`regime · ratio× · N items`, read straight from `onViewChange`) sit above it, bottom-right zoom controls drive the map's own `CorpusMapHandle` ("Zoom in", "Zoom out", "Fit"), and a footer shows a data-source disclosure for the corpora that need one. Selecting a node opens a drawer with its label and territory — for arXiv, also its publication year and a link to the paper's abstract page; every other corpus gets a generic field list from its `meta`. The URL hash carries the corpus, the view and the selection (`#corpus=arxiv&view=x,y,zoom&selected=id`, written through a debounced `replaceState`), so a link reopens where it was saved; "Copy link" in the top bar copies it.
+Run `npm run dev` to open the demo — a full-window showcase, not a component preview: the map fills the browser window (`CorpusMap` with no `width`/`height`, filling its parent), a top bar picks the corpus, a bottom-left minimap and indicator (`regime · ratio× · N items`, read straight from `onViewChange`) sit above it, bottom-right zoom controls drive the map's own `CorpusMapHandle` ("Zoom in", "Zoom out", "Fit"), and a footer shows a data-source disclosure for the corpora that need one. Selecting a node opens a drawer with its label and territory — for arXiv, also its publication year and a link to the paper's abstract page; every other corpus gets a generic field list from its `meta`. When the item has edges (arXiv ships papers similar across two categories), the drawer lists them under Related, each with the title words the two share, and pressing one selects and reveals it. The URL hash carries the corpus, the view and the selection (`#corpus=arxiv&view=x,y,zoom&selected=id`, written through a debounced `replaceState`), so a link reopens where it was saved; "Copy link" in the top bar copies it.
 
 The gallery ships four corpora, arXiv first and selected by default: "Computer-science papers (arXiv metadata)" (real-world, ~8,000 papers, fetched lazily from `demo/corpora/arxiv.json`, which the build emits as its own asset, so its ~1.8 MB never blocks the shell's first paint and a failed load can be retried without reloading the page; the footer credits it verbatim, "Thank you to arXiv for use of its open access interoperability."; built by the separate package under [pipeline/arxiv/](pipeline/arxiv/README.md)), "Chemical elements", "Constellations" (bright stars grouped by constellation), and "Synthetic (5,000 items)" (the count in its label follows the tuning panel's size control; footer: "Synthetic corpus, generated for scale testing.") — deliberately not food: a map spec validated by a single domain would be an unverified abstraction, and these four are unrelated enough to show that the spec and the `renderCard` extension point are genuinely domain-agnostic.
 
