@@ -104,6 +104,9 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
   const lastFocused = useRef<HTMLElement | null>(null);
   const lastOpened = useRef<string | null>(null);
   const [focusedControl, setFocusedControl] = useState<"overview" | "unassigned" | null>(null);
+  // A related item usually has no on-screen shape for the canvas to ring, so
+  // its button shows itself while focused, like the two controls.
+  const [focusedRelated, setFocusedRelated] = useState<string | null>(null);
 
   useEffect(() => {
     const root = rootReference.current;
@@ -153,8 +156,8 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
     properties.onNodeFocusChange?.(id);
   };
 
-  const controlStyle = (control: "overview" | "unassigned") =>
-    focusedControl === control
+  const focusedStyle = (focused: boolean) =>
+    focused
       ? {
           position: "absolute" as const,
           left: 8,
@@ -170,6 +173,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
           outline: `${theme.focusOutlineWidth}px solid ${theme.focusOutline}`,
         }
       : VISUALLY_HIDDEN;
+  const controlStyle = (control: "overview" | "unassigned") => focusedStyle(focusedControl === control);
 
   const territoryButton = (territory: Territory) => (
     <li key={territory.id}>
@@ -314,21 +318,29 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       </div>
       {/* A second region, so the related count never replaces the regime announcement. */}
       <div role="status" aria-live="polite" data-announcement="related" style={VISUALLY_HIDDEN}>
-        {showRelated ? `${related.length} related` : ""}
+        {/* Keyed on the selection, so a new item with the same count still changes the region and is spoken. */}
+        {showRelated ? <span key={selectedNode.id}>{`${related.length} related`}</span> : null}
       </div>
       {content}
       {showRelated ? (
-        <div style={VISUALLY_HIDDEN}>
-          <Heading id={relatedHeadingId}>{`Related to ${selectedNode.label}`}</Heading>
-          <ul aria-labelledby={relatedHeadingId}>
+        <div>
+          <Heading id={relatedHeadingId} style={VISUALLY_HIDDEN}>{`Related to ${selectedNode.label}`}</Heading>
+          <ul aria-labelledby={relatedHeadingId} style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {related.map((item) => (
               <li key={item.node.id}>
                 <button
                   type="button"
                   data-tree-related={item.node.id}
+                  style={focusedStyle(focusedRelated === item.node.id)}
                   onClick={() => properties.onRelated?.(item.node)}
-                  onFocus={(event) => remember(event.currentTarget)}
-                  onBlur={(event) => forget(event.currentTarget, event.relatedTarget)}
+                  onFocus={(event) => {
+                    remember(event.currentTarget);
+                    setFocusedRelated(item.node.id);
+                  }}
+                  onBlur={(event) => {
+                    forget(event.currentTarget, event.relatedTarget);
+                    setFocusedRelated(null);
+                  }}
                 >
                   {item.reason === undefined ? item.node.label : `${item.node.label} — ${item.reason}`}
                 </button>

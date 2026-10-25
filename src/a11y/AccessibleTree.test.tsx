@@ -404,6 +404,59 @@ describe("AccessibleTree: declared parents", () => {
       expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("1 related");
     });
 
+    it("announces again when the selection moves to another item with the same count", async () => {
+      const tree = (selectedId: string) => (
+        <AccessibleTree
+          spec={spec}
+          regime="mid"
+          viewport={viewport}
+          width={400}
+          height={300}
+          cap={200}
+          selectedId={selectedId}
+          related={related}
+        />
+      );
+      const { rerender } = render(tree(alpha.id));
+      const region = screen
+        .getAllByRole("status")
+        .find((status) => status.getAttribute("data-announcement") === "related") as HTMLElement;
+      const mutations: MutationRecord[] = [];
+      const observer = new MutationObserver((records) => mutations.push(...records));
+      observer.observe(region, { childList: true, subtree: true, characterData: true });
+      rerender(tree("d"));
+      await Promise.resolve();
+      observer.disconnect();
+      expect(region.textContent).toBe("2 related");
+      expect(mutations.length).toBeGreaterThan(0);
+    });
+
+    it("shows a related button on screen while it has focus, hidden otherwise", () => {
+      render(
+        <AccessibleTree
+          spec={spec}
+          regime="mid"
+          viewport={viewport}
+          width={400}
+          height={300}
+          cap={200}
+          selectedId={alpha.id}
+          related={related}
+        />,
+      );
+      const button = screen.getByRole("button", { name: "Gamma" });
+      const hiddenNow = (element: HTMLElement) =>
+        element.style.width === "1px" || (element.closest("[style*='clip']") !== null && element.style.clip === "");
+      expect(hiddenNow(button)).toBe(true);
+      act(() => button.focus());
+      expect(button.style.width).toBe("");
+      expect(button.style.clip).toBe("");
+      expect(button.closest("[style*='clip']")).toBeNull();
+      expect(button.style.outline).toContain("solid");
+      act(() => button.blur());
+      expect(button.style.width).toBe("1px");
+    });
+
     it("renders no list and no announcement at far, without related items, or without a selection", () => {
       const cases = [
         { regime: "far" as const, selectedId: alpha.id, related },
