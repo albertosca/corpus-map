@@ -46,6 +46,7 @@
     "maxGzipBytes": 27110
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@babel/core": "^7.29.7",
     "@babel/eslint-parser": "^7.29.9",
     "@babel/preset-react": "^7.29.7",
