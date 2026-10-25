@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SpecError, validateSpec } from "./spec";
+import { leafTerritories, SpecError, validateSpec } from "./spec";
 
 const minimal = {
   version: "1",
@@ -243,5 +243,99 @@ describe("validateSpec", () => {
         expect(() => validateSpec(withGroup(group))).toThrow(/\.group/);
       }
     });
+  });
+});
+
+const nested = {
+  version: "1",
+  territories: [
+    { id: "p", name: "Parent", members: [] as string[], centroid: [0, 0] },
+    { id: "a", name: "A", members: ["n1"], centroid: [0, 0], parent: "p" },
+    { id: "b", name: "B", members: ["n2"], centroid: [1, 1], parent: "p" },
+  ],
+  nodes: [
+    { id: "n1", label: "One", x: 0, y: 0, territory: "a" },
+    { id: "n2", label: "Two", x: 1, y: 1, territory: "b" },
+  ],
+};
+
+type Mutable = { territories: Array<Record<string, unknown>>; nodes: Array<Record<string, unknown>> };
+const copy = () => structuredClone(nested) as unknown as Mutable;
+
+describe("validateSpec: parents", () => {
+  it("accepts a parent with children and no members", () => {
+    expect(validateSpec(nested).territories).toHaveLength(3);
+  });
+  it("rejects an unknown parent", () => {
+    const spec = copy();
+    first(spec.territories.slice(1)).parent = "ghost";
+    expect(() => validateSpec(spec)).toThrow(/territories\[1\]\.parent: unknown territory ghost/);
+  });
+  it("rejects a territory that is its own parent", () => {
+    const spec = copy();
+    first(spec.territories.slice(1)).parent = "a";
+    expect(() => validateSpec(spec)).toThrow(/territories\[1\]\.parent: a territory cannot be its own parent/);
+  });
+  it("rejects a parent that is not a string", () => {
+    const spec = copy();
+    first(spec.territories.slice(1)).parent = 7;
+    expect(() => validateSpec(spec)).toThrow(/territories\[1\]\.parent: expected a string/);
+  });
+  it("rejects a third level", () => {
+    const spec = copy();
+    first(spec.territories).parent = "a";
+    expect(() => validateSpec(spec)).toThrow(/parent p itself has a parent; two levels only/);
+  });
+  it("rejects a parent that lists members", () => {
+    const spec = copy();
+    first(spec.territories).members = ["n1"];
+    expect(() => validateSpec(spec)).toThrow(
+      /territories\[0\]\.members: a parent lists no members of its own; its members are its children's/,
+    );
+  });
+  it("rejects a node that points at a parent", () => {
+    const spec = copy();
+    first(spec.nodes).territory = "p";
+    expect(() => validateSpec(spec)).toThrow(/nodes\[0\]\.territory: p is a parent; a node belongs to a leaf/);
+  });
+  it("rejects parent and group in one spec", () => {
+    const spec = copy();
+    first(spec.territories.slice(2)).group = "G";
+    expect(() => validateSpec(spec)).toThrow(/parent and group cannot be mixed in one spec/);
+  });
+  it("lists the leaves in spec order", () => {
+    expect(leafTerritories(validateSpec(nested)).map((territory) => territory.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("validateSpec: edges", () => {
+  const withEdges = (edges: unknown) => ({ ...structuredClone(nested), edges });
+  it("accepts edges and ignores extra fields", () => {
+    const spec = validateSpec(
+      withEdges([{ source: "n1", target: "n2", weight: 0.5, reason: "x", crosses_territory: true }]),
+    );
+    expect(spec.edges).toHaveLength(1);
+  });
+  it.each([
+    [[{ source: "ghost", target: "n1" }], /edges\[0\]\.source: unknown node ghost/],
+    [[{ source: "n1", target: "ghost" }], /edges\[0\]\.target: unknown node ghost/],
+    [[{ source: "n1", target: "n1" }], /edges\[0\]: an edge joins two different nodes/],
+    [
+      [
+        { source: "n1", target: "n2" },
+        { source: "n2", target: "n1" },
+      ],
+      /edges\[1\]: duplicate edge n1–n2/,
+    ],
+    [[{ source: "n1", target: "n2", weight: -1 }], /edges\[0\]\.weight: expected a finite number >= 0/],
+    [[{ source: "n1", target: "n2", weight: Number.NaN }], /edges\[0\]\.weight: expected a finite number >= 0/],
+    [[{ source: "n1", target: "n2", weight: "1" }], /edges\[0\]\.weight: expected a finite number >= 0/],
+    [[{ source: "n1", target: "n2", reason: "  " }], /edges\[0\]\.reason: expected a non-empty string/],
+    [[{ source: "n1", target: "n2", reason: 3 }], /edges\[0\]\.reason: expected a non-empty string/],
+    [[{ source: 1, target: "n2" }], /edges\[0\]\.source: expected a string/],
+    [["nope"], /edges\[0\]: expected an object/],
+    ["nope", /edges: expected an array/],
+  ])("rejects %j", (edges, message) => {
+    expect(() => validateSpec(withEdges(edges))).toThrow(message);
   });
 });

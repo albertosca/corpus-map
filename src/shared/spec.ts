@@ -27,12 +27,42 @@ export interface Territory {
    * derived and the others fall under "Other" (spec categories §3).
    */
   group?: string;
+  /**
+   * The id of this territory's parent (spec slice E §3). A parent is any
+   * territory another one names here; it lists no members of its own, its
+   * members are its children's. Two levels only; a node belongs to a leaf.
+   */
+  parent?: string;
+}
+
+/** An undirected link between two items (spec slice E §6). */
+export interface MapEdge {
+  source: string;
+  target: string;
+  /** Finite and >= 0; heavier edges are drawn first and thicker. */
+  weight?: number;
+  /** Why the two are related, shown in the related list. */
+  reason?: string;
 }
 
 export interface MapSpec {
   version: "1";
   territories: Territory[];
   nodes: MapNode[];
+  edges?: MapEdge[];
+}
+
+/** Ids of the territories some other territory names as `parent`. */
+export function parentIds(spec: Pick<MapSpec, "territories">): Set<string> {
+  const ids = new Set<string>();
+  for (const territory of spec.territories) if (territory.parent !== undefined) ids.add(territory.parent);
+  return ids;
+}
+
+/** The territories that hold items: every territory no other one names as `parent`, in spec order. */
+export function leafTerritories(spec: Pick<MapSpec, "territories">): Territory[] {
+  const parents = parentIds(spec);
+  return spec.territories.filter((territory) => !parents.has(territory.id));
 }
 
 export class SpecError extends Error {}
@@ -73,7 +103,8 @@ function requirePoint(value: unknown, path: string): [number, number] {
  * spec. Membership is checked in both directions — a node that claims a
  * territory must be listed in it, and a listed member must claim it — so the
  * painter (which walks `members`) and the tree (which walks `territory`)
- * agree on which nodes a territory holds. `meta` is never read.
+ * agree on which nodes a territory holds. Parents (two levels, nodes only
+ * in leaves) and edges are checked here too. `meta` is never read.
  */
 export function validateSpec(input: unknown): MapSpec {
   const raw = requireObject(input, "spec");
@@ -104,8 +135,29 @@ export function validateSpec(input: unknown): MapSpec {
       const group = requireString(territory.group, `${path}.group`);
       if (group.trim() === "") fail(`${path}.group`, "expected a non-empty string");
     }
+    if (territory.parent !== undefined) requireString(territory.parent, `${path}.parent`);
     members.set(id, new Set());
   }
+
+  const typed = territories as Territory[];
+  const declaredParents = new Set<string>();
+  for (const [index, territory] of typed.entries()) {
+    if (territory.parent === undefined) continue;
+    const path = `territories[${index}].parent`;
+    if (territory.parent === territory.id) fail(path, "a territory cannot be its own parent");
+    if (!members.has(territory.parent)) fail(path, `unknown territory ${territory.parent}`);
+    declaredParents.add(territory.parent);
+  }
+  for (const [index, territory] of typed.entries()) {
+    if (!declaredParents.has(territory.id)) continue;
+    const path = `territories[${index}]`;
+    if (territory.parent !== undefined)
+      fail(`${path}.parent`, `parent ${territory.id} itself has a parent; two levels only`);
+    if (territory.members.length > 0)
+      fail(`${path}.members`, "a parent lists no members of its own; its members are its children's");
+  }
+  if (declaredParents.size > 0 && typed.some((territory) => territory.group !== undefined))
+    fail("territories", "parent and group cannot be mixed in one spec");
 
   const claimed = new Map<string, string | null>();
   for (const [index, entry] of nodes.entries()) {
@@ -118,6 +170,8 @@ export function validateSpec(input: unknown): MapSpec {
     requireFinite(node.y, `${path}.y`);
     const territory = node.territory === null ? null : requireString(node.territory, `${path}.territory`);
     if (territory !== null && !members.has(territory)) fail(`${path}.territory`, `unknown territory ${territory}`);
+    if (territory !== null && declaredParents.has(territory))
+      fail(`${path}.territory`, `${territory} is a parent; a node belongs to a leaf`);
     claimed.set(id, territory);
   }
 
@@ -138,6 +192,28 @@ export function validateSpec(input: unknown): MapSpec {
   for (const [index, node] of (nodes as MapNode[]).entries()) {
     if (node.territory !== null && !members.get(node.territory)?.has(node.id)) {
       fail(`nodes[${index}].territory`, `territory ${node.territory} does not list ${node.id} among its members`);
+    }
+  }
+
+  if (raw.edges !== undefined) {
+    const seen = new Set<string>();
+    for (const [index, entry] of requireArray(raw.edges, "edges").entries()) {
+      const path = `edges[${index}]`;
+      const edge = requireObject(entry, path);
+      const source = requireString(edge.source, `${path}.source`);
+      const target = requireString(edge.target, `${path}.target`);
+      if (!claimed.has(source)) fail(`${path}.source`, `unknown node ${source}`);
+      if (!claimed.has(target)) fail(`${path}.target`, `unknown node ${target}`);
+      if (source === target) fail(path, "an edge joins two different nodes");
+      const [low, high] = source < target ? [source, target] : [target, source];
+      const key = JSON.stringify([low, high]);
+      if (seen.has(key)) fail(path, `duplicate edge ${low}–${high}`);
+      seen.add(key);
+      const weight = edge.weight;
+      if (weight !== undefined && (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0))
+        fail(`${path}.weight`, `expected a finite number >= 0, got ${String(weight)}`);
+      if (edge.reason !== undefined && (typeof edge.reason !== "string" || edge.reason.trim() === ""))
+        fail(`${path}.reason`, "expected a non-empty string");
     }
   }
 
