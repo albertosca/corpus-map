@@ -69,6 +69,29 @@ describe("familyColours", () => {
     expect(colours.get("d")).toBe(groupColours.get("q"));
   });
 
+  it("keeps the family colour on a family of one even when a touching leaf of another family already wears it", () => {
+    const nodes = [...block("c", 0), ...block("d", 3)];
+    const spec = validateSpec({
+      version: "1",
+      territories: [
+        { id: "p", name: "P", members: [], centroid: [1, 1] },
+        { id: "q", name: "Q", members: [], centroid: [4, 1], colour: "#aa0000" },
+        {
+          id: "c",
+          name: "C",
+          members: block("c", 0).map((node) => node.id),
+          centroid: [0, 0],
+          parent: "p",
+          colour: "#aa0000",
+        },
+        { id: "d", name: "D", members: block("d", 3).map((node) => node.id), centroid: [0, 0], parent: "q" },
+      ],
+      nodes,
+    });
+    const { colours } = coloursOf(spec);
+    expect(colours.get("d")).toBe("#aa0000");
+  });
+
   it("keeps a child's declared colour", () => {
     const { colours } = coloursOf(familySpec({ b: "#123456" }));
     expect(colours.get("b")).toBe("#123456");

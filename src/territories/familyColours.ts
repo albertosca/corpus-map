@@ -60,9 +60,17 @@ export function familyColours(
   const order = [...familyOf.keys()].sort(
     (first, second) => (visibleCells.get(second) ?? 0) - (visibleCells.get(first) ?? 0) || compareIds(first, second),
   );
+  const familySize = new Map(groups.map((group) => [group.id, group.members.length] as const));
   for (const id of order) {
-    const base = groupColours.get(familyOf.get(id) as string);
+    const family = familyOf.get(id) as string;
+    const base = groupColours.get(family);
     if (base === undefined || colours.has(id)) continue;
+    // A family of one keeps the family colour on its single leaf, whatever
+    // its neighbours wear: there is no sibling to tell apart (spec slice E §5).
+    if (familySize.get(family) === 1) {
+      colours.set(id, base);
+      continue;
+    }
     const candidates = TINT_STEPS.map((step) => tint(base, step, direction, band));
     const cost = candidates.map((candidate) => {
       let shared = 0;
