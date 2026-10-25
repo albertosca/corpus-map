@@ -19,12 +19,12 @@ import { EdgeMarkers } from "./edges/EdgeMarkers";
 import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
 import type { RelatedItem } from "./edges/related";
 import { useMeasure } from "./labels/useMeasure";
-import { legendCorner, legendEntries } from "./legend/entries";
+import { legendCorner, legendEntries, legendMaximumHeight } from "./legend/entries";
 import { Legend } from "./legend/Legend";
 import { type LodThresholds, type Regime, resolveThresholds } from "./lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
-import { Minimap, type MinimapCorner } from "./minimap/Minimap";
+import { MINIMAP_SIZE, Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { NO_DIMMED } from "./shared/dimmed";
 import { paint } from "./shared/paint";
@@ -515,12 +515,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         setOwnViewport(recenterOnBoxChange(ownViewport, fitBasis.width, fitBasis.height, width, height));
     }
   }
+  // Layout effects, not passive ones: the wheel listener reads these, and a
+  // wheel can land between a commit and the flush of passive effects — with
+  // the pre-measure fit it clamped every step to "no change".
   const fitScaleReference = useRef(fitScale);
-  useEffect(() => {
+  useLayoutEffect(() => {
     fitScaleReference.current = fitScale;
   }, [fitScale]);
   const tuningReference = useRef(tuning);
-  useEffect(() => {
+  useLayoutEffect(() => {
     tuningReference.current = tuning;
   }, [tuning]);
   // One gate for every view change (spec slice C §5). Reads refs only, so it
@@ -1225,6 +1228,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const pointNear = (position: { x: number; y: number }): string | null => nearestPoint(position)?.id ?? null;
   const resolveHover = (position: HoverPosition) => {
     const previousHover = hoverReference.current;
+    // A marker takes the press (see `onPointerUp`), so over one the pointer
+    // says so and nothing beneath it is named. The markers themselves are
+    // pointer-transparent, so the cursor is set on the root, without a commit.
+    const overMarker = markerAt(markers, position.x, position.y) !== null;
+    if (rootReference.current) rootReference.current.style.cursor = overMarker ? "pointer" : "";
+    if (overMarker) {
+      if (previousHover !== null) setHover(null);
+      return;
+    }
     const nearest = nearestPoint(position);
     if (nearest) {
       // Same node, same screen position as the currently shown hover:
@@ -1631,6 +1643,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               hidden={dimmed}
               presentation={presentation}
               corner={legendPlacement}
+              maximumHeight={legendMaximumHeight(legendPlacement, minimapCorner, MINIMAP_SIZE.height)}
               theme={legendTheme}
               narrow={width < 480}
               heading={headingTag}

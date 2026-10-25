@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CorpusMap, type CorpusMapView } from "./CorpusMap";
+import type { Corner } from "./shared/corner";
 import { validateSpec } from "./shared/spec";
 
 const cluster = (territory: string, left: number) =>
@@ -27,7 +28,7 @@ function latest(views: readonly CorpusMapView[]): CorpusMapView | undefined {
   return views[views.length - 1];
 }
 
-function mount(extra: { legend?: boolean | { corner: "top-left" }; minimap?: { corner: "top-left" } } = {}) {
+function mount(extra: { legend?: boolean | { corner: Corner }; minimap?: { corner: Corner } } = {}) {
   const views: CorpusMapView[] = [];
   render(
     <CorpusMap
@@ -67,6 +68,12 @@ describe("legend prop", () => {
     const legend = screen.getByRole("region", { name: "Map legend" });
     expect(legend.style.top).toBe("12px");
     expect(legend.style.right).toBe("12px");
+  });
+
+  it("stops above the minimap when the two share the left side", () => {
+    mount({ legend: true, minimap: { corner: "bottom-left" } });
+    const legend = screen.getByRole("region", { name: "Map legend" });
+    expect(legend.style.maxHeight).toBe("calc(100% - 146px)");
   });
 });
 

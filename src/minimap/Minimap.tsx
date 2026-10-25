@@ -1,5 +1,5 @@
 import { type ReactElement, type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
-import { CORNER_POSITION, type Corner } from "../shared/corner";
+import { CORNER_POSITION, type Corner, OVERLAY_LAYER } from "../shared/corner";
 import type { Scene } from "../shared/scene";
 import { canvasSurface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
@@ -94,6 +94,7 @@ export function Minimap({ scene, world, view, corner, theme, onPoint }: MinimapP
       style={{
         position: "absolute",
         ...CORNER_POSITION[corner],
+        zIndex: OVERLAY_LAYER,
         width: MINIMAP_SIZE.width,
         height: MINIMAP_SIZE.height,
         touchAction: "none",

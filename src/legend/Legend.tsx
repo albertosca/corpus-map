@@ -1,6 +1,6 @@
 import { memo, type ReactElement, type SyntheticEvent, useId, useState } from "react";
 import type { HeadingTag } from "../a11y/headingLevel";
-import { CORNER_POSITION, type Corner } from "../shared/corner";
+import { CORNER_POSITION, type Corner, OVERLAY_LAYER } from "../shared/corner";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
 import type { TerritoryGroup } from "../territories/groups";
@@ -17,6 +17,8 @@ export interface LegendProps {
   hidden: ReadonlySet<string>;
   presentation: Presentation;
   corner: Corner;
+  /** A CSS height ceiling (`legendMaximumHeight`), so the expanded list never runs over the minimap. */
+  maximumHeight: string;
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
   /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
   narrow: boolean;
@@ -57,8 +59,19 @@ function stop(event: SyntheticEvent): void {
  * resolves a card click underneath.
  */
 export function LegendView(properties: LegendProps): ReactElement {
-  const { entries, groups, onScreen, hidden, presentation, corner, theme, narrow, onEntry, onHiddenChange } =
-    properties;
+  const {
+    entries,
+    groups,
+    onScreen,
+    hidden,
+    presentation,
+    corner,
+    maximumHeight,
+    theme,
+    narrow,
+    onEntry,
+    onHiddenChange,
+  } = properties;
   const Heading = properties.heading ?? "h3";
   const listId = useId();
   // A toggle the reader pressed holds until the presentation changes; the
@@ -98,8 +111,9 @@ export function LegendView(properties: LegendProps): ReactElement {
       style={{
         position: "absolute",
         ...CORNER_POSITION[corner],
+        zIndex: OVERLAY_LAYER,
         maxWidth: 280,
-        maxHeight: "calc(100% - 24px)",
+        maxHeight: maximumHeight,
         overflowY: "auto",
         boxSizing: "border-box",
         padding: 8,

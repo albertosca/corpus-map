@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Territory } from "../shared/spec";
-import { legendCorner, legendEntries } from "./entries";
+import { legendCorner, legendEntries, legendMaximumHeight } from "./entries";
 
 const territory = (id: string, members: number): Territory => ({
   id,
@@ -54,5 +54,26 @@ describe("legendCorner", () => {
   it("stays where asked when the minimap is elsewhere or absent", () => {
     expect(legendCorner("top-left", "bottom-left")).toBe("top-left");
     expect(legendCorner("top-left", null)).toBe("top-left");
+  });
+});
+
+describe("legendMaximumHeight", () => {
+  it.each([
+    ["top-left", "bottom-left"],
+    ["bottom-left", "top-left"],
+    ["top-right", "bottom-right"],
+    ["bottom-right", "top-right"],
+  ] as const)(
+    "leaves the minimap's height and a gap free when the legend at %s shares a side with it at %s",
+    (legend, minimap) => {
+      // 12 above, 12 below, the 110 px minimap and a 12 px gap between them.
+      expect(legendMaximumHeight(legend, minimap, 110)).toBe("calc(100% - 146px)");
+    },
+  );
+
+  it("takes the whole column, less the two margins, when the minimap is on the other side or absent", () => {
+    expect(legendMaximumHeight("top-left", "bottom-right", 110)).toBe("calc(100% - 24px)");
+    expect(legendMaximumHeight("top-left", "top-right", 110)).toBe("calc(100% - 24px)");
+    expect(legendMaximumHeight("top-left", null, 110)).toBe("calc(100% - 24px)");
   });
 });

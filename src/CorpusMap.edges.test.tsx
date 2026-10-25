@@ -2,7 +2,13 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
+import { MARKER_FONT, MARKER_MAXIMUM_WIDTH } from "./edges/markers";
+import { estimateText } from "./labels/placement";
+import { buildScene } from "./shared/scene";
 import type { MapNode, MapSpec } from "./shared/spec";
+import { DEFAULT_THEME } from "./shared/theme";
+import { DEFAULT_TUNING } from "./shared/tuning";
+import { fitScene } from "./viewport/fitScene";
 import type { MapViewport, ViewportChangeReason } from "./viewport/publicViewport";
 
 // `s` sits at the centre; `right` and `top` are far off screen at zoom 20,
@@ -140,6 +146,84 @@ describe("off-screen neighbour markers (spec slice E §6)", () => {
       expect(onSelectedChange).toHaveBeenLastCalledWith("near");
     } finally {
       rects.mockRestore();
+    }
+  });
+
+  it("over a marker, shows a pointer and names nothing beneath it, since a press there goes to the marker", () => {
+    const queued: FrameRequestCallback[] = [];
+    const frames = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queued.push(callback);
+      return queued.length;
+    });
+    // `under` sits exactly beneath the centre of the `right` marker (right
+    // edge, vertical middle); zoom 20 is relative to the fit, which `under`
+    // does not move since it lies inside the other nodes' box.
+    const markerWidth = Math.min(MARKER_MAXIMUM_WIDTH, estimateText("Right", MARKER_FONT).width + 16);
+    const scale =
+      20 * fitScene(spec, buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText), 400, 300, 24).scale;
+    const underHorizontal = (400 - markerWidth / 2 - 200) / scale;
+    const withUnder: MapSpec = {
+      ...spec,
+      nodes: [...spec.nodes, { id: "under", label: "Under", x: underHorizontal, y: 0, territory: null }],
+    };
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={withUnder}
+        width={400}
+        height={300}
+        thresholds={MID}
+        defaultViewport={{ centre: [0, 0], zoom: 20 }}
+        defaultSelectedId="s"
+      />,
+    );
+    const hoverAt = ([horizontal, vertical]: [number, number]) => {
+      fireEvent.pointerMove(surface(container), {
+        clientX: horizontal,
+        clientY: vertical,
+        pointerId: 1,
+        pointerType: "mouse",
+      });
+      act(() => {
+        for (const callback of queued.splice(0)) callback(0);
+      });
+    };
+    const centre = markerCentre(container, "right");
+    expect(centre[0]).toBeCloseTo(200 + underHorizontal * scale, 6);
+    hoverAt(centre);
+    expect(container.querySelector("[data-hover]")).toBeNull();
+    expect(surface(container).style.cursor).toBe("pointer");
+    // Just above the marker (half its 22 px height), still inside the 12 px hover radius of `under`.
+    hoverAt([centre[0], centre[1] - 11.5]);
+    expect(container.querySelector('[data-hover="under"]')).not.toBeNull();
+    expect(surface(container).style.cursor).toBe("");
+    frames.mockRestore();
+  });
+
+  it("stacks the legend and the minimap above the markers, since their presses never reach the markers", () => {
+    const withTerritory: MapSpec = {
+      ...spec,
+      territories: [{ id: "t", name: "T", members: ["near"], centroid: [10, 10] }],
+      nodes: spec.nodes.map((node) => (node.id === "near" ? { ...node, territory: "t" } : node)),
+    };
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={withTerritory}
+        width={400}
+        height={300}
+        thresholds={MID}
+        defaultViewport={{ centre: [0, 0], zoom: 20 }}
+        defaultSelectedId="s"
+        legend
+        minimap
+      />,
+    );
+    const layer = container.querySelector("[data-edge-markers]") as HTMLElement;
+    for (const selector of ["[data-legend]", "[data-minimap]"]) {
+      const overlay = container.querySelector(selector) as HTMLElement;
+      expect(Number(overlay.style.zIndex)).toBeGreaterThanOrEqual(Number(layer.style.zIndex));
+      expect(layer.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
   });
 

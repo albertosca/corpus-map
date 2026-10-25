@@ -1,4 +1,5 @@
 import { memo, type ReactElement } from "react";
+import { OVERLAY_LAYER } from "../shared/corner";
 import type { Theme } from "../shared/theme";
 import { type EdgeMarker, MARKER_FONT, MARKER_HEIGHT } from "./markers";
 
@@ -19,7 +20,7 @@ export const EdgeMarkers = memo(function EdgeMarkers({
     <div
       data-edge-markers=""
       aria-hidden="true"
-      style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 2 }}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: OVERLAY_LAYER }}
     >
       {markers.map((marker) => (
         <div

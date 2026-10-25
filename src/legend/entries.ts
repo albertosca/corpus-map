@@ -1,5 +1,5 @@
 import { compareIds } from "../shared/compareIds";
-import type { Corner } from "../shared/corner";
+import { CORNER_MARGIN, type Corner } from "../shared/corner";
 import type { Territory } from "../shared/spec";
 
 export interface LegendEntry {
@@ -31,4 +31,15 @@ const CLOCKWISE: readonly Corner[] = ["top-left", "top-right", "bottom-right", "
 export function legendCorner(requested: Corner, minimap: Corner | null): Corner {
   if (requested !== minimap) return requested;
   return CLOCKWISE[(CLOCKWISE.indexOf(requested) + 1) % CLOCKWISE.length] as Corner;
+}
+
+/**
+ * The legend's height ceiling: its column less the two margins, and less the
+ * minimap's height and one more margin when the minimap sits at the other end
+ * of the same side — an expanded legend otherwise runs down over it.
+ */
+export function legendMaximumHeight(legend: Corner, minimap: Corner | null, minimapHeight: number): string {
+  const sameSide = minimap !== null && minimap !== legend && minimap.endsWith(legend.split("-")[1] as string);
+  const reserved = 2 * CORNER_MARGIN + (sameSide ? minimapHeight + CORNER_MARGIN : 0);
+  return `calc(100% - ${reserved}px)`;
 }

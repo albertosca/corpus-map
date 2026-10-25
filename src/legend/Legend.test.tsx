@@ -22,6 +22,7 @@ function props(overrides: Partial<LegendProps> = {}): LegendProps {
     hidden: new Set(),
     presentation: "guided",
     corner: "top-left",
+    maximumHeight: "calc(100% - 24px)",
     theme: DEFAULT_THEME,
     narrow: false,
     onEntry: () => {},

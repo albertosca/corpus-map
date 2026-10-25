@@ -119,7 +119,13 @@ describe("commit cost", () => {
       </Profiler>,
     );
     await screen.findByText(/Showing territories/);
+    // Flush the first ready commit's passive effects before wheeling, so the
+    // zoom never depends on macrotask order (the slice E flake).
+    await act(async () => {});
     dragZoomedIn(appRender.container, zoomSteps, app);
+    // A lost zoom fails here with a clear reading, not as a bare commit count below.
+    const indicator = appRender.container.querySelector("[data-indicator]")?.textContent ?? "";
+    expect(Number.parseFloat(indicator.split(" · ")[1] ?? "1")).toBeGreaterThan(1);
     appRender.unmount();
 
     const map = frameRecorder();
