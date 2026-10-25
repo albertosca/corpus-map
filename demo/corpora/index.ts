@@ -1,5 +1,7 @@
 import type { MapSpec } from "corpus-map";
 import { validateSpec } from "corpus-map";
+import { withGroupNames } from "../../tools/group-names/groupNamesFile";
+import arxivGroupNames from "./arxiv.groups.json";
 import { constellationsSpec } from "./constellations";
 import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
@@ -23,11 +25,20 @@ const arxivUrl = new URL("./arxiv.json", import.meta.url).href;
 
 let pendingArxiv: Promise<MapSpec> | undefined;
 
+/**
+ * The arXiv body as the demo shows it: compact edges expanded, then the group
+ * names Claude wrote (`arxiv.groups.json`, spec slice F §4) applied in place
+ * of the provisional "Largest +N" ones. The tests build arXiv through this
+ * too, so they check what the demo loads.
+ */
+export function arxivSpec(body: unknown): MapSpec {
+  return validateSpec(withGroupNames(withExpandedEdges(body), arxivGroupNames));
+}
+
 async function fetchArxiv(): Promise<MapSpec> {
   const response = await fetch(arxivUrl);
   if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
-  const body: unknown = await response.json();
-  return validateSpec(withExpandedEdges(body));
+  return arxivSpec(await response.json());
 }
 
 /**

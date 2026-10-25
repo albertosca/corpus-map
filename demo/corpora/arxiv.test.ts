@@ -3,7 +3,7 @@ import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
 import { paint } from "../../src/shared/paint";
-import { buildScene, type Scene } from "../../src/shared/scene";
+import { buildScene, GROUP_LETTER_SPACING, type Scene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
 import { SpecError, validateSpec } from "../../src/shared/spec";
 import { RecordingSurface } from "../../src/shared/surface";
@@ -11,6 +11,8 @@ import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen, type Viewport } from "../../src/viewport/viewport";
+import { staleGroups } from "../../tools/group-names/stale";
+import groupNamesJson from "./arxiv.groups.json";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
 // typed off the ~1.8 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
@@ -18,8 +20,11 @@ import { toScreen, type Viewport } from "../../src/viewport/viewport";
 import rawSpecJson from "./arxiv.json";
 import metaJson from "./arxiv.meta.json";
 import { withExpandedEdges } from "./edges";
+import { arxivSpec } from "./index";
 
 const rawSpec: unknown = withExpandedEdges(rawSpecJson);
+/** What the demo loads: the corpus with Claude's group names applied (spec slice F §4). */
+const shippedSpec: MapSpec = arxivSpec(rawSpecJson);
 const meta: Record<string, unknown> = metaJson;
 
 const ATTRIBUTION = "Thank you to arXiv for use of its open access interoperability.";
@@ -173,15 +178,43 @@ function crossesEdge(box: DrawnBox, width: number, height: number): boolean {
  * scale, so at both desktop and phone width every drawn name is whole on
  * the canvas: none crosses its edge.
  */
+/** Spec slice F: the group names Claude wrote, applied by the demo at load. */
+describe("the arXiv group names", () => {
+  const file = groupNamesJson;
+  const scene = buildScene(shippedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+
+  it("are fresh: the names file matches the groups the corpus derives today", () => {
+    expect(staleGroups(validateSpec(rawSpec), file)).toEqual([]);
+  });
+
+  it("are what the loaded map's groups carry, member for member", () => {
+    const named = scene.groups.map((group) => ({ name: group.name, members: [...group.members].sort() }));
+    const expected = file.groups.map((group) => ({ name: group.name, members: [...group.members].sort() }));
+    expect(named).toEqual(expected);
+    expect(scene.groups.every((group) => !/ \+\d+$/.test(group.name))).toBe(true);
+  });
+
+  it("each fits a phone: 375 px minus the 16 px gutters, in the group-name style", () => {
+    const font = DEFAULT_THEME.territoryFonts.large;
+    const tooWide = file.groups
+      .map((group) => ({
+        name: group.name,
+        width: estimateText(group.name, font).width + GROUP_LETTER_SPACING * group.name.length,
+      }))
+      .filter((measured) => measured.width > 375 - 2 * 16);
+    expect(tooWide).toEqual([]);
+  });
+});
+
 describe("acceptance 2: the fitted arXiv view", () => {
-  const spec = validateSpec(rawSpec);
+  const spec = shippedSpec;
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
   it("the fitted view opens in the far regime", () => {
     expect(regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis)).toBe("far");
   });
 
-  it("derives 6 groups from the 38 categories, with the probe's contiguous pairs together", () => {
+  it("groups the 38 categories in 6, with the probe's contiguous pairs together", () => {
     expect(scene.groups).toHaveLength(6);
     const memberships = scene.groups.flatMap((group) => group.members);
     expect([...memberships].sort()).toEqual(spec.territories.map((territory) => territory.id).sort());
@@ -216,7 +249,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
  * skipping a name whose box crosses the edge) makes names pop here.
  */
 describe("no name pops out on pan or zoom (arXiv, painted)", () => {
-  const spec = validateSpec(rawSpec);
+  const spec = shippedSpec;
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
   const aboutCentre = (fit: Viewport, width: number, height: number, ratio: number): Viewport => {
@@ -309,7 +342,7 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
  * fill layer's alpha jumps by more than half the fill between frames.
  */
 describe("metric 18: no pop at the family swap (arXiv, painted)", () => {
-  const spec = validateSpec(rawSpec);
+  const spec = shippedSpec;
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   const options = {
     midAt: DEFAULT_THRESHOLDS.midAt,

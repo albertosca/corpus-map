@@ -1,0 +1,31 @@
+{
+  "model": "claude-opus-5-5",
+  "namedAt": "2026-10-25",
+  "promptVersion": 1,
+  "groups": [
+    {
+      "name": "ML & Computing Systems",
+      "members": ["cs.LG", "cs.DC", "cs.NI", "cs.NE", "cs.CE", "cs.AR", "cs.ET", "cs.PF", "cs.MS", "cs.OH", "cs.OS"]
+    },
+    {
+      "name": "AI, Security & Software",
+      "members": ["cs.AI", "cs.CR", "cs.SE", "cs.SI", "cs.MA", "cs.DB", "cs.GL"]
+    },
+    {
+      "name": "Vision, Robotics & 3D",
+      "members": ["cs.CV", "cs.RO", "cs.GR"]
+    },
+    {
+      "name": "Language, HCI & Society",
+      "members": ["cs.CL", "cs.HC", "cs.CY", "cs.IR", "cs.DL"]
+    },
+    {
+      "name": "Theory & Algorithms",
+      "members": ["cs.IT", "cs.DS", "cs.LO", "cs.DM", "cs.GT", "cs.CC", "cs.PL", "cs.CG", "cs.FL", "cs.SC"]
+    },
+    {
+      "name": "Audio & Multimedia",
+      "members": ["cs.SD", "cs.MM"]
+    }
+  ]
+}
