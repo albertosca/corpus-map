@@ -95,3 +95,27 @@ it("no longer carries the fields slice D replaced", () => {
     expect(DARK_THEME).not.toHaveProperty(field);
   }
 });
+
+/**
+ * The related-item line and neighbour ring (spec slice E §6) are held to the
+ * focus outline's bar: 3:1 against every page, bare and under every palette
+ * fill (family tints are checked in `theme.metrics.test.ts`).
+ */
+describe.each([
+  ["light", DEFAULT_THEME, ["#ffffff", "#f7f7f8"]],
+  ["dark", DARK_THEME, ["#18181b", "#111114"]],
+] as const)("%s edge colour", (_name, theme, pages) => {
+  it("reaches at least 3:1 against the page, bare and under every territory fill", () => {
+    const edge = parseColor(theme.edge);
+    expect(edge[3]).toBe(1);
+    for (const page of pages) {
+      const background = parseColor(page);
+      expect(contrastRatio(edge, background), `against ${page}`).toBeGreaterThanOrEqual(3);
+      for (const colour of theme.palette) {
+        const [red, green, blue] = parseColor(colour);
+        const underFill = over([red, green, blue, theme.territoryFillAlpha], background);
+        expect(contrastRatio(edge, underFill), `${colour} over ${page}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});

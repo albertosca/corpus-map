@@ -28,6 +28,8 @@ export interface Tuning {
    * through all of far.
    */
   groupNamesUntil: number;
+  /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
+  edgesPerNode: number;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -40,6 +42,7 @@ export const DEFAULT_TUNING: Tuning = {
   labelClasses: { large: 0.8, medium: 0.4 },
   hoverRadius: 12,
   groupNamesUntil: 1.4,
+  edgesPerNode: 3,
 };
 
 function validateTuning(tuning: Tuning): void {
@@ -80,6 +83,9 @@ function validateTuning(tuning: Tuning): void {
     throw new RangeError(
       `tuning.labelClasses.medium must be a finite number in [0, 1], got ${tuning.labelClasses.medium}`,
     );
+  }
+  if (!Number.isInteger(tuning.edgesPerNode) || tuning.edgesPerNode < 0) {
+    throw new RangeError(`tuning.edgesPerNode must be an integer >= 0, got ${tuning.edgesPerNode}`);
   }
   if (tuning.labelClasses.medium > tuning.labelClasses.large) {
     throw new RangeError(

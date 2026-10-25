@@ -1,3 +1,4 @@
+import { buildRelated, type RelatedEdge } from "../edges/related";
 import { type Measure, type PlacedLabel, placeLabels } from "../labels/placement";
 import { poleOfInaccessibility } from "../labels/pole";
 import { assignTerritoryColours, largestFirst } from "../territories/colour";
@@ -34,6 +35,10 @@ export interface Scene {
   groupBounds: ReadonlyMap<string, Bounds>;
   /** Each family's colour, keyed by group id (spec slice E §5); empty without groups. */
   groupColours: ReadonlyMap<string, string>;
+  /** Each item's related items, heaviest first (spec slice E §6); empty without edges. */
+  related: ReadonlyMap<string, readonly RelatedEdge[]>;
+  /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
+  maximumEdgeWeight: number;
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
@@ -174,5 +179,7 @@ export function buildScene(
     groupShapes,
     groupBounds: boxes(groupShapes),
     groupColours: families.groupColours,
+    related: buildRelated(spec),
+    maximumEdgeWeight: Math.max(0, ...(spec.edges ?? []).map((edge) => edge.weight ?? 0)),
   };
 }

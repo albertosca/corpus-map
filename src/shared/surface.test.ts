@@ -140,6 +140,19 @@ describe("canvasSurface", () => {
     expect(context.restore).toHaveBeenCalledOnce();
   });
 
+  it("strokes a line at its width and colour, inside save/restore", () => {
+    const context = strokeCtx();
+    canvasSurface(context as unknown as CanvasRenderingContext2D).line([1, 2], [3, 4], "#654321", 2.5);
+    expect(context.moveTo).toHaveBeenCalledWith(1, 2);
+    expect(context.lineTo).toHaveBeenCalledWith(3, 4);
+    expect(context.stroke).toHaveBeenCalledOnce();
+    expect(context.fill).not.toHaveBeenCalled();
+    expect(context.strokeStyle).toBe("#654321");
+    expect(context.lineWidth).toBe(2.5);
+    expect(context.save).toHaveBeenCalledOnce();
+    expect(context.restore).toHaveBeenCalledOnce();
+  });
+
   it("draws nothing for an empty outline", () => {
     const context = strokeCtx();
     canvasSurface(context as unknown as CanvasRenderingContext2D).outline([], "#123456", 3);

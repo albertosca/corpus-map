@@ -20,3 +20,18 @@ describe("groupNamesUntil", () => {
     }
   });
 });
+
+describe("edgesPerNode (spec slice E §6)", () => {
+  it("defaults to 3 and accepts 0", () => {
+    expect(DEFAULT_TUNING.edgesPerNode).toBe(3);
+    expect(resolveTuning({ edgesPerNode: 0 }).edgesPerNode).toBe(0);
+  });
+
+  it("rejects a negative, fractional or non-finite value", () => {
+    for (const edgesPerNode of [-1, 1.5, Number.NaN]) {
+      expect(() => resolveTuning({ edgesPerNode })).toThrow(
+        new RangeError(`tuning.edgesPerNode must be an integer >= 0, got ${edgesPerNode}`),
+      );
+    }
+  });
+});

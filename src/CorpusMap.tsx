@@ -618,6 +618,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const pendingCentre = useRef<{ wx: number; wy: number } | null>(null);
   const rafId = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
+  // The hovered item previews its edges (spec slice E §6); a primitive, so it can sit in the paint effect's dependencies.
+  const hoveredItem = hover?.kind === "point" ? hover.id : null;
   // The pointer's latest surface-relative position while not pressed,
   // awaiting resolution in the same animation-frame flush as a drag's
   // accumulated pan (metric 13: resolving it synchronously in the move
@@ -909,6 +911,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         groupAlpha,
         dimmed,
         selected,
+        hovered: hoveredItem,
+        edgesPerNode: tuning.edgesPerNode,
       },
       theme,
     );
@@ -927,6 +931,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     groupAlpha,
     dimmed,
     selected,
+    hoveredItem,
+    tuning.edgesPerNode,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the

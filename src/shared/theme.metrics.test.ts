@@ -54,7 +54,7 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
             ).toBeGreaterThanOrEqual(3);
           if (fillAlpha === theme.territoryFillAlpha)
             expect(contrastRatio(over(label, background), background)).toBeGreaterThanOrEqual(4.5);
-          for (const outline of [theme.focusOutline, theme.selectionRing ?? theme.territoryLabel])
+          for (const outline of [theme.focusOutline, theme.selectionRing ?? theme.territoryLabel, theme.edge])
             expect(contrastRatio(parseColor(outline), background), `${outline} over a tint`).toBeGreaterThanOrEqual(3);
         }
       }

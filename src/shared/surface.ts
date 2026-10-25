@@ -12,6 +12,8 @@ export interface Surface {
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
   /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
   hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
+  /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
+  line(start: [number, number], end: [number, number], colour: string, width: number): void;
   /**
    * Draws `draw`'s calls into one offscreen layer and composites it once at
    * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -31,8 +33,19 @@ export class RecordingSurface implements Surface {
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
   layers: number[] = [];
   hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
+  lines: Array<{ from: [number, number]; to: [number, number]; colour: string; width: number }> = [];
   calls: Array<
-    "clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "layer" | "layerEnd"
+    | "clear"
+    | "polygon"
+    | "circle"
+    | "hollowCircle"
+    | "text"
+    | "alpha"
+    | "outline"
+    | "ring"
+    | "line"
+    | "layer"
+    | "layerEnd"
   > = [];
 
   clear() {
@@ -70,6 +83,10 @@ export class RecordingSurface implements Surface {
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number) {
     this.calls.push("ring");
     this.rings.push({ x: horizontal, y: vertical, r: radius, color, width });
+  }
+  line(start: [number, number], end: [number, number], colour: string, width: number) {
+    this.calls.push("line");
+    this.lines.push({ from: start, to: end, colour, width });
   }
   layer(alpha: number, draw: (surface: Surface) => void) {
     this.calls.push("layer");
@@ -114,6 +131,16 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.arc(horizontal, vertical, radius, 0, Math.PI * 2);
       context.fillStyle = fill;
       context.fill();
+    },
+    line(start, end, colour, width) {
+      context.save();
+      context.beginPath();
+      context.moveTo(start[0], start[1]);
+      context.lineTo(end[0], end[1]);
+      context.strokeStyle = colour;
+      context.lineWidth = width;
+      context.stroke();
+      context.restore();
     },
     hollowCircle(_id, horizontal, vertical, radius, colour, width) {
       context.save();

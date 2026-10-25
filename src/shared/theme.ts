@@ -21,6 +21,8 @@ export interface Theme {
   focusOutlineWidth: number;
   /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
   selectionRing?: string | undefined;
+  /** The related-item line and neighbour ring (spec slice E §6); opaque, at least 3:1 over every page and fill. */
+  edge: string;
   /**
    * Categorical colours for territories, assigned so that territories whose
    * visible borders touch get different colours (`territories/colour.ts`).
@@ -47,6 +49,7 @@ export const DEFAULT_THEME: Theme = {
   pointRadius: 3.5,
   focusOutline: "#1d4ed8",
   focusOutlineWidth: 3,
+  edge: "#4a4a58",
   palette: ["#003c96", "#960000", "#005a2d", "#781e5a", "#7a45d6", "#0a7a70", "#876900", "#a53c4b"],
   pointNeutral: "#5b6170",
   territoryFillAlpha: 0.2,
@@ -63,4 +66,5 @@ export const DARK_THEME: Theme = {
   hoverBackground: "rgba(240,240,245,0.94)",
   hoverText: "#111114",
   focusOutline: "#7aa7ff",
+  edge: "#c4c4d0",
 };

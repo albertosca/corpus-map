@@ -1,4 +1,5 @@
 import { paintFocusedNode, paintFocusedTerritory } from "../a11y/paintFocus";
+import { paintEdges } from "../edges/paintEdges";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
@@ -39,12 +40,16 @@ export interface Frame {
   dimmed?: ReadonlySet<string> | undefined;
   /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
   selected?: string | null | undefined;
+  /** The hovered item's id, whose edges are previewed at half the point alpha (spec slice E §6); absent or `null` means none. */
+  hovered?: string | null | undefined;
+  /** How many edges an item draws (`Tuning.edgesPerNode`); absent means none. */
+  edgesPerNode?: number | undefined;
 }
 
 /**
  * The single place that decides paint order: the territory fill layer
  * (largest first; with groups, the leaves' and the families' layers
- * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (with the selection ring), the keyboard-focus outline,
+ * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -64,6 +69,12 @@ export function paint(
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);
+    const cap = frame.edgesPerNode ?? 0;
+    const edgeBox = { width: frame.width, height: frame.height, cap, dimmed, restoreAlpha: frame.pointAlpha };
+    if (cap > 0 && typeof frame.hovered === "string" && frame.hovered !== frame.selected)
+      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.hovered, alpha: frame.pointAlpha * 0.5 });
+    if (cap > 0 && typeof frame.selected === "string")
+      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.selected, alpha: frame.pointAlpha });
     if (typeof frame.selected === "string") paintSelection(surface, scene, viewport, theme, frame.selected);
     surface.globalAlpha(1);
   }

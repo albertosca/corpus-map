@@ -109,6 +109,62 @@ describe("paint order (slice D)", () => {
   });
 });
 
+describe("edges in the point layer (spec slice E §6)", () => {
+  const withEdges = validateSpec({
+    ...spec,
+    edges: [
+      { source: "b", target: "c", weight: 1 },
+      { source: "b", target: "a", weight: 0.5 },
+      { source: "a", target: "c" },
+    ],
+  });
+  const edgeScene = buildScene(withEdges, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const layer = (frame: { selected?: string; hovered?: string; edgesPerNode?: number }) => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      edgeScene,
+      withEdges,
+      { scale: 40, tx: 0, ty: 0 },
+      { regime: "mid", pointAlpha: 0.5, width: 400, height: 400, ...frame },
+      DEFAULT_THEME,
+    );
+    const start = surface.calls.indexOf("alpha");
+    const end = surface.calls.lastIndexOf("alpha");
+    return { surface, calls: surface.calls.slice(start, end + 1) };
+  };
+
+  it("draws the selected item's lines, then its neighbours' rings, then the selection ring", () => {
+    const { surface, calls } = layer({ selected: "b", edgesPerNode: 3 });
+    expect(calls).toEqual([
+      "alpha",
+      "circle",
+      "hollowCircle",
+      "circle",
+      "alpha",
+      "line",
+      "line",
+      "ring",
+      "ring",
+      "alpha",
+      "ring",
+      "alpha",
+    ]);
+    expect(surface.alphas).toEqual([0.5, 0.5, 0.5, 1]);
+  });
+
+  it("previews a hovered item's edges at half the point alpha, under the selected item's", () => {
+    const { surface } = layer({ selected: "b", hovered: "a", edgesPerNode: 3 });
+    expect(surface.alphas).toEqual([0.5, 0.25, 0.5, 0.5, 0.5, 1]);
+    expect(surface.lines).toHaveLength(4);
+  });
+
+  it("draws no edges without edgesPerNode, or for a hovered item that is the selected one", () => {
+    expect(layer({ selected: "b" }).surface.lines).toEqual([]);
+    expect(layer({ selected: "b", hovered: "b", edgesPerNode: 3 }).surface.lines).toHaveLength(2);
+  });
+});
+
 describe("a spec without groups", () => {
   it("paints exactly the calls it painted before families existed (spec slice E §4)", () => {
     const surface = new RecordingSurface();

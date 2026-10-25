@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
 import type { Frame } from "./shared/paint";
@@ -55,5 +55,38 @@ describe("the painted selection (spec slice C §5)", () => {
     expect(lastFrame().selected).toBe("a");
     rerender(<CorpusMap {...properties} hiddenTerritories={["t"]} />);
     expect(lastFrame().selected).toBeNull();
+  });
+});
+
+describe("the painted edges (spec slice E §6)", () => {
+  const properties = {
+    renderCard: card,
+    spec,
+    width: 400,
+    height: 300,
+    defaultViewport: { centre: [0, 0] as [number, number], zoom: 8 },
+  };
+
+  it("passes the edge cap from tuning, 3 by default", () => {
+    const { rerender } = render(<CorpusMap {...properties} />);
+    expect(lastFrame().edgesPerNode).toBe(3);
+    rerender(<CorpusMap {...properties} tuning={{ edgesPerNode: 0 }} />);
+    expect(lastFrame().edgesPerNode).toBe(0);
+  });
+
+  it("passes the hovered item's id, and null while nothing is hovered", () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    const { container } = render(<CorpusMap {...properties} />);
+    expect(lastFrame().hovered).toBeNull();
+    const surface = container.querySelector("[data-map-surface]") as HTMLElement;
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 150, pointerId: 1, pointerType: "mouse" });
+    act(() => {
+      for (const callback of animationFrames.splice(0)) callback(0);
+    });
+    expect(lastFrame().hovered).toBe("a");
   });
 });
