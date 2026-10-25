@@ -152,6 +152,8 @@ const DEFAULT_PANEL_CARD_SIZE = { width: 200, height: 96 };
 /** The synthetic corpus's own defaults (`demo/corpora/synthetic.ts`): seed 1, 5,000 items. */
 const DEFAULT_SYNTHETIC_SIZE = 5000;
 const DEFAULT_SYNTHETIC_SEED = 1;
+// One empty list, so the related memo does not recompute on every render.
+const NOTHING_HIDDEN: readonly string[] = [];
 
 /**
  * The one async corpus's (arXiv's) most recently settled load.
@@ -496,10 +498,22 @@ export function App({ loadArxiv }: AppProps = {}) {
   // The drawer's Related list (slice E): one index over the spec's edges, kept
   // while the spec and the selection stay the same.
   const currentSpec = current?.spec;
-  const related = useMemo(
-    () => (currentSpec && selectedId !== null ? relatedItems(currentSpec, selectedId) : []),
-    [currentSpec, selectedId],
-  );
+  const mapKey = current?.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current?.id;
+  // The map keeps its hidden categories itself; the demo only watches them so
+  // the drawer leaves out what the map dims. They belong to the map they were
+  // hidden on: a new key mounts a map with nothing hidden.
+  const [hiddenOnMap, setHiddenOnMap] = useState<{ mapKey: string | undefined; ids: readonly string[] }>({
+    mapKey: undefined,
+    ids: [],
+  });
+  const hiddenIds = hiddenOnMap.mapKey === mapKey ? hiddenOnMap.ids : NOTHING_HIDDEN;
+  const related = useMemo(() => {
+    if (!currentSpec || selectedId === null) return [];
+    const hidden = new Set(hiddenIds);
+    return relatedItems(currentSpec, selectedId).filter(
+      (item) => item.node.territory === null || !hidden.has(item.node.territory),
+    );
+  }, [currentSpec, selectedId, hiddenIds]);
 
   return (
     <div data-app-shell style={shellStyle}>
@@ -521,7 +535,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             // A selection belongs to the corpus it was made in: the map keeps
             // an uncontrolled one across a spec swap, so a new corpus (or a
             // regenerated synthetic one, whose ids repeat) gets a fresh map.
-            key={current.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current.id}
+            key={mapKey}
             ref={mapReference}
             spec={current.spec}
             renderCard={CARDS[current.id]}
@@ -537,6 +551,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             selectedId={selectedId}
             onViewportChange={(view) => updateLink({ view })}
             onSelectedChange={handleSelectedChange}
+            onHiddenTerritoriesChange={(ids) => setHiddenOnMap({ mapKey, ids })}
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>

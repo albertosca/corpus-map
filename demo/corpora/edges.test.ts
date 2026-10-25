@@ -52,4 +52,11 @@ describe("withExpandedEdges", () => {
     const body = { nodes, edges: [[0, 9, 90]] };
     expect(withExpandedEdges(body)).toBe(body);
   });
+
+  it("leaves a node without a string label or id for validateSpec to reject, instead of throwing", () => {
+    for (const broken of [{ ...nodes[0], label: 5 }, { ...nodes[0], id: 5 }, null]) {
+      const body = { nodes: [broken, nodes[1]], edges: [[0, 1, 90]] };
+      expect(withExpandedEdges(body)).toBe(body);
+    }
+  });
 });

@@ -73,6 +73,12 @@ export function expandEdges(nodes: readonly MapNode[], compact: readonly Compact
   });
 }
 
+function isNamedNode(node: unknown): boolean {
+  if (typeof node !== "object" || node === null) return false;
+  const { id, label } = node as { id?: unknown; label?: unknown };
+  return typeof id === "string" && typeof label === "string";
+}
+
 function isCompactEdge(entry: unknown, nodeCount: number): entry is CompactEdge {
   return (
     Array.isArray(entry) &&
@@ -87,13 +93,14 @@ function isCompactEdge(entry: unknown, nodeCount: number): entry is CompactEdge 
 
 /**
  * `body` with compact edges expanded, before `validateSpec` sees it; any
- * other body — no edges, edges already objects, or a compact entry that
- * does not resolve — comes back as it was, so `validateSpec` reports it.
+ * other body — no edges, edges already objects, a compact entry that does
+ * not resolve, or a node without a string id and label — comes back as it was, so `validateSpec` reports it.
  */
 export function withExpandedEdges(body: unknown): unknown {
   if (typeof body !== "object" || body === null) return body;
   const { nodes, edges } = body as { nodes?: unknown; edges?: unknown };
   if (!Array.isArray(nodes) || !Array.isArray(edges) || edges.length === 0) return body;
   if (!edges.every((entry) => isCompactEdge(entry, nodes.length))) return body;
+  if (!nodes.every(isNamedNode)) return body;
   return { ...body, edges: expandEdges(nodes as MapNode[], edges as CompactEdge[]) };
 }

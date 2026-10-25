@@ -1042,6 +1042,32 @@ describe("App (showcase Task 5)", () => {
       await waitFor(() => expect(window.location.hash).toContain("selected=p2"));
     });
 
+    it("leaves a related paper out of the drawer while its category is hidden (slice E)", async () => {
+      const relatedSpec = {
+        ...SELECT_SPEC,
+        territories: [
+          { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "west"], centroid: [-0.5, 0] },
+          { id: "cs.SE", name: "Software Engineering", members: ["p2", "east"], centroid: [0.5, 0] },
+        ],
+        nodes: SELECT_SPEC.nodes.map((node) =>
+          node.id === "p2" || node.id === "east" ? { ...node, territory: "cs.SE" } : node,
+        ),
+        edges: [[0, 1, 90]],
+      };
+      await renderApp(relatedSpec);
+      await screen.findByText("Artificial Intelligence, 2 items");
+      zoomToNear();
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      expect(within(dialog).queryByRole("heading", { name: "Related" })).not.toBeNull();
+
+      const legend = screen.getByRole("region", { name: "Map legend" });
+      if (within(legend).queryByRole("checkbox", { name: "Show Software Engineering" }) === null)
+        fireEvent.click(within(legend).getByRole("button", { name: "Legend" }));
+      fireEvent.click(within(legend).getByRole("checkbox", { name: "Show Software Engineering" }));
+      await waitFor(() => expect(within(dialog).queryByRole("heading", { name: "Related" })).toBeNull());
+    });
+
     it("switching corpus while the drawer is open closes it — a stale selection from the corpus just left must never show", async () => {
       await renderApp(SELECT_SPEC);
       await screen.findByText(territoryButtonText(SELECT_SPEC));
