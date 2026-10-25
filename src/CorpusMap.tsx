@@ -15,6 +15,8 @@ import {
 import { AccessibleTree, itemCount } from "./a11y/AccessibleTree";
 import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
+import { EdgeMarkers } from "./edges/EdgeMarkers";
+import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries } from "./legend/entries";
 import { Legend } from "./legend/Legend";
@@ -66,6 +68,8 @@ export interface CorpusMapHandle {
   fit(): void;
   /** Focuses the map surface, so a consumer has an element to return focus to after a dialog (spec slice B §4). */
   focus(): void;
+  /** Centres the view on an item at the current zoom, without selecting it (reason `"interaction"`); an unknown id does nothing (spec slice E §6). */
+  reveal(id: string): void;
 }
 
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
@@ -207,6 +211,7 @@ function startingView(
 }
 
 type ViewportUpdate = Viewport | ((previous: Viewport) => Viewport);
+const NO_MARKERS: readonly EdgeMarker[] = [];
 /** A regime reset a view change carries (a fit, a keyboard regime step), applied when that view is drawn. */
 interface RegimeReset {
   regime: Regime;
@@ -983,6 +988,29 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     onViewChangeReference.current?.({ regime: next, ratio, visibleCount, presentation });
   }, [next, ratio, visibleCount, ready, refits, presentation]);
 
+  // The selected item's off-screen neighbours, marked at the box edge at
+  // mid and near (spec slice E §6); presses on them are resolved before cards.
+  const markers = useMemo(
+    () =>
+      selected !== null && (next === "mid" || next === "near") && pointAlpha > 0
+        ? edgeMarkers(scene, viewport, { id: selected, width, height, cap: tuning.edgesPerNode, dimmed })
+        : NO_MARKERS,
+    [scene, viewport, selected, next, pointAlpha, width, height, tuning.edgesPerNode, dimmed],
+  );
+  // Centres on an item at the current scale; the shared target of a marker press and `reveal`.
+  const goTo = (id: string) => {
+    const node = nodesById.get(id);
+    if (!node) return;
+    requestViewport(
+      (previous) => ({
+        ...previous,
+        tx: width / 2 - node.x * previous.scale,
+        ty: height / 2 - node.y * previous.scale,
+      }),
+      "interaction",
+    );
+  };
+
   const zoomStep = (direction: "in" | "out") => {
     const factor = wheelZoomFactor({ deltaY: direction === "in" ? -120 : 120, deltaMode: 0, ctrlKey: false }, tuning);
     requestViewport((previous) => {
@@ -1019,6 +1047,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     zoomOut: () => zoomStep("out"),
     fit: () => fitView("fit"),
     focus: () => rootReference.current?.focus(),
+    reveal: goTo,
   }));
 
   // Spoken once keyboard movement settles, so a held arrow key does not
@@ -1333,6 +1362,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       clientX: event.clientX,
       clientY: event.clientY,
     };
+    // A marker sits above the cards, so it takes the press first.
+    const markerId = markerAt(markers, position.x, position.y);
+    if (markerId !== null) {
+      requestSelection(markerId);
+      const target = nodesById.get(markerId);
+      if (target && onSelect) onSelect(target);
+      goTo(markerId);
+      return;
+    }
     const cardId = visibleCardAt(event.clientX, event.clientY);
     const id = cardId ?? pointNear(position);
     requestSelection(id);
@@ -1406,6 +1444,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             colours={scene.colours}
             renderCard={renderCard}
           />
+          <EdgeMarkers markers={markers} theme={theme} />
           {hover?.kind === "point" ? (
             <div
               data-hover={hover.id}
