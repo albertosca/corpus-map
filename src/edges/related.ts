@@ -38,7 +38,11 @@ export interface RelatedItem {
   reason: string | undefined;
 }
 
-/** `id`'s related items, heaviest first, absent weights last, then by id (spec slice E §6). */
+/**
+ * `id`'s related items, heaviest first, absent weights last, then by id (spec
+ * slice E §6). Each call indexes the whole edge list afresh, so a caller
+ * asking for many ids of one spec should memoize per spec.
+ */
 export function relatedItems(spec: MapSpec, id: string): RelatedItem[] {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
   return (buildRelated(spec).get(id) ?? []).map((edge) => ({

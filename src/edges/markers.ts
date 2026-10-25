@@ -34,7 +34,10 @@ function sideOf([horizontal, vertical]: [number, number], width: number): Side {
  * One marker per drawn edge of `id` whose neighbour is off screen, placed
  * inside the box against the edge the line leaves through, centred on where
  * it leaves; markers on one edge are pushed apart along it, and stack back
- * from the end when they run past it.
+ * from the end when they run past it. A neighbour gets no marker when its
+ * segment never crosses the box (both ends off screen, the line passing
+ * outside it): nothing on screen points that way, so there is no edge to pin
+ * a marker to.
  */
 export function edgeMarkers(
   scene: Pick<Scene, "related" | "byId">,
