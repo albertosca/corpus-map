@@ -1,4 +1,4 @@
-import type { MapSpec, Territory } from "../shared/spec";
+import { leafTerritories, type MapSpec, parentIds, type Territory } from "../shared/spec";
 
 /** Territories shown together in the legend and named together on the far map (spec categories §3). */
 export interface TerritoryGroup {
@@ -6,6 +6,8 @@ export interface TerritoryGroup {
   name: string;
   /** Territory ids, most members first, ties by id. */
   members: string[];
+  /** The declared parent's `colour`; absent otherwise (spec slice E §3). */
+  colour?: string;
 }
 
 /** Below this many territories nothing is derived: a short flat list needs no groups. */
@@ -25,6 +27,7 @@ interface Draft {
   id: string;
   name: string;
   members: Territory[];
+  colour?: string;
 }
 
 function compareIds(first: string, second: string): number {
@@ -51,6 +54,7 @@ function finish(drafts: readonly Draft[]): TerritoryGroup[] {
       id: draft.id,
       name: draft.name,
       members: [...draft.members].sort(largestFirst).map((territory) => territory.id),
+      ...(draft.colour === undefined ? {} : { colour: draft.colour }),
     }));
 }
 
@@ -61,6 +65,30 @@ function supplied(territories: readonly Territory[]): TerritoryGroup[] {
     byName.set(name, [...(byName.get(name) ?? []), territory]);
   }
   return finish([...byName].map(([name, members]) => ({ id: `group:${name}`, name, members })));
+}
+
+/**
+ * One group per declared parent, with the parent's id, name and colour and
+ * its children as members; a top-level leaf is a group of one under its own
+ * id and name, so every leaf has a family (spec slice E §3).
+ */
+function declared(spec: MapSpec): TerritoryGroup[] {
+  const parents = parentIds(spec);
+  const leaves = leafTerritories(spec);
+  const drafts: Draft[] = [];
+  for (const territory of spec.territories) {
+    if (parents.has(territory.id)) {
+      drafts.push({
+        id: territory.id,
+        name: territory.name,
+        members: leaves.filter((leaf) => leaf.parent === territory.id),
+        ...(territory.colour === undefined ? {} : { colour: territory.colour }),
+      });
+    } else if (territory.parent === undefined) {
+      drafts.push({ id: territory.id, name: territory.name, members: [territory] });
+    }
+  }
+  return finish(drafts);
 }
 
 /**
@@ -127,13 +155,15 @@ function derived(territories: readonly Territory[]): TerritoryGroup[] {
 }
 
 /**
- * The spec's groups: by `group` name when any territory carries one (the
- * rest under "Other"), otherwise derived from the centroids for 10 to 400
+ * The spec's groups: by declared parent when any territory has `parent`;
+ * by `group` name when any territory carries one (the rest under "Other");
+ * otherwise derived from the centroids for 10 to 400
  * territories, otherwise none. A pipeline can run this, name the groups and
  * write `group` back into its corpus: that is how derived groups get named.
  */
 export function deriveTerritoryGroups(spec: MapSpec): TerritoryGroup[] {
   const { territories } = spec;
+  if (territories.some((territory) => territory.parent !== undefined)) return declared(spec);
   if (territories.some((territory) => territory.group !== undefined)) return supplied(territories);
   if (territories.length < MINIMUM_DERIVED_TERRITORIES || territories.length > MAXIMUM_DERIVED_TERRITORIES) return [];
   return derived(territories);

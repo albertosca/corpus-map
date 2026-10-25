@@ -1,7 +1,9 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { nestedSpec } from "../../test/specs";
 import type { MapSpec } from "../shared/spec";
+import { deriveTerritoryGroups } from "../territories/groups";
 import { AccessibleTree } from "./AccessibleTree";
 
 const spec: MapSpec = {
@@ -319,5 +321,32 @@ describe("AccessibleTree", () => {
     expect(overview.style.width).toBe("");
     expect(overview.style.clip).toBe("");
     expect(overview.style.outline).toContain("solid");
+  });
+});
+
+describe("AccessibleTree: declared parents", () => {
+  it("lists the leaves under their parent's heading and never the parent as a territory", () => {
+    const nested = nestedSpec();
+    render(
+      <AccessibleTree
+        spec={nested}
+        regime="far"
+        viewport={viewport}
+        width={400}
+        height={300}
+        cap={200}
+        groups={deriveTerritoryGroups(nested)}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Parent" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "A, 6 items" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "B, 6 items" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Parent/ })).toBeNull();
+  });
+
+  it("never lists the parent in a tree without groups", () => {
+    const nested = nestedSpec();
+    render(<AccessibleTree spec={nested} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
+    expect(screen.queryByRole("button", { name: /Parent/ })).toBeNull();
   });
 });

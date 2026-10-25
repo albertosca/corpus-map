@@ -27,7 +27,7 @@ import { NO_DIMMED } from "./shared/dimmed";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildScene } from "./shared/scene";
-import { type MapNode, type MapSpec, validateSpec } from "./shared/spec";
+import { leafTerritories, type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
@@ -690,7 +690,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   );
   const controlled = properties.hiddenTerritories !== undefined;
   const requestedHidden = properties.hiddenTerritories ?? uncontrolledHidden;
-  const territoryIds = useMemo(() => new Set(spec.territories.map((territory) => territory.id)), [spec]);
+  const territoryIds = useMemo(() => new Set(leafTerritories(spec).map((territory) => territory.id)), [spec]);
   const hiddenKey = JSON.stringify([...new Set(requestedHidden.filter((id) => territoryIds.has(id)))].sort());
   const dimmed = useMemo<ReadonlySet<string>>(
     () => (hiddenKey === "[]" ? NO_DIMMED : new Set(JSON.parse(hiddenKey) as string[])),
@@ -798,7 +798,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     properties.legend === true ? "top-left" : properties.legend ? properties.legend.corner : null;
   const legendPlacement = legendRequest === null ? null : legendCorner(legendRequest, minimapCorner);
   const legendList = useMemo(
-    () => legendEntries(spec.territories, scene.colours, theme.pointNeutral),
+    () => legendEntries(leafTerritories(spec), scene.colours, theme.pointNeutral),
     [spec, scene, theme.pointNeutral],
   );
   // The legend is memoised: every prop below keeps its identity across a pan

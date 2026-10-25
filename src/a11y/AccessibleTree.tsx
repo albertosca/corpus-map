@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { Regime } from "../lod/lod";
 import { visibleNodes } from "../lod/visible";
-import type { MapNode, MapSpec, Territory } from "../shared/spec";
+import { leafTerritories, type MapNode, type MapSpec, type Territory } from "../shared/spec";
 import { DEFAULT_THEME, type Theme } from "../shared/theme";
 import type { TerritoryGroup } from "../territories/groups";
 import type { Viewport } from "../viewport/viewport";
@@ -225,7 +225,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
     </button>
   );
 
-  const shown = spec.territories.filter((territory) => !hidden.has(territory.id));
+  const shown = leafTerritories(spec).filter((territory) => !hidden.has(territory.id));
   let content: ReactElement;
   if (regime === "near") {
     const nodes = visibleNodes(spec, viewport, width, height, cap);

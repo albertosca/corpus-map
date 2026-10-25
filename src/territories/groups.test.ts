@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MapSpec, Territory } from "../shared/spec";
+import { type MapSpec, type Territory, validateSpec } from "../shared/spec";
 import {
   derivedGroupCount,
   deriveTerritoryGroups,
@@ -90,6 +90,30 @@ describe("deriveTerritoryGroups, supplied", () => {
     expect(groups).toEqual([
       { id: "group:Vision", name: "Vision", members: ["cv", "ro"] },
       { id: "group:Other", name: "Other", members: ["lone"] },
+    ]);
+  });
+});
+
+describe("deriveTerritoryGroups: declared parents", () => {
+  it("turns declared parents into groups with the parent's id, name and colour", () => {
+    const spec = validateSpec({
+      version: "1",
+      territories: [
+        { id: "p", name: "Parent", members: [], centroid: [0, 0], colour: "#003c96" },
+        { id: "a", name: "A", members: ["n1"], centroid: [0, 0], parent: "p" },
+        { id: "b", name: "B", members: ["n2", "n3"], centroid: [1, 1], parent: "p" },
+        { id: "solo", name: "Solo", members: ["n4"], centroid: [5, 5] },
+      ],
+      nodes: [
+        { id: "n1", label: "1", x: 0, y: 0, territory: "a" },
+        { id: "n2", label: "2", x: 1, y: 1, territory: "b" },
+        { id: "n3", label: "3", x: 1, y: 2, territory: "b" },
+        { id: "n4", label: "4", x: 5, y: 5, territory: "solo" },
+      ],
+    });
+    expect(deriveTerritoryGroups(spec)).toEqual([
+      { id: "p", name: "Parent", members: ["b", "a"], colour: "#003c96" },
+      { id: "solo", name: "Solo", members: ["solo"] },
     ]);
   });
 });

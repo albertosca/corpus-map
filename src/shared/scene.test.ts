@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateCorpus, TERRITORY_COUNT } from "../../fixtures/synthetic/generate";
+import { nestedSpec, singleChildSpec } from "../../test/specs";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../labels/placement";
 import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
 import { contains } from "../territories/shape";
@@ -226,5 +227,55 @@ describe("buildScene groups", () => {
     const splitScene = buildScene(split, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     const leftLabel = splitScene.labels.find((label) => label.id === "left") as PlacedLabel;
     expect(splitScene.groupLabels[0]?.anchor).toEqual(leftLabel.anchor);
+  });
+});
+
+describe("buildScene: families", () => {
+  it("outlines each family over every descendant point and keeps parents out of the leaf maps", () => {
+    const spec = nestedSpec();
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect([...scene.shapes.keys()].sort()).toEqual(["a", "b"]);
+    expect(scene.paintOrder).not.toContain("p");
+    expect(scene.labels.map((label) => label.id)).not.toContain("p");
+    expect(scene.bounds.has("p")).toBe(false);
+    const rings = scene.groupShapes.get("p") ?? [];
+    for (const node of spec.nodes) expect(rings.some((ring) => contains(ring, [node.x, node.y]))).toBe(true);
+    expect(scene.groupBounds.get("p")).toBeDefined();
+  });
+
+  it("gives a family of one its leaf's own shape", () => {
+    const spec = singleChildSpec();
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.groupShapes.get("solo")).toEqual(scene.shapes.get("solo"));
+  });
+
+  it("anchors a declared parent's name at the parent's centroid", () => {
+    const spec = nestedSpec();
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.groupLabels.find((label) => label.id === "p")?.anchor).toEqual([3, 0.5]);
+  });
+
+  it("uses a parent's boundary as its family shape", () => {
+    const raw = structuredClone(nestedSpec());
+    const parent = raw.territories[0] as MapSpec["territories"][number];
+    parent.boundary = [
+      [-1, -1],
+      [7, -1],
+      [7, 2],
+      [-1, 2],
+    ];
+    const scene = buildScene(raw, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.groupShapes.get("p")).toEqual([parent.boundary]);
+  });
+
+  it("leaves groupShapes empty for a spec with no groups", () => {
+    const spec = validateSpec({
+      version: "1",
+      territories: [{ id: "t", name: "T", members: ["n"], centroid: [0, 0] }],
+      nodes: [{ id: "n", label: "N", x: 0, y: 0, territory: "t" }],
+    });
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    expect(scene.groupShapes.size).toBe(0);
+    expect(scene.groupBounds.size).toBe(0);
   });
 });

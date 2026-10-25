@@ -4,7 +4,7 @@ import { assignTerritoryColours, largestFirst } from "../territories/colour";
 import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import { type Bounds, ringBounds } from "../viewport/fit";
-import type { MapNode, MapSpec, Territory } from "./spec";
+import { leafTerritories, type MapNode, type MapSpec, parentIds, type Territory } from "./spec";
 import type { Theme } from "./theme";
 import type { Tuning } from "./tuning";
 
@@ -23,6 +23,14 @@ export interface Scene {
   groupLabels: readonly PlacedLabel[];
   /** Each territory's world-space bounding box; a territory without rings is absent. */
   bounds: ReadonlyMap<string, Bounds>;
+  /**
+   * Each group's region, keyed by group id (spec slice E §3): a declared
+   * parent's `boundary` when it has one, a group of one its leaf's shape,
+   * otherwise the disks outline of every member point. Empty without groups.
+   */
+  groupShapes: ReadonlyMap<string, Ring[]>;
+  /** Each group's world-space bounding box; a group without rings is absent. */
+  groupBounds: ReadonlyMap<string, Bounds>;
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
@@ -44,7 +52,11 @@ function groupAnchor(
   territories: ReadonlyMap<string, Territory>,
   shapes: ReadonlyMap<string, Ring[]>,
   anchors: ReadonlyMap<string, Point>,
+  parents: ReadonlySet<string>,
 ): Point {
+  // A declared parent's own centroid anchors its name (spec slice E §3).
+  const parent = parents.has(group.id) ? territories.get(group.id) : undefined;
+  if (parent) return [parent.centroid[0], parent.centroid[1]];
   const largestAnchor = anchors.get(group.members[0] as string) as Point;
   let weight = 0;
   let horizontal = 0;
@@ -77,22 +89,26 @@ export function buildScene(
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
   // Territories too small to measure their own spacing get disks 1% of the corpus wide.
   const fallback = 0.01 * Math.max(extent(spec.nodes.map((node) => [node.x, node.y] as Point)), 1e-9);
-  const shapes = new Map<string, Ring[]>();
-  const inputs = spec.territories.map((territory) => {
-    const points = territory.members.flatMap((id) => {
+  const pointsOf = (territory: Territory) =>
+    territory.members.flatMap((id) => {
       const node = byId.get(id);
       return node ? [[node.x, node.y] as Point] : [];
     });
-    let rings: Ring[];
-    if (territory.boundary) {
-      rings = [territory.boundary.map(([horizontal, vertical]) => [horizontal, vertical] as Point)];
-    } else {
-      const memberSpacing = points.length >= 3 ? spacing(points, 0.9) : 0;
-      // Too few members to measure spacing: overlap the disks so one or two
-      // members still read as one region, never as separate dots.
-      const radius = memberSpacing > 0 ? tuning.hullPadding * memberSpacing : Math.max(fallback, 0.6 * extent(points));
-      rings = disksOutline(points, radius);
-    }
+  const outline = (points: readonly Point[]) => {
+    const memberSpacing = points.length >= 3 ? spacing(points, 0.9) : 0;
+    // Too few members to measure spacing: overlap the disks so one or two
+    // members still read as one region, never as separate dots.
+    const radius = memberSpacing > 0 ? tuning.hullPadding * memberSpacing : Math.max(fallback, 0.6 * extent(points));
+    return disksOutline(points, radius);
+  };
+  const copyBoundary = (boundary: ReadonlyArray<readonly [number, number]>): Ring[] => [
+    boundary.map(([horizontal, vertical]) => [horizontal, vertical] as Point),
+  ];
+  const shapes = new Map<string, Ring[]>();
+  const leaves = leafTerritories(spec);
+  const parents = parentIds(spec);
+  const inputs = leaves.map((territory) => {
+    const rings = territory.boundary ? copyBoundary(territory.boundary) : outline(pointsOf(territory));
     shapes.set(territory.id, rings);
     const ring = largestRing(rings);
     const anchor: Point =
@@ -112,19 +128,31 @@ export function buildScene(
   const groupInputs = groups.map((group) => ({
     id: group.id,
     name: group.name,
-    anchor: groupAnchor(group, territoriesById, shapes, anchors),
+    anchor: groupAnchor(group, territoriesById, shapes, anchors, parents),
     members: group.members.reduce((total, id) => total + (territoriesById.get(id) as Territory).members.length, 0),
   }));
-  const bounds = new Map<string, Bounds>();
-  for (const [id, rings] of shapes) {
-    const box = ringBounds(rings);
-    if (box) bounds.set(id, box);
+  const groupShapes = new Map<string, Ring[]>();
+  for (const group of groups) {
+    const parent = parents.has(group.id) ? territoriesById.get(group.id) : undefined;
+    if (parent?.boundary) groupShapes.set(group.id, copyBoundary(parent.boundary));
+    else if (group.members.length === 1 && group.members[0] === group.id)
+      groupShapes.set(group.id, shapes.get(group.id) ?? []);
+    else
+      groupShapes.set(group.id, outline(group.members.flatMap((id) => pointsOf(territoriesById.get(id) as Territory))));
   }
+  const boxes = (rings: ReadonlyMap<string, Ring[]>) => {
+    const result = new Map<string, Bounds>();
+    for (const [id, ringList] of rings) {
+      const box = ringBounds(ringList);
+      if (box) result.set(id, box);
+    }
+    return result;
+  };
   return {
     byId,
     shapes,
     labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure),
-    colours: assignTerritoryColours(shapes, spec.territories, theme.palette),
+    colours: assignTerritoryColours(shapes, leaves, theme.palette),
     paintOrder: largestFirst(shapes),
     groups,
     groupLabels: placeLabels(
@@ -133,6 +161,8 @@ export function buildScene(
       tuning.labelClasses,
       spaced,
     ),
-    bounds,
+    bounds: boxes(shapes),
+    groupShapes,
+    groupBounds: boxes(groupShapes),
   };
 }
