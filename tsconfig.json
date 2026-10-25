@@ -20,5 +20,5 @@
     "resolveJsonModule": true,
     "paths": { "corpus-map": ["./src/index.ts"] }
   },
-  "include": ["src", "test", "demo", "bench", "fixtures"]
+  "include": ["src", "test", "demo", "bench", "fixtures", "tools"]
 }
