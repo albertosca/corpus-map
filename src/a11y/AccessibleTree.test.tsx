@@ -1,8 +1,8 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { nestedSpec } from "../../test/specs";
-import type { MapSpec } from "../shared/spec";
+import type { MapNode, MapSpec } from "../shared/spec";
 import { deriveTerritoryGroups } from "../territories/groups";
 import { AccessibleTree } from "./AccessibleTree";
 
@@ -23,6 +23,10 @@ const spec: MapSpec = {
 // scale 10, tx 0, ty 0: every fixture node above lands at screen x,y <= 90,
 // comfortably inside this 400x300 viewport.
 const viewport = { scale: 10, tx: 0, ty: 0 };
+
+// Two live regions: the regime's, and the related count's (spec slice E §6).
+const regimeAnnouncement = () =>
+  screen.getAllByRole("status").find((status) => status.getAttribute("data-announcement") === "regime")?.textContent;
 
 describe("AccessibleTree", () => {
   it("lists territories, not items, at the far regime", () => {
@@ -84,17 +88,17 @@ describe("AccessibleTree", () => {
       <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
     );
     rerender(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
-    expect(screen.getByRole("status").textContent).toMatch(/items/);
+    expect(regimeAnnouncement()).toMatch(/items/);
   });
 
   it("announces far to mid distinctly, since the tree's items do not change there", () => {
     const { rerender } = render(
       <AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />,
     );
-    const far = screen.getByRole("status").textContent;
+    const far = regimeAnnouncement();
     expect(far).toBe("Showing territories");
     rerender(<AccessibleTree spec={spec} regime="mid" viewport={viewport} width={400} height={300} cap={200} />);
-    const mid = screen.getByRole("status").textContent;
+    const mid = regimeAnnouncement();
     expect(mid).toBe("Showing territories and points");
     expect(mid).not.toBe(far);
   });
@@ -348,5 +352,75 @@ describe("AccessibleTree: declared parents", () => {
     const nested = nestedSpec();
     render(<AccessibleTree spec={nested} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
     expect(screen.queryByRole("button", { name: /Parent/ })).toBeNull();
+  });
+
+  describe("related items (spec slice E §6)", () => {
+    const [alpha, beta, gamma] = spec.nodes as [MapNode, MapNode, MapNode];
+    const related = [
+      { node: beta, weight: 1, reason: "graphs, search" },
+      { node: gamma, weight: undefined, reason: undefined },
+    ];
+
+    it("lists the selected item's related items as buttons at mid, and announces how many", async () => {
+      const onRelated = vi.fn();
+      render(
+        <AccessibleTree
+          spec={spec}
+          regime="mid"
+          viewport={viewport}
+          width={400}
+          height={300}
+          cap={200}
+          selectedId={alpha.id}
+          related={related}
+          onRelated={onRelated}
+        />,
+      );
+      const list = screen.getByRole("list", { name: "Related to Alpha" });
+      expect(
+        within(list)
+          .getAllByRole("button")
+          .map((button) => button.textContent),
+      ).toEqual(["Beta — graphs, search", "Gamma"]);
+      await userEvent.click(within(list).getByRole("button", { name: "Gamma" }));
+      expect(onRelated).toHaveBeenCalledWith(gamma);
+      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("2 related");
+    });
+
+    it("says 1 related for a single related item, at near too", () => {
+      render(
+        <AccessibleTree
+          spec={spec}
+          regime="near"
+          viewport={viewport}
+          width={400}
+          height={300}
+          cap={200}
+          selectedId={alpha.id}
+          related={related.slice(0, 1)}
+        />,
+      );
+      expect(screen.getByRole("list", { name: "Related to Alpha" })).toBeDefined();
+      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("1 related");
+    });
+
+    it("renders no list and no announcement at far, without related items, or without a selection", () => {
+      const cases = [
+        { regime: "far" as const, selectedId: alpha.id, related },
+        { regime: "mid" as const, selectedId: alpha.id, related: [] },
+        { regime: "mid" as const, selectedId: null, related },
+        { regime: "mid" as const, selectedId: "ghost", related },
+      ];
+      for (const properties of cases) {
+        const { unmount } = render(
+          <AccessibleTree spec={spec} viewport={viewport} width={400} height={300} cap={200} {...properties} />,
+        );
+        expect(screen.queryByRole("list", { name: /^Related to/ })).toBeNull();
+        expect(screen.getAllByRole("status").map((status) => status.textContent)).not.toContainEqual(
+          expect.stringMatching(/related$/),
+        );
+        unmount();
+      }
+    });
   });
 });

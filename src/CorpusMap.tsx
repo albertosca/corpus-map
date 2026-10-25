@@ -17,6 +17,7 @@ import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { EdgeMarkers } from "./edges/EdgeMarkers";
 import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
+import type { RelatedItem } from "./edges/related";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries } from "./legend/entries";
 import { Legend } from "./legend/Legend";
@@ -212,6 +213,7 @@ function startingView(
 
 type ViewportUpdate = Viewport | ((previous: Viewport) => Viewport);
 const NO_MARKERS: readonly EdgeMarker[] = [];
+const NO_RELATED: readonly RelatedItem[] = [];
 /** A regime reset a view change carries (a fit, a keyboard regime step), applied when that view is drawn. */
 interface RegimeReset {
   regime: Regime;
@@ -997,7 +999,21 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         : NO_MARKERS,
     [scene, viewport, selected, next, pointAlpha, width, height, tuning.edgesPerNode, dimmed],
   );
-  // Centres on an item at the current scale; the shared target of a marker press and `reveal`.
+  // The selected item's live related items (neighbours in dimmed territories
+  // left out), for the accessible tree's related list.
+  const relatedOfSelected = useMemo(
+    () =>
+      selected === null
+        ? NO_RELATED
+        : (scene.related.get(selected) ?? []).flatMap((edge) => {
+            const node = nodesById.get(edge.neighbour);
+            return node && (node.territory === null || !dimmed.has(node.territory))
+              ? [{ node, weight: edge.weight, reason: edge.reason }]
+              : [];
+          }),
+    [scene, selected, nodesById, dimmed],
+  );
+  // Centres on an item at the current scale; the shared target of a marker press, a related item and `reveal`.
   const goTo = (id: string) => {
     const node = nodesById.get(id);
     if (!node) return;
@@ -1574,6 +1590,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               onSelect?.(node);
             }}
             selectedId={selected}
+            related={relatedOfSelected}
+            onRelated={(node) => {
+              requestSelection(node.id);
+              onSelect?.(node);
+              goTo(node.id);
+            }}
             groups={scene.groups}
             hidden={dimmed}
             heading={headingTag}

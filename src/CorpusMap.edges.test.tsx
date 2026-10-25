@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
@@ -206,5 +206,71 @@ describe("off-screen neighbour markers (spec slice E §6)", () => {
     expect(onSelectedChange).not.toHaveBeenCalled();
     act(() => handle.current?.reveal("ghost"));
     expect(changes).toHaveLength(1);
+  });
+
+  it("pressing a related item's button selects it and centres on it at the same zoom", () => {
+    const changes: Change[] = [];
+    const onSelectedChange = vi.fn();
+    render(
+      <CorpusMap
+        renderCard={card}
+        spec={spec}
+        width={400}
+        height={300}
+        thresholds={MID}
+        defaultViewport={{ centre: [0, 0], zoom: 20 }}
+        defaultSelectedId="s"
+        onSelectedChange={onSelectedChange}
+        onViewportChange={(...call) => changes.push(call)}
+      />,
+    );
+    const list = screen.getByRole("list", { name: "Related to Source" });
+    expect(
+      within(list)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Right", "Top", "Near"]);
+    act(() => within(list).getByRole("button", { name: "Right" }).click());
+    expect(onSelectedChange).toHaveBeenLastCalledWith("right");
+    const [view, meta] = changes[changes.length - 1] as Change;
+    expect(meta.reason).toBe("interaction");
+    expect(view.zoom).toBeCloseTo(20, 9);
+    expect(view.centre[0]).toBeCloseTo(1000, 6);
+  });
+
+  it("an item whose only neighbours are in a hidden territory gets no markers, no list and no announcement", () => {
+    const hiddenNeighbours: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "home", name: "Home", members: ["s"], centroid: [0, 0] },
+        { id: "away", name: "Away", members: ["far", "close"], centroid: [500, 0] },
+      ],
+      nodes: [
+        { id: "s", label: "Source", x: 0, y: 0, territory: "home" },
+        { id: "far", label: "Far", x: 1000, y: 0, territory: "away" },
+        { id: "close", label: "Close", x: 5, y: 5, territory: "away" },
+      ],
+      edges: [
+        { source: "s", target: "far" },
+        { source: "s", target: "close" },
+      ],
+    };
+    const { container } = render(
+      <CorpusMap
+        renderCard={card}
+        spec={hiddenNeighbours}
+        width={400}
+        height={300}
+        thresholds={MID}
+        defaultViewport={{ centre: [0, 0], zoom: 20 }}
+        defaultSelectedId="s"
+        defaultHiddenTerritories={["away"]}
+      />,
+    );
+    expect(container.querySelectorAll("[data-edge-marker]")).toHaveLength(0);
+    expect(screen.queryByRole("list", { name: /^Related to/ })).toBeNull();
+    expect(screen.getAllByRole("status").map((status) => status.textContent)).not.toContainEqual(
+      expect.stringMatching(/related$/),
+    );
   });
 });

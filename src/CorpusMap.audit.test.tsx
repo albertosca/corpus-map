@@ -102,4 +102,28 @@ describe("accessibility audit (spec slice B §7)", () => {
     );
     await expectClean(container);
   });
+
+  it("is clean at mid with a selected item's related list and edge markers", async () => {
+    const linked: MapSpec = {
+      ...grid,
+      edges: [
+        { source: "t0-a", target: "t9-a", weight: 2, reason: "far apart" },
+        { source: "t0-a", target: "t1-a", weight: 1 },
+      ],
+    };
+    const { container } = render(
+      <CorpusMap
+        spec={linked}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={600}
+        height={400}
+        legend
+        defaultViewport={{ centre: [1, 1], zoom: 6 }}
+        defaultSelectedId="t0-a"
+      />,
+    );
+    expect(screen.getByRole("list", { name: "Related to Item 0" })).toBeDefined();
+    expect(container.querySelectorAll("[data-edge-marker]").length).toBeGreaterThan(0);
+    await expectClean(container);
+  });
 });

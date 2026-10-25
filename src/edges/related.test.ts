@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapSpec } from "../shared/spec";
-import { buildRelated } from "./related";
+import { buildRelated, relatedItems } from "./related";
 
 const base: MapSpec = {
   version: "1",
@@ -36,5 +36,26 @@ describe("buildRelated (spec slice E §6)", () => {
 
   it("is empty without edges", () => {
     expect(buildRelated(base).size).toBe(0);
+  });
+});
+
+describe("relatedItems (spec slice E §6)", () => {
+  it("returns the related nodes in buildRelated's order, with weight and reason", () => {
+    const spec = {
+      ...base,
+      edges: [
+        { source: "a", target: "b", weight: 0.2 },
+        { source: "c", target: "a", weight: 0.9, reason: "shared" },
+      ],
+    };
+    expect(relatedItems(spec, "a")).toEqual([
+      { node: base.nodes[2], weight: 0.9, reason: "shared" },
+      { node: base.nodes[1], weight: 0.2, reason: undefined },
+    ]);
+  });
+
+  it("returns nothing for an unknown id or an item without edges", () => {
+    expect(relatedItems(base, "ghost")).toEqual([]);
+    expect(relatedItems({ ...base, edges: [{ source: "a", target: "b" }] }, "c")).toEqual([]);
   });
 });

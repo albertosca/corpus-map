@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { RelatedItem } from "../edges/related";
 import type { Regime } from "../lod/lod";
 import { visibleNodes } from "../lod/visible";
 import { leafTerritories, type MapNode, type MapSpec, type Territory } from "../shared/spec";
@@ -33,11 +34,16 @@ export interface AccessibleTreeProps {
   onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
   /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
   onNodeFocusChange?: ((id: string | null) => void) | undefined;
+  /** The selected item's live related items, listed at mid and near (spec slice E §6). */
+  related?: readonly RelatedItem[] | undefined;
+  /** Called when a related item's button is pressed. */
+  onRelated?: ((node: MapNode) => void) | undefined;
 }
 
 const UNASSIGNED = "Unassigned";
 const NO_GROUPS: readonly TerritoryGroup[] = [];
 const NOTHING_HIDDEN: ReadonlySet<string> = new Set();
+const NO_RELATED: readonly RelatedItem[] = [];
 
 // One string per regime, so a far→mid change is announced too — the tree's
 // items do not change between those two, only what the canvas shows.
@@ -77,6 +83,12 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
   const Heading = properties.heading ?? "h3";
   const theme = properties.theme ?? DEFAULT_THEME;
   const loose = spec.nodes.filter((node) => node.territory === null);
+  const related = properties.related ?? NO_RELATED;
+  const relatedHeadingId = useId();
+  const selectedNode = selectedId == null ? undefined : spec.nodes.find((node) => node.id === selectedId);
+  // Its own section: the item buttons exist only at near and only on screen,
+  // and a related item is usually neither (spec slice E §6).
+  const showRelated = (regime === "mid" || regime === "near") && related.length > 0 && selectedNode !== undefined;
 
   // The buttons are visually hidden, so `CorpusMap` draws their focus on the
   // canvas; it learns which one from focus/blur here. A focused button that
@@ -297,10 +309,34 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       data-accessible-tree=""
       style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0 }}
     >
-      <div role="status" aria-live="polite" style={VISUALLY_HIDDEN}>
+      <div role="status" aria-live="polite" data-announcement="regime" style={VISUALLY_HIDDEN}>
         {ANNOUNCEMENT[regime]}
       </div>
+      {/* A second region, so the related count never replaces the regime announcement. */}
+      <div role="status" aria-live="polite" data-announcement="related" style={VISUALLY_HIDDEN}>
+        {showRelated ? `${related.length} related` : ""}
+      </div>
       {content}
+      {showRelated ? (
+        <div style={VISUALLY_HIDDEN}>
+          <Heading id={relatedHeadingId}>{`Related to ${selectedNode.label}`}</Heading>
+          <ul aria-labelledby={relatedHeadingId}>
+            {related.map((item) => (
+              <li key={item.node.id}>
+                <button
+                  type="button"
+                  data-tree-related={item.node.id}
+                  onClick={() => properties.onRelated?.(item.node)}
+                  onFocus={(event) => remember(event.currentTarget)}
+                  onBlur={(event) => forget(event.currentTarget, event.relatedTarget)}
+                >
+                  {item.reason === undefined ? item.node.label : `${item.node.label} — ${item.reason}`}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
