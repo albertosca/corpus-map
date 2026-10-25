@@ -21,8 +21,11 @@ export interface Theme {
   focusOutlineWidth: number;
   /** The selected item's ring; absent falls back to `territoryLabel`, which clears 4.5:1 in both themes. */
   selectionRing?: string | undefined;
-  /** The related-item line and neighbour ring (spec slice E §6); opaque, at least 3:1 over every page and fill. */
-  edge: string;
+  /**
+   * The related-item line and neighbour ring (spec slice E §6); opaque, at
+   * least 3:1 over every page and fill. Absent falls back to `territoryLabel`.
+   */
+  edge?: string | undefined;
   /**
    * Categorical colours for territories, assigned so that territories whose
    * visible borders touch get different colours (`territories/colour.ts`).

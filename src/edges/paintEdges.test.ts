@@ -71,6 +71,22 @@ describe("paintEdges (spec slice E §6)", () => {
     expect(surface.alphas).toEqual([0.8, 1]);
   });
 
+  it("falls back to the territory label colour when the theme names no edge colour", () => {
+    const { edge: _edge, ...theme } = DEFAULT_THEME;
+    const surface = new RecordingSurface();
+    paintEdges(surface, fan, identity, theme, {
+      id: "a",
+      width: 400,
+      height: 400,
+      cap: 3,
+      dimmed: new Set(),
+      alpha: 0.8,
+      restoreAlpha: 1,
+    });
+    const colours = [...surface.lines.map((line) => line.colour), ...surface.rings.map((ring) => ring.color)];
+    expect(new Set(colours)).toEqual(new Set([DEFAULT_THEME.territoryLabel]));
+  });
+
   it("draws width 1 + 2 × weight / max, and 2 px without weights", () => {
     const weighted = sceneOf(
       [node("a", 10, 10), node("b", 20, 10), node("c", 30, 10)],

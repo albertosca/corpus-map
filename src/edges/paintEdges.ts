@@ -65,7 +65,7 @@ export function paintEdges(
   surface: Surface,
   scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">,
   viewport: Viewport,
-  theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth">,
+  theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel">,
   options: {
     id: string;
     width: number;
@@ -81,6 +81,7 @@ export function paintEdges(
   const edges = drawnEdges(scene, options.id, options.cap, options.dimmed);
   if (edges.length === 0) return;
   const originPoint = toScreen(viewport, origin.x, origin.y);
+  const colour = theme.edge ?? theme.territoryLabel;
   surface.globalAlpha(options.alpha);
   const ends: Array<[number, number]> = [];
   for (const edge of edges) {
@@ -89,16 +90,10 @@ export function paintEdges(
     const clipped = clipToBox(originPoint, neighbourPoint, options.width, options.height);
     const lineWidth =
       edge.weight === undefined || scene.maximumEdgeWeight === 0 ? 2 : 1 + (2 * edge.weight) / scene.maximumEdgeWeight;
-    if (clipped) surface.line(clipped[0], clipped[1], theme.edge, lineWidth);
+    if (clipped) surface.line(clipped[0], clipped[1], colour, lineWidth);
     ends.push(neighbourPoint);
   }
   for (const [horizontal, vertical] of ends)
-    surface.ring(
-      horizontal,
-      vertical,
-      theme.pointRadius + theme.focusOutlineWidth / 2,
-      theme.edge,
-      NEIGHBOUR_RING_WIDTH,
-    );
+    surface.ring(horizontal, vertical, theme.pointRadius + theme.focusOutlineWidth / 2, colour, NEIGHBOUR_RING_WIDTH);
   surface.globalAlpha(options.restoreAlpha);
 }

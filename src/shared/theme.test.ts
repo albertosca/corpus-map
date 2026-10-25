@@ -106,7 +106,7 @@ describe.each([
   ["dark", DARK_THEME, ["#18181b", "#111114"]],
 ] as const)("%s edge colour", (_name, theme, pages) => {
   it("reaches at least 3:1 against the page, bare and under every territory fill", () => {
-    const edge = parseColor(theme.edge);
+    const edge = parseColor(theme.edge ?? theme.territoryLabel);
     expect(edge[3]).toBe(1);
     for (const page of pages) {
       const background = parseColor(page);
