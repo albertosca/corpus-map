@@ -262,6 +262,45 @@ export interface CardOverlayProps {
 }
 export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, colours, renderCard, }: CardOverlayProps): ReactElement | null;
 
+// cards/cardSizeFor.d.ts
+import type { MapSpec } from "../shared/spec";
+/** How `cardSizeFor` sizes a card: the text the consumer's card shows, and the frame around it. */
+export interface CardSizeOptions {
+    /** CSS font shorthand with a px size, the font the card's title uses. Default `"16px sans-serif"`. */
+    font?: string;
+    /** Line height as a multiple of the font size. Default 1.25. */
+    lineHeight?: number;
+    /** The most lines a title may wrap to; an integer >= 1. Default 2. */
+    titleLines?: number;
+    /** Lines under the title (a year, a subtitle); an integer >= 0. Default 0. */
+    extraLines?: number;
+    /** Which label width the card fits, in (0, 1]; 0.9 fits nine titles in ten whole. Default 0.9. */
+    percentile?: number;
+    /** Pixels on every side of the text. Default 8. */
+    padding?: number;
+    /** The narrowest frame, padding included. Default 120. */
+    minimumWidth?: number;
+    /** The widest frame, padding included. Default 240. */
+    maximumWidth?: number;
+    /** Measures a label on one line; defaults to the library's own estimate (0.6 × the font's px size per character). */
+    measure?: (text: string, font: string) => {
+        width: number;
+    };
+}
+/**
+ * A card size fitted to the corpus's own labels, to pass as `CorpusMap`'s
+ * `cardSize`. The label width at `percentile` (nearest rank) is split over
+ * `titleLines`, the frame clamped to `[minimumWidth, maximumWidth]`; the
+ * height holds the lines the title then takes plus `extraLines`. A label
+ * longer than that is the card renderer's to clamp. Both sides are rounded
+ * up to whole pixels; invalid options throw a `RangeError` naming the
+ * option.
+ */
+export declare function cardSizeFor(spec: MapSpec, options?: CardSizeOptions): {
+    width: number;
+    height: number;
+};
+
 // cards/layout.d.ts
 export interface CardAnchor {
     id: string;
@@ -395,6 +434,8 @@ export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
+export type { CardSizeOptions } from "./cards/cardSizeFor";
+export { cardSizeFor } from "./cards/cardSizeFor";
 export type { RelatedItem } from "./edges/related";
 export { relatedItems } from "./edges/related";
 export type { LodThresholds, Regime } from "./lod/lod";

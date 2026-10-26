@@ -1,6 +1,8 @@
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
+export type { CardSizeOptions } from "./cards/cardSizeFor";
+export { cardSizeFor } from "./cards/cardSizeFor";
 export type { RelatedItem } from "./edges/related";
 export { relatedItems } from "./edges/related";
 export type { LodThresholds, Regime } from "./lod/lod";
