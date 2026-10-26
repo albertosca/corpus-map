@@ -6,8 +6,11 @@ export interface Surface {
   text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
   /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
   globalAlpha(alpha: number): void;
-  /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
-  outline(points: Array<[number, number]>, color: string, width: number): void;
+  /**
+   * Strokes closed rings (no fill) as one path at `width`, so many rings of
+   * one colour cost one stroke; leaves the line width of later calls untouched.
+   */
+  outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
   /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
   /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
@@ -29,7 +32,7 @@ export class RecordingSurface implements Surface {
   circles: Array<{ id: string; x: number; y: number; r: number; fill: string }> = [];
   texts: Array<{ text: string; x: number; y: number; color: string; font: string; letterSpacing?: string }> = [];
   alphas: number[] = [];
-  outlines: Array<{ points: Array<[number, number]>; color: string; width: number }> = [];
+  outlines: Array<{ rings: Array<Array<[number, number]>>; color: string; width: number }> = [];
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
   layers: number[] = [];
   hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
@@ -76,9 +79,9 @@ export class RecordingSurface implements Surface {
     this.calls.push("alpha");
     this.alphas.push(alpha);
   }
-  outline(points: Array<[number, number]>, color: string, width: number) {
+  outline(rings: Array<Array<[number, number]>>, color: string, width: number) {
     this.calls.push("outline");
-    this.outlines.push({ points, color, width });
+    this.outlines.push({ rings, color, width });
   }
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number) {
     this.calls.push("ring");
@@ -168,14 +171,16 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
     globalAlpha(alpha) {
       context.globalAlpha = alpha;
     },
-    outline(points, color, width) {
-      const [first, ...rest] = points;
-      if (!first) return;
+    outline(rings, color, width) {
+      if (!rings.some((ring) => ring.length > 0)) return;
       context.save();
       context.beginPath();
-      context.moveTo(first[0], first[1]);
-      for (const [horizontal, vertical] of rest) context.lineTo(horizontal, vertical);
-      context.closePath();
+      for (const [first, ...rest] of rings) {
+        if (!first) continue;
+        context.moveTo(first[0], first[1]);
+        for (const [horizontal, vertical] of rest) context.lineTo(horizontal, vertical);
+        context.closePath();
+      }
       context.strokeStyle = color;
       context.lineWidth = width;
       context.stroke();

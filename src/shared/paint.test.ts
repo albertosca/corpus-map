@@ -176,7 +176,7 @@ describe("paint", () => {
     // plus an outline of the same ring in the same colour.
     const territoryColour = DEFAULT_THEME.palette[0];
     expect(first(surface.polygons)).toMatchObject({ fill: territoryColour, stroke: "transparent" });
-    expect(first(surface.outlines)).toEqual({ points: ring, color: territoryColour, width: TERRITORY_OUTLINE_WIDTH });
+    expect(first(surface.outlines)).toEqual({ rings: [ring], color: territoryColour, width: TERRITORY_OUTLINE_WIDTH });
   });
 
   it("paints points at the frame's pointAlpha, and the alpha is reset to 1 afterwards", () => {
@@ -262,13 +262,15 @@ describe("paint order", () => {
     };
     const surface = new RecordingSurface();
     paintSpec(two, surface, "mid", undefined, LABEL_VP);
+    // t1 and t2 do not touch, so they share the palette's first colour and
+    // their outlines are one stroke.
+    expect(new Set(surface.polygons.map((polygon) => polygon.fill)).size).toBe(1);
     expect(surface.calls).toEqual([
       "clear",
       "layer",
       "polygon",
       "polygon",
       "layerEnd",
-      "outline",
       "outline",
       "alpha",
       // None of these nodes is visited, so every point is a ring.
@@ -414,7 +416,8 @@ describe("keyboard focus on the canvas (2026-09-25 review, B10)", () => {
   it("outlines every ring of the focused territory, and only that one, in the theme's focus style", () => {
     const surface = paintWith("far", { focusedTerritory: "t2" });
     expect(screenRings("t2").length).toBeGreaterThan(0);
-    expect(focusOutlines(surface).map((outline) => outline.points)).toEqual(screenRings("t2"));
+    expect(focusOutlines(surface)).toHaveLength(1);
+    expect(focusOutlines(surface).flatMap((outline) => outline.rings)).toEqual(screenRings("t2"));
     for (const outline of focusOutlines(surface)) {
       expect(outline.color).toBe(DEFAULT_THEME.focusOutline);
       expect(outline.width).toBe(DEFAULT_THEME.focusOutlineWidth);

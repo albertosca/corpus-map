@@ -50,16 +50,30 @@ function fillLayer(surface: Surface, projected: readonly Projected[], alpha: num
   });
 }
 
-/** Outlines every ring in its full colour at `width`, at `alpha` (a dimmed one at `DIMMED_ALPHA * alpha`). */
+/**
+ * Outlines every ring in its full colour at `width`, at `alpha` (a dimmed one
+ * at `DIMMED_ALPHA * alpha`), as one stroke per colour and alpha in the order
+ * each first appears: one path per ring cost a stroke per ring (backlog,
+ * measured in slice D). Where two colours' outlines cross, the colour that
+ * appears later in `projected` is on top.
+ */
 function outlines(surface: Surface, projected: readonly Projected[], width: number, alpha: number): void {
-  let current = 1;
+  const batches = new Map<string, { colour: string; alpha: number; rings: Array<Array<[number, number]>> }>();
   for (const { colour, rings, isDimmed } of projected) {
+    if (rings.length === 0) continue;
     const wanted = isDimmed ? DIMMED_ALPHA * alpha : alpha;
-    if (wanted !== current) {
-      surface.globalAlpha(wanted);
-      current = wanted;
+    const key = `${wanted} ${colour}`;
+    const batch = batches.get(key) ?? { colour, alpha: wanted, rings: [] };
+    batch.rings.push(...rings);
+    batches.set(key, batch);
+  }
+  let current = 1;
+  for (const batch of batches.values()) {
+    if (batch.alpha !== current) {
+      surface.globalAlpha(batch.alpha);
+      current = batch.alpha;
     }
-    for (const ring of rings) surface.outline(ring, colour, width);
+    surface.outline(batch.rings, batch.colour, width);
   }
   if (current !== 1) surface.globalAlpha(1);
 }

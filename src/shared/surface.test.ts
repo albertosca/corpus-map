@@ -123,9 +123,11 @@ describe("canvasSurface", () => {
     const context = strokeCtx();
     canvasSurface(context as unknown as CanvasRenderingContext2D).outline(
       [
-        [0, 0],
-        [4, 0],
-        [0, 4],
+        [
+          [0, 0],
+          [4, 0],
+          [0, 4],
+        ],
       ],
       "#123456",
       3,
@@ -153,9 +155,34 @@ describe("canvasSurface", () => {
     expect(context.restore).toHaveBeenCalledOnce();
   });
 
-  it("draws nothing for an empty outline", () => {
+  it("strokes several rings as one path, each closed on its own", () => {
     const context = strokeCtx();
-    canvasSurface(context as unknown as CanvasRenderingContext2D).outline([], "#123456", 3);
+    canvasSurface(context as unknown as CanvasRenderingContext2D).outline(
+      [
+        [
+          [0, 0],
+          [4, 0],
+          [0, 4],
+        ],
+        [
+          [10, 10],
+          [14, 10],
+          [10, 14],
+        ],
+      ],
+      "#123456",
+      3,
+    );
+    expect(context.beginPath).toHaveBeenCalledOnce();
+    expect(context.moveTo).toHaveBeenNthCalledWith(1, 0, 0);
+    expect(context.moveTo).toHaveBeenNthCalledWith(2, 10, 10);
+    expect(context.closePath).toHaveBeenCalledTimes(2);
+    expect(context.stroke).toHaveBeenCalledOnce();
+  });
+
+  it.each([[[]], [[[]]]])("draws nothing for an outline with no points (%j)", (rings) => {
+    const context = strokeCtx();
+    canvasSurface(context as unknown as CanvasRenderingContext2D).outline(rings, "#123456", 3);
     expect(context.beginPath).not.toHaveBeenCalled();
     expect(context.stroke).not.toHaveBeenCalled();
   });

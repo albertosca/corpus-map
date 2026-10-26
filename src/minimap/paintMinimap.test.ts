@@ -66,7 +66,9 @@ describe("paintMinimap", () => {
     expect(ring.stroke).toBe("transparent");
     expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
     expect(surface.calls).toEqual(["clear", "layer", "polygon", "layerEnd", "outline", "polygon"]);
-    expect(surface.outlines).toEqual([{ points: ring.points, color: territoryColour, width: TERRITORY_OUTLINE_WIDTH }]);
+    expect(surface.outlines).toEqual([
+      { rings: [ring.points], color: territoryColour, width: TERRITORY_OUTLINE_WIDTH },
+    ]);
 
     // The view rectangle matches the same fitted transform, corner for corner.
     const viewport = minimapFit(world, SIZE);

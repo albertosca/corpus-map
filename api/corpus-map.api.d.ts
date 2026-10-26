@@ -1091,8 +1091,11 @@ export interface Surface {
     text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
     globalAlpha(alpha: number): void;
-    /** Strokes a closed ring (no fill) at `width`, leaving the line width of later calls untouched. */
-    outline(points: Array<[number, number]>, color: string, width: number): void;
+    /**
+     * Strokes closed rings (no fill) as one path at `width`, so many rings of
+     * one colour cost one stroke; leaves the line width of later calls untouched.
+     */
+    outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
     /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
     /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
@@ -1131,7 +1134,7 @@ export declare class RecordingSurface implements Surface {
     }>;
     alphas: number[];
     outlines: Array<{
-        points: Array<[number, number]>;
+        rings: Array<Array<[number, number]>>;
         color: string;
         width: number;
     }>;
@@ -1164,7 +1167,7 @@ export declare class RecordingSurface implements Surface {
     hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
     text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     globalAlpha(alpha: number): void;
-    outline(points: Array<[number, number]>, color: string, width: number): void;
+    outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
     line(start: [number, number], end: [number, number], colour: string, width: number): void;
     layer(alpha: number, draw: (surface: Surface) => void): void;

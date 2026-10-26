@@ -15,15 +15,10 @@ export function paintFocusedTerritory(
   theme: Pick<Theme, "focusOutline" | "focusOutlineWidth">,
   id: string,
 ): void {
-  for (const ring of scene.shapes.get(id) ?? []) {
-    if (ring.length >= 3) {
-      surface.outline(
-        ring.map(([horizontal, vertical]) => toScreen(viewport, horizontal, vertical)),
-        theme.focusOutline,
-        theme.focusOutlineWidth,
-      );
-    }
-  }
+  const rings = (scene.shapes.get(id) ?? [])
+    .filter((ring) => ring.length >= 3)
+    .map((ring) => ring.map(([horizontal, vertical]) => toScreen(viewport, horizontal, vertical)));
+  if (rings.length > 0) surface.outline(rings, theme.focusOutline, theme.focusOutlineWidth);
 }
 
 /** A ring around the focused item's point, one outline width clear of the point itself. */
