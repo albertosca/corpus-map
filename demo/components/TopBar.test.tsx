@@ -146,5 +146,26 @@ describe("TopBar (showcase Task 5)", () => {
       rerender(<TopBar {...properties} linkStatus="failed" />);
       expect(screen.getByRole("status").textContent).toBe("Copy failed: use the address bar");
     });
+
+    it("grows the status into the free space left of the controls, so the button never moves from under the pointer", () => {
+      render(
+        <TopBar
+          corpora={gallery}
+          activeId="arxiv"
+          onChange={() => {}}
+          tuningOpen={false}
+          onToggleTuning={() => {}}
+          onCopyLink={() => {}}
+          linkStatus="failed"
+        />,
+      );
+      const status = screen.getByRole("status");
+      const label = screen.getByText("Corpus");
+      // The right-aligned controls start at the first `margin-left: auto`
+      // item; a status after them would push every control left as it fills.
+      expect(status.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(status.style.marginLeft).toBe("auto");
+      expect(label.style.marginLeft).toBe("");
+    });
   });
 });

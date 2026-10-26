@@ -45,7 +45,6 @@ const barStyle: CSSProperties = {
 };
 
 const labelStyle: CSSProperties = {
-  marginLeft: "auto",
   fontSize: 13,
 };
 
@@ -58,7 +57,11 @@ const selectStyle: CSSProperties = {
   maxWidth: "70vw",
 };
 
+// The status is the item that pushes the controls right: as its text appears
+// it grows into the free space on its left, so Copy link stays under the
+// pointer that just clicked it.
 const statusStyle: CSSProperties = {
+  marginLeft: "auto",
   fontSize: 13,
 };
 
@@ -110,6 +113,9 @@ export function TopBar({
   return (
     <header ref={barReference} data-topbar data-floating-control style={barStyle}>
       <h1 style={{ fontSize: 15, margin: 0 }}>corpus-map</h1>
+      <span role="status" style={statusStyle}>
+        {linkStatus === null ? "" : LINK_STATUS_TEXT[linkStatus]}
+      </span>
       <label htmlFor="corpus-select" style={labelStyle}>
         Corpus
       </label>
@@ -132,9 +138,6 @@ export function TopBar({
       <button type="button" onClick={onCopyLink} style={gearButtonStyle}>
         Copy link
       </button>
-      <span role="status" style={statusStyle}>
-        {linkStatus === null ? "" : LINK_STATUS_TEXT[linkStatus]}
-      </span>
     </header>
   );
 }
