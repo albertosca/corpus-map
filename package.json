@@ -31,7 +31,7 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "dev": "vite --config vite.demo.config.ts",
-    "build:demo": "vite build --config vite.demo.config.ts --outDir ../dist-demo",
+    "build:demo": "vite build --config vite.demo.config.ts",
     "test": "vitest run --coverage",
     "bench": "vitest run --config vitest.bench.config.ts",
     "lint": "biome check . && eslint --max-warnings 0 .",
