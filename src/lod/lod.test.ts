@@ -3,7 +3,7 @@ import { DEFAULT_THRESHOLDS, type LodThresholds, resolveThresholds } from "./lod
 
 describe("DEFAULT_THRESHOLDS", () => {
   it("is fit-relative and ordered, so every corpus opens in the far regime", () => {
-    expect(DEFAULT_THRESHOLDS).toEqual({ midAt: 2, nearAt: 6 });
+    expect(DEFAULT_THRESHOLDS).toEqual({ midAt: 2, nearAt: 3.5 });
     expect(DEFAULT_THRESHOLDS.midAt).toBeLessThan(DEFAULT_THRESHOLDS.nearAt);
   });
 });
@@ -14,8 +14,8 @@ describe("resolveThresholds", () => {
   });
 
   it("passes a valid, explicit thresholds object through unchanged", () => {
-    const t = { midAt: 1, nearAt: 3 };
-    expect(resolveThresholds(t)).toEqual(t);
+    const thresholds = { midAt: 1, nearAt: 3 };
+    expect(resolveThresholds(thresholds)).toEqual(thresholds);
   });
 
   it("accepts { midAt: 0, nearAt: 0 } (relied on by tests that want everything visible immediately)", () => {

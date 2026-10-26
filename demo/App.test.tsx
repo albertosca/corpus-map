@@ -22,6 +22,7 @@ import {
   ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 } from "./components/floatingLayout";
 import { BUTTON_WIDTH } from "./components/ZoomControls";
+import { type CorpusId, gallery } from "./corpora";
 import arxivJson from "./corpora/arxiv.json";
 import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
@@ -60,6 +61,11 @@ function territoryButtonText(spec: Pick<MapSpec, "territories">, index = 0): str
   if (!territory) throw new Error(`spec has no territory at index ${index}`);
   const count = territory.members.length;
   return `${territory.name}, ${count} ${count === 1 ? "item" : "items"}`;
+}
+
+/** A gallery entry's own `display`, the shape Copy settings produces at that corpus's values. */
+function entryDisplay(id: CorpusId) {
+  return gallery.find((entry) => entry.id === id)?.display ?? {};
 }
 
 const VIEWPORT_WIDTH_PX = 375;
@@ -1435,18 +1441,19 @@ describe("App (showcase Task 5)", () => {
       fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
 
       const alert = screen.getByRole("alert");
-      expect(alert.textContent).toMatch(/thresholds\.midAt \(10\) must be <= thresholds\.nearAt \(6\)/);
+      expect(alert.textContent).toContain(
+        `thresholds.midAt (10) must be <= thresholds.nearAt (${entryDisplay("arxiv")?.thresholds?.nearAt})`,
+      );
 
-      // Two full-clamp wheel-in events (each capped at `maxZoomPerEvent`'s
-      // default of 2×) land at ratio 4 — inside the *default* midAt=2
-      // regime's mid band. If the invalid draft (midAt=10) had reached the
-      // map instead of being rejected, ratio 4 would still read "far".
+      // One full-clamp wheel-in event (capped at `maxZoomPerEvent`'s default
+      // of 2×) lands at ratio 2 — inside arXiv's mid band (midAt 2 up to its
+      // own nearAt). If the invalid draft (midAt=10) had reached the map
+      // instead of being rejected, ratio 2 would still read "far".
       fireEvent.wheel(mapSurface(container), { deltaY: -600, deltaMode: 0, ctrlKey: false });
-      fireEvent.wheel(mapSurface(container), { deltaY: -600, deltaMode: 0, ctrlKey: false });
-      await screen.findByText(/mid · 4\.0×/);
+      await screen.findByText(/mid · 2\.0×/);
     });
 
-    it("Copy settings leaves out an invalid draft: the thresholds the map is using are the defaults", async () => {
+    it("Copy settings leaves out an invalid draft: it copies the thresholds the map is using, arXiv's own", async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
       await renderApp();
@@ -1458,7 +1465,7 @@ describe("App (showcase Task 5)", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
       await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-      expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: {} });
+      expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: entryDisplay("arxiv") });
     });
 
     describe("per-corpus values (slice G)", () => {
@@ -1523,7 +1530,7 @@ describe("App (showcase Task 5)", () => {
         expect(screen.getByText("Editing: Chemical elements")).not.toBeNull();
       });
 
-      it("Copy settings copies an empty display at the corpus's values, then only what changed", async () => {
+      it("Copy settings copies the entry's own display at the corpus's values, then only what changed", async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.assign(navigator, { clipboard: { writeText } });
         await renderApp();
@@ -1533,12 +1540,14 @@ describe("App (showcase Task 5)", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
         await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: {} });
+        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: entryDisplay("elements") });
 
         fireEvent.change(screen.getByLabelText(/Fade band/), { target: { value: "0.4" } });
         fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
         await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-        expect(JSON.parse(writeText.mock.calls[1]?.[0] as string)).toEqual({ display: { tuning: { fadeBand: 0.4 } } });
+        expect(JSON.parse(writeText.mock.calls[1]?.[0] as string)).toEqual({
+          display: { ...entryDisplay("elements"), tuning: { fadeBand: 0.4 } },
+        });
       });
 
       it("Copy settings says it could not copy when there is no clipboard", async () => {

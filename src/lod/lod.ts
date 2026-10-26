@@ -6,7 +6,7 @@ export interface LodThresholds {
 }
 
 /** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
-export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 6 };
+export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 3.5 };
 
 /** The wheel zoom clamp (`CorpusMap`'s `MAXIMUM_ZOOM_IN`): a threshold above it can never be reached by zooming. */
 const MAXIMUM_RATIO = 64;

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
+import { DEFAULT_THRESHOLDS } from "./lod/lod";
 import type { MapSpec } from "./shared/spec";
 
 const lineSpec: MapSpec = {
@@ -177,7 +178,7 @@ describe("CorpusMap surface keys (spec slice B §4)", () => {
     expect(last().regime).toBe("near");
     fireEvent.keyDown(root, { key: "Escape" });
     expect(last().regime).toBe("mid");
-    expect(last().ratio).toBeCloseTo(Math.sqrt(12), 9);
+    expect(last().ratio).toBeCloseTo(Math.sqrt(DEFAULT_THRESHOLDS.midAt * DEFAULT_THRESHOLDS.nearAt), 9);
     fireEvent.keyDown(root, { key: "Escape" });
     expect(last().regime).toBe("far");
     expect(last().ratio).toBe(1);

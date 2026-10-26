@@ -67,18 +67,20 @@ describe("keyboardCommand", () => {
 });
 
 describe("regimeOutRatio", () => {
-  const defaults = { midAt: 2, nearAt: 6 };
+  // A wide mid band (the library default before slice G), so the
+  // geometric middle is far from both edges.
+  const wideBand = { midAt: 2, nearAt: 6 };
 
   it("does nothing at far", () => {
-    expect(regimeOutRatio("far", 1, defaults)).toBeNull();
+    expect(regimeOutRatio("far", 1, wideBand)).toBeNull();
   });
 
   it("fits from mid", () => {
-    expect(regimeOutRatio("mid", 3, defaults)).toBe(1);
+    expect(regimeOutRatio("mid", 3, wideBand)).toBe(1);
   });
 
   it("goes from near to the geometric middle of the mid band", () => {
-    expect(regimeOutRatio("near", 8, defaults)).toBeCloseTo(Math.sqrt(12), 12);
+    expect(regimeOutRatio("near", 8, wideBand)).toBeCloseTo(Math.sqrt(12), 12);
   });
 
   it("fits from near when the mid band is empty", () => {
@@ -102,7 +104,7 @@ describe("regimeOutRatio", () => {
 
   it("does nothing when no target lies below the current ratio", () => {
     expect(regimeOutRatio("mid", 0.6, { midAt: 0.5, nearAt: 6 })).toBeNull();
-    expect(regimeOutRatio("mid", 1, defaults)).toBeNull();
+    expect(regimeOutRatio("mid", 1, wideBand)).toBeNull();
     expect(regimeOutRatio("near", 0.9, { midAt: 0.5, nearAt: 0.8 })).toBeNull();
   });
 });
