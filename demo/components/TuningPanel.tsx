@@ -305,7 +305,7 @@ export function TuningPanel({
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const closeButtonReference = useRef<HTMLButtonElement>(null);
-  const panelReference = useRef<HTMLElement>(null);
+  const panelReference = useRef<HTMLDivElement>(null);
 
   // Opening moves focus into the panel (its Close button), so a keyboard
   // user lands where the controls are, and opening it from the drawer's
@@ -390,7 +390,7 @@ export function TuningPanel({
   };
 
   return (
-    <aside
+    <div
       ref={panelReference}
       data-tuning-panel
       data-floating-control
@@ -531,6 +531,6 @@ export function TuningPanel({
       <section aria-label="Wheel capture">
         <WheelCapture containerRef={mapContainerReference} />
       </section>
-    </aside>
+    </div>
   );
 }

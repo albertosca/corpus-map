@@ -296,7 +296,7 @@ export function Drawer({
   return (
     <>
       <style>{ANIMATION_STYLE}</style>
-      <aside
+      <div
         data-drawer
         data-floating-control
         className="cm-drawer-panel"
@@ -329,7 +329,7 @@ export function Drawer({
             </ul>
           </>
         ) : null}
-      </aside>
+      </div>
     </>
   );
 }

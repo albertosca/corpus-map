@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DEFAULT_THRESHOLDS, DEFAULT_TUNING } from "corpus-map";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { auditAccessibility, violationIds } from "../../test/audit";
 import { token } from "../tokens";
 import {
   PANEL_ALERT_COLOR,
@@ -74,6 +75,11 @@ function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
 }
 
 describe("TuningPanel (showcase Task 7)", () => {
+  it("passes the accessibility audit while open", async () => {
+    const { container } = renderPanel();
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

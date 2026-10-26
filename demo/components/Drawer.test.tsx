@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { MapNode } from "corpus-map";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { auditAccessibility, violationIds } from "../../test/audit";
 import { Drawer } from "./Drawer";
 
 const ARXIV_NODE: MapNode = {
@@ -47,6 +48,15 @@ function renderWithReturnTarget(node: MapNode | null, extra: Partial<Parameters<
 }
 
 describe("Drawer (showcase Task 6)", () => {
+  it("passes the accessibility audit while open, related items included", async () => {
+    const { container } = renderWithReturnTarget(ARXIV_NODE, {
+      isArxiv: true,
+      territoryName: "Artificial Intelligence",
+      related: [{ node: ELEMENT_NODE, weight: 0.9, reason: "gui" }],
+    });
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
+  });
+
   it("renders nothing until a node is selected", () => {
     const { container } = renderWithReturnTarget(null);
     expect(screen.queryByRole("dialog")).toBeNull();
