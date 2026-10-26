@@ -42,12 +42,17 @@ describe("territory outline budget on the arXiv corpus", () => {
     expect(ringCount).toBeGreaterThan(distinct(scene.colours) + distinct(scene.groupColours));
   });
 
-  it.each([0, 0.5, 1])("strokes at most one outline per colour at groupAlpha %s", (groupAlpha) => {
+  it.each([0, 0.5])("strokes one outline per leaf colour plus one per family colour at groupAlpha %s", (groupAlpha) => {
     expect(outlineStrokes(groupAlpha)).toBeLessThanOrEqual(distinct(scene.colours) + distinct(scene.groupColours));
   });
 
-  it("at most doubles the strokes when some territories are dimmed (one more per colour at the dimmed alpha)", () => {
+  it("strokes only the families, one outline per family colour, at groupAlpha 1", () => {
+    expect(outlineStrokes(1)).toBeLessThanOrEqual(distinct(scene.groupColours));
+  });
+
+  it("adds one stroke per colour that has a dimmed territory, not per dimmed ring", () => {
     const half = new Set(scene.paintOrder.filter((_, index) => index % 2 === 0));
-    expect(outlineStrokes(0, half)).toBeLessThanOrEqual(2 * (distinct(scene.colours) + distinct(scene.groupColours)));
+    const leafBatches = new Set(scene.paintOrder.map((id) => `${half.has(id)} ${scene.colours.get(id)}`)).size;
+    expect(outlineStrokes(0, half)).toBeLessThanOrEqual(leafBatches + 2 * distinct(scene.groupColours));
   });
 });

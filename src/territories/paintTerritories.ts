@@ -55,7 +55,9 @@ function fillLayer(surface: Surface, projected: readonly Projected[], alpha: num
  * at `DIMMED_ALPHA * alpha`), as one stroke per colour and alpha in the order
  * each first appears: one path per ring cost a stroke per ring (backlog,
  * measured in slice D). Where two colours' outlines cross, the colour that
- * appears later in `projected` is on top.
+ * appears later in `projected` is on top. One path is painted once where its
+ * own rings cross, so a translucent outline (dimmed, mid cross-fade, or an
+ * `rgba` theme colour) no longer darkens where two same-colour rings cross.
  */
 function outlines(surface: Surface, projected: readonly Projected[], width: number, alpha: number): void {
   const batches = new Map<string, { colour: string; alpha: number; rings: Array<Array<[number, number]>> }>();
