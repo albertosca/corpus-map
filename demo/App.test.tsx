@@ -1049,6 +1049,33 @@ describe("App (showcase Task 5)", () => {
       await waitFor(() => expect(window.location.hash).toContain("selected=p2"));
     });
 
+    it("reveals a related paper left of the open drawer, not under it (insets)", async () => {
+      const relatedSpec = {
+        ...SELECT_SPEC,
+        territories: [
+          { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "west"], centroid: [-0.5, 0] },
+          { id: "cs.SE", name: "Software Engineering", members: ["p2", "east"], centroid: [0.5, 0] },
+        ],
+        nodes: SELECT_SPEC.nodes.map((node) =>
+          node.id === "p2" || node.id === "east" ? { ...node, territory: "cs.SE" } : node,
+        ),
+        edges: [[0, 1, 90]],
+      };
+      await renderApp(relatedSpec);
+      await screen.findByText("Artificial Intelligence, 2 items");
+      zoomToNear();
+
+      fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+      const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+      fireEvent.click(within(within(dialog).getByRole("list")).getByRole("button"));
+      await waitFor(() => expect(window.location.hash).toContain("selected=p2"));
+      // The drawer covers the map's right edge, so the paper (x 0.0001) is
+      // centred in the uncovered area: the box centre then shows a point to
+      // its right. Without the inset the view's centre would be the paper.
+      const view = new URLSearchParams(window.location.hash.slice(1)).get("view")?.split(",").map(Number);
+      expect(view?.[0]).toBeGreaterThan(0.0001 * 1.01);
+    });
+
     it("leaves a related paper out of the drawer while its category is hidden (slice E)", async () => {
       const relatedSpec = {
         ...SELECT_SPEC,

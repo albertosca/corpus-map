@@ -9,6 +9,7 @@ export { relatedItems } from "./edges/related";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS, resolveThresholds } from "./lod/lod";
 export type { MinimapCorner } from "./minimap/Minimap";
+export type { Insets } from "./shared/insets";
 export type { Presentation, PresentationSetting } from "./shared/presentation";
 export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";

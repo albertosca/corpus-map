@@ -4,6 +4,7 @@ import { type HeadingLevel } from "./a11y/headingLevel";
 import { type CardContext } from "./cards/CardOverlay";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MinimapCorner } from "./minimap/Minimap";
+import { type Insets } from "./shared/insets";
 import { type Presentation, type PresentationSetting } from "./shared/presentation";
 import { type MapNode, type MapSpec } from "./shared/spec";
 import { type Theme } from "./shared/theme";
@@ -146,6 +147,14 @@ export interface CorpusMapProps {
     defaultHiddenTerritories?: readonly string[] | undefined;
     /** Fired by every legend checkbox and "Show all", with the new sorted list. */
     onHiddenTerritoriesChange?: ((ids: string[]) => void) | undefined;
+    /**
+     * Pixels of the box a consumer overlay covers on each side (a drawer, a
+     * toolbar); a missing, negative or non-finite side is 0. Edge markers stay
+     * in the uncovered area, an item under an overlay counts as off screen,
+     * and `reveal` (or a marker press) centres in that area. The fit ignores
+     * insets, so an overlay opening or closing never moves the zoom ratio.
+     */
+    insets?: Partial<Insets> | undefined;
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -364,6 +373,7 @@ export declare const EdgeMarkers: import("react").MemoExoticComponent<({ markers
 }) => ReactElement | null>;
 
 // edges/markers.d.ts
+import { type Insets } from "../shared/insets";
 import type { Scene } from "../shared/scene";
 import { type Viewport } from "../viewport/viewport";
 /** A box at the edge of the map naming a drawn neighbour that lies off screen (spec slice E §6). */
@@ -386,7 +396,8 @@ export declare const MARKER_GAP = 4;
  * from the end when they run past it. A neighbour gets no marker when its
  * segment never crosses the box (both ends off screen, the line passing
  * outside it): nothing on screen points that way, so there is no edge to pin
- * a marker to.
+ * a marker to. With `insets`, "on screen" and the edges are those of the area
+ * the insets leave uncovered.
  */
 export declare function edgeMarkers(scene: Pick<Scene, "related" | "byId">, viewport: Viewport, options: {
     id: string;
@@ -394,6 +405,7 @@ export declare function edgeMarkers(scene: Pick<Scene, "related" | "byId">, view
     height: number;
     cap: number;
     dimmed: ReadonlySet<string>;
+    insets?: Insets | undefined;
 }): EdgeMarker[];
 /** The id of the topmost marker containing the box position, or null. */
 export declare function markerAt(markers: readonly EdgeMarker[], horizontal: number, vertical: number): string | null;
@@ -461,6 +473,7 @@ export { relatedItems } from "./edges/related";
 export type { LodThresholds, Regime } from "./lod/lod";
 export { DEFAULT_THRESHOLDS, resolveThresholds } from "./lod/lod";
 export type { MinimapCorner } from "./minimap/Minimap";
+export type { Insets } from "./shared/insets";
 export type { Presentation, PresentationSetting } from "./shared/presentation";
 export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
@@ -911,6 +924,29 @@ export declare const CORNER_POSITION: Record<Corner, {
 export declare const DIMMED_ALPHA = 0.15;
 /** The empty dimmed set, shared so a default argument never allocates. */
 export declare const NO_DIMMED: ReadonlySet<string>;
+
+// shared/insets.d.ts
+/**
+ * Pixels of the map's box that a consumer overlay covers on each side (a
+ * drawer, a toolbar). Edge markers and `reveal` treat the rest as the usable
+ * area; the fit does not, so opening an overlay never moves the zoom ratio.
+ */
+export interface Insets {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+}
+export declare const NO_INSETS: Insets;
+/** Every side a finite non-negative number; a missing, negative or non-finite side is 0. */
+export declare function normaliseInsets(insets: Partial<Insets> | undefined): Insets;
+/** The part of a `width` x `height` box the insets leave uncovered, never of negative size. */
+export declare function usableArea(width: number, height: number, insets: Insets): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
 
 // shared/paint.d.ts
 import type { Regime } from "../lod/lod";

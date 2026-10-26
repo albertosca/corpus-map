@@ -1,4 +1,5 @@
 import { estimateText } from "../labels/placement";
+import { type Insets, NO_INSETS, usableArea } from "../shared/insets";
 import type { Scene } from "../shared/scene";
 import type { MapNode } from "../shared/spec";
 import { toScreen, type Viewport } from "../viewport/viewport";
@@ -37,13 +38,32 @@ function sideOf([horizontal, vertical]: [number, number], width: number): Side {
  * from the end when they run past it. A neighbour gets no marker when its
  * segment never crosses the box (both ends off screen, the line passing
  * outside it): nothing on screen points that way, so there is no edge to pin
- * a marker to.
+ * a marker to. With `insets`, "on screen" and the edges are those of the area
+ * the insets leave uncovered.
  */
 export function edgeMarkers(
   scene: Pick<Scene, "related" | "byId">,
   viewport: Viewport,
-  options: { id: string; width: number; height: number; cap: number; dimmed: ReadonlySet<string> },
+  options: {
+    id: string;
+    width: number;
+    height: number;
+    cap: number;
+    dimmed: ReadonlySet<string>;
+    insets?: Insets | undefined;
+  },
 ): EdgeMarker[] {
+  const insets = options.insets ?? NO_INSETS;
+  if (insets !== NO_INSETS) {
+    // The same placement inside the uncovered area: shift the view so that
+    // area's corner is the origin, then shift the markers back.
+    const area = usableArea(options.width, options.height, insets);
+    if (area.width <= 0 || area.height <= 0) return [];
+    const shifted = { ...viewport, tx: viewport.tx - area.left, ty: viewport.ty - area.top };
+    return edgeMarkers(scene, shifted, { ...options, width: area.width, height: area.height, insets: NO_INSETS }).map(
+      (marker) => ({ ...marker, left: marker.left + area.left, top: marker.top + area.top }),
+    );
+  }
   const origin = scene.byId.get(options.id);
   if (!origin || options.cap <= 0) return [];
   const originPoint = toScreen(viewport, origin.x, origin.y);

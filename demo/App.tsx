@@ -3,13 +3,13 @@ import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, 
 import { type CSSProperties, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
-import { Drawer } from "./components/Drawer";
+import { DRAWER_MAXIMUM_WIDTH, Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
 import { createViewStore, Indicator } from "./components/Indicator";
 import { type LinkStatus, TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
-import { ZoomControls } from "./components/ZoomControls";
+import { useViewportWidth, ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
 import { type CardSize, resolveDisplay } from "./corpora/display";
 import { createHashWriter, type DeepLink, parseDeepLink, writeHash } from "./deepLink";
@@ -212,6 +212,8 @@ export function App({ loadArxiv }: AppProps = {}) {
   // map under the bar hid the legend's toggle and the fitted names' top row.
   const topBarReference = useRef<HTMLElement>(null);
   const topBarHeight = useBorderBoxHeight(topBarReference);
+  // The drawer's rendered width is `min(90vw, DRAWER_MAXIMUM_WIDTH)`.
+  const viewportWidth = useViewportWidth();
 
   // The linked view and selection apply while the page still shows the
   // corpus the link named. A user switch ends that for good: the map refits
@@ -518,6 +520,9 @@ export function App({ loadArxiv }: AppProps = {}) {
             onViewportChange={(view) => updateLink({ view })}
             onSelectedChange={handleSelectedChange}
             onHiddenTerritoriesChange={(ids) => setHiddenOnMap({ mapKey, ids })}
+            // The drawer and the panel cover the map's right edge, so edge
+            // markers and a related paper's reveal stay left of them.
+            insets={{ right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0 }}
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>

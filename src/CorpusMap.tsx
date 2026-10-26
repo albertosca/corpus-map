@@ -27,6 +27,7 @@ import { visibleNodes } from "./lod/visible";
 import { MINIMAP_SIZE, Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { NO_DIMMED } from "./shared/dimmed";
+import { type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildScene } from "./shared/scene";
@@ -189,6 +190,14 @@ export interface CorpusMapProps {
   defaultHiddenTerritories?: readonly string[] | undefined;
   /** Fired by every legend checkbox and "Show all", with the new sorted list. */
   onHiddenTerritoriesChange?: ((ids: string[]) => void) | undefined;
+  /**
+   * Pixels of the box a consumer overlay covers on each side (a drawer, a
+   * toolbar); a missing, negative or non-finite side is 0. Edge markers stay
+   * in the uncovered area, an item under an overlay counts as off screen,
+   * and `reveal` (or a marker press) centres in that area. The fit ignores
+   * insets, so an overlay opening or closing never moves the zoom ratio.
+   */
+  insets?: Partial<Insets> | undefined;
 }
 
 const FIT_PADDING = 24;
@@ -317,6 +326,12 @@ type HoverState =
  */
 export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProps): ReactElement {
   const { spec: raw, renderCard, onSelect, onRegimeChange, onViewChange } = properties;
+  // Memoized on the four sides, so a fresh `insets` literal every render is not a change.
+  const { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft } = normaliseInsets(properties.insets);
+  const insets = useMemo(
+    () => normaliseInsets({ top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft }),
+    [insetTop, insetRight, insetBottom, insetLeft],
+  );
   const thresholds = useMemo(() => resolveThresholds(properties.thresholds), [properties.thresholds]);
   const tuning = useMemo(() => resolveTuning(properties.tuning), [properties.tuning]);
   const cardCap = properties.cardCap ?? 200;
@@ -1003,9 +1018,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const markers = useMemo(
     () =>
       selected !== null && (next === "mid" || next === "near") && pointAlpha > 0
-        ? edgeMarkers(scene, viewport, { id: selected, width, height, cap: tuning.edgesPerNode, dimmed })
+        ? edgeMarkers(scene, viewport, { id: selected, width, height, cap: tuning.edgesPerNode, dimmed, insets })
         : NO_MARKERS,
-    [scene, viewport, selected, next, pointAlpha, width, height, tuning.edgesPerNode, dimmed],
+    [scene, viewport, selected, next, pointAlpha, width, height, tuning.edgesPerNode, dimmed, insets],
   );
   // The selected item's live related items (neighbours in dimmed territories
   // left out), for the accessible tree's related list.
@@ -1025,11 +1040,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const goTo = (id: string) => {
     const node = nodesById.get(id);
     if (!node) return;
+    const area = usableArea(width, height, insets);
     requestViewport(
       (previous) => ({
         ...previous,
-        tx: width / 2 - node.x * previous.scale,
-        ty: height / 2 - node.y * previous.scale,
+        tx: area.left + area.width / 2 - node.x * previous.scale,
+        ty: area.top + area.height / 2 - node.y * previous.scale,
       }),
       "interaction",
     );
