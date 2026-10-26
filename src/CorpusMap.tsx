@@ -14,7 +14,7 @@ import {
 } from "react";
 import { AccessibleTree, itemCount } from "./a11y/AccessibleTree";
 import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
-import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
+import { type CardContext, CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { EdgeMarkers } from "./edges/EdgeMarkers";
 import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
 import type { RelatedItem } from "./edges/related";
@@ -89,7 +89,12 @@ export interface CorpusMapProps {
    * render.
    */
   spec: MapSpec;
-  renderCard: (node: MapNode) => ReactNode;
+  /**
+   * Fills each card at near. `context.badgeCount` is the number the card's
+   * group badge shows in its top-right corner (0 without one); keep the
+   * first line clear of that corner when it is above 0.
+   */
+  renderCard: (node: MapNode, context: CardContext) => ReactNode;
   /** React 19 ref-as-prop; see `CorpusMapHandle`. */
   ref?: Ref<CorpusMapHandle> | undefined;
   /**

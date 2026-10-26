@@ -1,8 +1,8 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MapSpec } from "../shared/spec";
+import type { MapNode, MapSpec } from "../shared/spec";
 import { DEFAULT_THEME } from "../shared/theme";
-import { CardOverlay } from "./CardOverlay";
+import { type CardContext, CardOverlay } from "./CardOverlay";
 
 /** `colour` as jsdom normalises it inside a `style` (hex becomes `rgb(...)`). */
 function normalised(colour: string): string {
@@ -45,5 +45,52 @@ describe("CardOverlay group badge", () => {
     expect(badge?.style.top).toBe("0px");
     expect(badge?.style.right).toBe("0px");
     expect(badge?.style.background).toBe(normalised(DEFAULT_THEME.cardBackground));
+  });
+});
+
+// Same arrangement as CardOverlay.test.tsx's group badge test: in a 60x60 box
+// with a 50x50 frame, nodes at one point collapse into a single card.
+function specAt(count: number): MapSpec {
+  return {
+    version: "1",
+    territories: [],
+    nodes: Array.from({ length: count }, (_, index) => ({
+      id: `g${index}`,
+      label: `G${index}`,
+      x: 0,
+      y: 0,
+      territory: null,
+    })),
+  };
+}
+
+function contextsFor(count: number): CardContext[] {
+  const seen: CardContext[] = [];
+  const renderCard = (node: MapNode, context: CardContext) => {
+    seen.push(context);
+    return <div>{node.label}</div>;
+  };
+  render(
+    <CardOverlay
+      spec={specAt(count)}
+      viewport={{ scale: 1, tx: 0, ty: 0 }}
+      regime="near"
+      cap={200}
+      width={60}
+      height={60}
+      cardSize={{ width: 50, height: 50 }}
+      renderCard={renderCard}
+    />,
+  );
+  return seen;
+}
+
+describe("CardOverlay's card context", () => {
+  it("tells the renderer the number its group badge shows, so it can keep its text clear of the corner", () => {
+    expect(contextsFor(4)).toEqual([{ badgeCount: 3 }]);
+  });
+
+  it("tells a lone card's renderer there is no badge", () => {
+    expect(contextsFor(1)).toEqual([{ badgeCount: 0 }]);
   });
 });

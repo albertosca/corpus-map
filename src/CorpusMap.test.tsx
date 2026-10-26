@@ -55,7 +55,7 @@ describe("CorpusMap", () => {
         thresholds={{ midAt: 0, nearAt: 0 }}
       />,
     );
-    expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ meta: { secret: 42 } }));
+    expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ meta: { secret: 42 } }), { badgeCount: 0 });
   });
 
   it("never reads inside meta: a Proxy that throws on any property access still renders", () => {

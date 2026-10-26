@@ -41,7 +41,7 @@ describe("CARD_TEXT", () => {
 
 describe("CARDS", () => {
   it.each(CORPUS_IDS)("%s fills the frame, sets no minimum width and clamps its title to CARD_TEXT's lines", (id) => {
-    const { container } = render(CARDS[id](SAMPLE_NODES[id]));
+    const { container } = render(CARDS[id](SAMPLE_NODES[id], { badgeCount: 0 }));
     const frame = container.firstElementChild as HTMLElement;
     expect(frame.style.width).toBe("100%");
     expect(frame.style.minWidth).toBe("");
@@ -50,6 +50,14 @@ describe("CARDS", () => {
     expect(title.textContent).toBe(CARD_TEXT[id].title(SAMPLE_NODES[id]));
     expect(title.style.webkitLineClamp).toBe(String(CARD_TEXT[id].options.titleLines));
     expect(title.style.overflow).toBe("hidden");
+  });
+
+  it.each(CORPUS_IDS)("%s keeps its title clear of a +12 group badge, and reserves nothing without one", (id) => {
+    const titleOf = (badgeCount: number) =>
+      render(CARDS[id](SAMPLE_NODES[id], { badgeCount })).container.querySelector("strong") as HTMLElement;
+    // "+12": three characters plus the badge's 4 px padding on each side.
+    expect(titleOf(12).style.paddingRight).toBe("calc(3ch + 8px)");
+    expect(titleOf(0).style.paddingRight).toBe("");
   });
 });
 

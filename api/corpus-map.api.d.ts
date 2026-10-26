@@ -1,6 +1,7 @@
 // CorpusMap.d.ts
 import { type ReactElement, type ReactNode, type Ref } from "react";
 import { type HeadingLevel } from "./a11y/headingLevel";
+import { type CardContext } from "./cards/CardOverlay";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MinimapCorner } from "./minimap/Minimap";
 import { type Presentation, type PresentationSetting } from "./shared/presentation";
@@ -36,7 +37,12 @@ export interface CorpusMapProps {
      * render.
      */
     spec: MapSpec;
-    renderCard: (node: MapNode) => ReactNode;
+    /**
+     * Fills each card at near. `context.badgeCount` is the number the card's
+     * group badge shows in its top-right corner (0 without one); keep the
+     * first line clear of that corner when it is above 0.
+     */
+    renderCard: (node: MapNode, context: CardContext) => ReactNode;
     /** React 19 ref-as-prop; see `CorpusMapHandle`. */
     ref?: Ref<CorpusMapHandle> | undefined;
     /**
@@ -243,6 +249,15 @@ export declare const DEFAULT_CARD_SIZE: {
 export declare const CARD_STRIPE_WIDTH = 4;
 /** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
 export declare const CARD_BORDER_WIDTH = 1;
+/**
+ * What a card renderer knows about the card it fills, beyond its node.
+ * `badgeCount` is the number the group badge in the card's top-right corner
+ * shows ("+3" is 3), 0 when the card has no badge: a renderer keeps its first
+ * line clear of that corner when it is above 0.
+ */
+export interface CardContext {
+    badgeCount: number;
+}
 export interface CardOverlayProps {
     spec: MapSpec;
     viewport: Viewport;
@@ -260,7 +275,7 @@ export interface CardOverlayProps {
     theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
     /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
     colours?: ReadonlyMap<string, string> | undefined;
-    renderCard: (node: MapNode) => ReactNode;
+    renderCard: (node: MapNode, context: CardContext) => ReactNode;
 }
 export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, colours, renderCard, }: CardOverlayProps): ReactElement | null;
 
@@ -438,6 +453,7 @@ export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
+export type { CardContext } from "./cards/CardOverlay";
 export type { CardSizeOptions } from "./cards/cardSizeFor";
 export { cardSizeFor } from "./cards/cardSizeFor";
 export type { RelatedItem } from "./edges/related";

@@ -15,6 +15,16 @@ export const CARD_STRIPE_WIDTH = 4;
 /** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
 export const CARD_BORDER_WIDTH = 1;
 
+/**
+ * What a card renderer knows about the card it fills, beyond its node.
+ * `badgeCount` is the number the group badge in the card's top-right corner
+ * shows ("+3" is 3), 0 when the card has no badge: a renderer keeps its first
+ * line clear of that corner when it is above 0.
+ */
+export interface CardContext {
+  badgeCount: number;
+}
+
 export interface CardOverlayProps {
   spec: MapSpec;
   viewport: Viewport;
@@ -29,7 +39,7 @@ export interface CardOverlayProps {
   theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
   /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
   colours?: ReadonlyMap<string, string> | undefined;
-  renderCard: (node: MapNode) => ReactNode;
+  renderCard: (node: MapNode, context: CardContext) => ReactNode;
 }
 
 // Cards are decorative: `aria-hidden` removes them from the accessibility
@@ -96,7 +106,7 @@ export function CardOverlay({
               overflow: "hidden",
             }}
           >
-            {renderCard(first)}
+            {renderCard(first, { badgeCount: card.ids.length - 1 })}
             {/* Out of the flow, in the corner: a frame sized exactly to its content (as
                 `cardSizeFor` sizes it) clips anything placed below the renderer's block. */}
             {card.ids.length > 1 ? (

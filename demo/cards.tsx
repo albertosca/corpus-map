@@ -1,4 +1,4 @@
-import type { CardSizeOptions, MapNode, MapSpec } from "corpus-map";
+import type { CardContext, CardSizeOptions, MapNode, MapSpec } from "corpus-map";
 import { cardSizeFor } from "corpus-map";
 import type { CSSProperties, ReactNode } from "react";
 import type { CorpusId } from "./corpora";
@@ -57,8 +57,15 @@ export function cardSizeOf(id: CorpusId, spec: MapSpec): CardSize {
 
 const frameStyle: CSSProperties = { padding: 8, width: "100%", boxSizing: "border-box", lineHeight: 1.25 };
 
-function titleStyle(lines: number): CSSProperties {
+// The library's group badge ("+N", 4 px padding each side) sits over the
+// card's top-right corner; a grouped card's title stays out from under it.
+function badgeReserve(badgeCount: number): string | undefined {
+  return badgeCount > 0 ? `calc(${String(badgeCount).length + 1}ch + 8px)` : undefined;
+}
+
+function titleStyle(lines: number, context: CardContext): CSSProperties {
   return {
+    paddingRight: badgeReserve(context.badgeCount),
     display: "-webkit-box",
     WebkitLineClamp: lines,
     WebkitBoxOrient: "vertical",
@@ -67,46 +74,48 @@ function titleStyle(lines: number): CSSProperties {
   };
 }
 
-function renderElementCard(node: MapNode) {
+function renderElementCard(node: MapNode, context: CardContext) {
   const meta = node.meta as ElementMeta;
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.elements.options.titleLines)}>{CARD_TEXT.elements.title(node)}</strong>
+      <strong style={titleStyle(CARD_TEXT.elements.options.titleLines, context)}>
+        {CARD_TEXT.elements.title(node)}
+      </strong>
       <div>#{meta.atomicNumber}</div>
     </div>
   );
 }
 
-function renderStarCard(node: MapNode) {
+function renderStarCard(node: MapNode, context: CardContext) {
   const meta = node.meta as StarMeta;
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.constellations.options.titleLines)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.constellations.options.titleLines, context)}>{node.label}</strong>
       <div>{meta.constellation}</div>
       <div>mag {meta.magnitude}</div>
     </div>
   );
 }
 
-function renderArxivCard(node: MapNode) {
+function renderArxivCard(node: MapNode, context: CardContext) {
   const meta = node.meta as ArxivMeta | undefined;
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines, context)}>{node.label}</strong>
       {meta?.year ? <div>{meta.year}</div> : null}
     </div>
   );
 }
 
-function renderSyntheticCard(node: MapNode) {
+function renderSyntheticCard(node: MapNode, context: CardContext) {
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.synthetic.options.titleLines)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.synthetic.options.titleLines, context)}>{node.label}</strong>
     </div>
   );
 }
 
-export const CARDS: Record<CorpusId, (node: MapNode) => ReactNode> = {
+export const CARDS: Record<CorpusId, (node: MapNode, context: CardContext) => ReactNode> = {
   arxiv: renderArxivCard,
   elements: renderElementCard,
   constellations: renderStarCard,
