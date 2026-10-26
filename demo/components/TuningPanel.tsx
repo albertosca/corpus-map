@@ -1,28 +1,33 @@
 import type { LodThresholds, Tuning } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import { type CardSize, displayDifferences } from "../corpora/display";
 import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { WheelCapture } from "./WheelCapture";
 
 export interface TuningPanelProps {
   open: boolean;
+  /** The gallery label of the corpus whose values the controls show (slice G: each corpus keeps its own). */
+  corpusLabel: string;
   /** The draft the controls show, which may be invalid (see `tuningError`). */
   tuning: Tuning;
-  /** The last valid tuning, the one the map is using; "Copy as JSON" copies this, never a draft in error. */
+  /** The last valid tuning, the one the map is using; "Copy settings" copies this, never a draft in error. */
   appliedTuning: Tuning;
   onTuningChange: (next: Tuning) => void;
   /** The last `resolveTuning` RangeError message, or `null` while the current draft is valid. */
   tuningError: string | null;
   /** The draft the controls show, which may be invalid (see `thresholdsError`). */
   thresholds: LodThresholds;
-  /** The last valid thresholds, the ones the map is using; "Copy as JSON" copies these. */
+  /** The last valid thresholds, the ones the map is using; "Copy settings" copies these. */
   appliedThresholds: LodThresholds;
   onThresholdsChange: (next: LodThresholds) => void;
   /** The last `resolveThresholds` RangeError message, or `null` while the current draft is valid. */
   thresholdsError: string | null;
-  cardSize: { width: number; height: number };
-  onCardSizeChange: (next: { width: number; height: number }) => void;
+  cardSize: CardSize;
+  /** The card size the corpus gets when nobody sets one; "Copy settings" leaves `cardSize` out while it matches. */
+  computedCardSize: CardSize;
+  onCardSizeChange: (next: CardSize) => void;
   /** Whether the active corpus is the synthetic one — the size/seed controls only make sense for it. */
   isSynthetic: boolean;
   syntheticSize: number;
@@ -89,8 +94,8 @@ const iconButtonStyle: CSSProperties = {
   color: PANEL_TEXT_COLOR,
   fontSize: 13,
   // A percentage `maxWidth` resolves against the containing block, so this
-  // genuinely caps every button using this style (Close/Reset/Copy as
-  // JSON) at the panel's own width -- real CSS containment (Task 7 fix
+  // genuinely caps every button using this style (Close/Reset/Copy
+  // settings) at the panel's own width -- real CSS containment (Task 7 fix
   // round 2), not a value chosen to please `App.test.tsx`'s overflow
   // check.
   maxWidth: "100%",
@@ -273,6 +278,7 @@ const SYNTHETIC_SIZE_STEP = 1000;
  */
 export function TuningPanel({
   open,
+  corpusLabel,
   tuning,
   appliedTuning,
   onTuningChange,
@@ -282,6 +288,7 @@ export function TuningPanel({
   onThresholdsChange,
   thresholdsError,
   cardSize,
+  computedCardSize,
   onCardSizeChange,
   isSynthetic,
   syntheticSize,
@@ -343,17 +350,19 @@ export function TuningPanel({
     onClose();
   };
 
-  // Copies what the map is actually using: a draft that shows an error
-  // would throw when pasted back into `resolveTuning`/`resolveThresholds`,
-  // so the last valid values go out instead, and the message says so.
-  const handleCopyJson = () => {
+  // Copies what the map is actually using, in the shape a gallery entry's
+  // `display` takes (only what differs from the library defaults and the
+  // computed card size): a draft that shows an error would throw when
+  // pasted back, so the last valid values go out instead, and the message
+  // says so. An insecure origin has no `navigator.clipboard` at all, which
+  // gets the same message as a refused write instead of a throw.
+  const handleCopySettings = () => {
+    const display = displayDifferences(
+      { tuning: appliedTuning, thresholds: appliedThresholds, cardSize },
+      computedCardSize,
+    );
     const payload = JSON.stringify(
-      {
-        tuning: appliedTuning,
-        thresholds: appliedThresholds,
-        cardSize,
-        synthetic: { size: syntheticSize, seed: syntheticSeed },
-      },
+      isSynthetic ? { display, synthetic: { size: syntheticSize, seed: syntheticSeed } } : { display },
       null,
       2,
     );
@@ -361,10 +370,12 @@ export function TuningPanel({
       tuningError || thresholdsError
         ? "Copied the last valid values; the draft in error was left out."
         : "Copied to clipboard.";
-    navigator.clipboard.writeText(payload).then(
-      () => setCopyMessage(copied),
-      () => setCopyMessage("Could not copy to clipboard."),
-    );
+    const notCopied = () => setCopyMessage("Could not copy to clipboard.");
+    if (!navigator.clipboard) {
+      notCopied();
+      return;
+    }
+    navigator.clipboard.writeText(payload).then(() => setCopyMessage(copied), notCopied);
   };
 
   // No NaN guard here: a `type="number"` input sanitises any value that
@@ -396,13 +407,14 @@ export function TuningPanel({
           Close
         </button>
       </div>
+      <p style={statusStyle}>Editing: {corpusLabel}</p>
 
       <div style={actionsRowStyle}>
         <button type="button" onClick={onReset} style={iconButtonStyle}>
           Reset
         </button>
-        <button type="button" onClick={handleCopyJson} style={iconButtonStyle}>
-          Copy as JSON
+        <button type="button" onClick={handleCopySettings} style={iconButtonStyle}>
+          Copy settings
         </button>
       </div>
       {copyMessage ? (

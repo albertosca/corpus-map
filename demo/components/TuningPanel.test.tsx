@@ -16,7 +16,7 @@ const DEFAULT_CARD_SIZE = { width: 160, height: 56 };
 
 function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
   const returnFocusTo = createRef<HTMLButtonElement>();
-  const mapContainerRef = createRef<HTMLDivElement>();
+  const mapContainerReference = createRef<HTMLDivElement>();
   const onTuningChange = vi.fn();
   const onThresholdsChange = vi.fn();
   const onCardSizeChange = vi.fn();
@@ -25,8 +25,9 @@ function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
   const onReset = vi.fn();
   const onClose = vi.fn();
 
-  const props: TuningPanelProps = {
+  const panelProperties: TuningPanelProps = {
     open: true,
+    corpusLabel: "Synthetic corpus",
     tuning: DEFAULT_TUNING,
     appliedTuning: DEFAULT_TUNING,
     onTuningChange,
@@ -36,6 +37,7 @@ function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
     onThresholdsChange,
     thresholdsError: null,
     cardSize: DEFAULT_CARD_SIZE,
+    computedCardSize: DEFAULT_CARD_SIZE,
     onCardSizeChange,
     isSynthetic: true,
     syntheticSize: 5000,
@@ -45,22 +47,22 @@ function renderPanel(overrides: Partial<TuningPanelProps> = {}) {
     onReset,
     onClose,
     returnFocusTo,
-    mapContainerRef,
+    mapContainerRef: mapContainerReference,
     ...overrides,
   };
 
-  const utils = render(
+  const rendered = render(
     <>
       <button type="button" ref={returnFocusTo}>
         gear stand-in
       </button>
-      <TuningPanel {...props} />
+      <TuningPanel {...panelProperties} />
     </>,
   );
   return {
-    ...utils,
+    ...rendered,
     returnFocusTo,
-    mapContainerRef,
+    mapContainerReference,
     onTuningChange,
     onThresholdsChange,
     onCardSizeChange,
@@ -162,31 +164,44 @@ describe("TuningPanel (showcase Task 7)", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
-  it("Copy as JSON writes valid JSON with every Tuning field, the thresholds, and the card size", async () => {
+  it("Copy settings copies an empty display when the values are the defaults and the computed card size", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
-    renderPanel({ tuning: { ...DEFAULT_TUNING, pinchGain: 9 }, appliedTuning: { ...DEFAULT_TUNING, pinchGain: 9 } });
+    renderPanel({ isSynthetic: false });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
 
-    const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as {
-      tuning: Record<string, unknown>;
-      thresholds: Record<string, unknown>;
-      cardSize: Record<string, unknown>;
-    };
-    for (const key of Object.keys(DEFAULT_TUNING)) {
-      expect(payload.tuning).toHaveProperty(key);
-    }
-    expect(payload.tuning.pinchGain).toBe(9);
-    expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
-    expect(payload.cardSize).toEqual(DEFAULT_CARD_SIZE);
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: {} });
+    await screen.findByText("Copied to clipboard.");
   });
 
-  it("Copy as JSON copies the last valid values, not a draft in error, and says so", async () => {
+  it("Copy settings copies only the fields that differ, the card size against the computed one", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     renderPanel({
+      isSynthetic: false,
+      tuning: { ...DEFAULT_TUNING, pinchGain: 9 },
+      appliedTuning: { ...DEFAULT_TUNING, pinchGain: 9 },
+      thresholds: { ...DEFAULT_THRESHOLDS, nearAt: 4 },
+      appliedThresholds: { ...DEFAULT_THRESHOLDS, nearAt: 4 },
+      cardSize: { width: 180, height: 56 },
+      computedCardSize: { width: 150, height: 56 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({
+      display: { tuning: { pinchGain: 9 }, thresholds: { nearAt: 4 }, cardSize: { width: 180, height: 56 } },
+    });
+  });
+
+  it("Copy settings copies the last valid values, not a draft in error, and says so", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderPanel({
+      isSynthetic: false,
       tuning: { ...DEFAULT_TUNING, labelClasses: { large: 0.2, medium: 0.9 } },
       tuningError: "tuning.labelClasses.medium (0.9) must be <= tuning.labelClasses.large (0.2)",
       appliedTuning: { ...DEFAULT_TUNING, pinchGain: 9 },
@@ -195,30 +210,30 @@ describe("TuningPanel (showcase Task 7)", () => {
       appliedThresholds: DEFAULT_THRESHOLDS,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
 
-    const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as {
-      tuning: Record<string, unknown>;
-      thresholds: Record<string, unknown>;
-    };
-    expect(payload.tuning.pinchGain).toBe(9);
-    expect(payload.tuning.labelClasses).toEqual(DEFAULT_TUNING.labelClasses);
-    expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: { tuning: { pinchGain: 9 } } });
     await screen.findByText("Copied the last valid values; the draft in error was left out.");
   });
 
-  it("Copy as JSON includes the synthetic corpus's size and seed", async () => {
+  it("Copy settings includes the synthetic corpus's size and seed, and only on that corpus", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
-    renderPanel({ syntheticSize: 7000, syntheticSeed: 42 });
+    const { unmount } = renderPanel({ syntheticSize: 7000, syntheticSeed: 42 });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({
+      display: {},
+      synthetic: { size: 7000, seed: 42 },
+    });
+    unmount();
 
-    const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as { synthetic: unknown };
-    expect(payload.synthetic).toEqual({ size: 7000, seed: 42 });
-    await screen.findByText("Copied to clipboard.");
+    renderPanel({ isSynthetic: false, syntheticSize: 7000, syntheticSeed: 42 });
+    fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(writeText.mock.calls[1]?.[0] as string)).toEqual({ display: {} });
   });
 
   it("shows a message instead of throwing when the clipboard write rejects", async () => {
@@ -226,8 +241,21 @@ describe("TuningPanel (showcase Task 7)", () => {
     Object.assign(navigator, { clipboard: { writeText } });
     renderPanel();
 
-    expect(() => fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }))).not.toThrow();
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "Copy settings" }))).not.toThrow();
     await screen.findByText("Could not copy to clipboard.");
+  });
+
+  it("shows a message instead of throwing when there is no clipboard at all", async () => {
+    Object.assign(navigator, { clipboard: undefined });
+    renderPanel();
+
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "Copy settings" }))).not.toThrow();
+    await screen.findByText("Could not copy to clipboard.");
+  });
+
+  it("names the corpus it edits under its title", () => {
+    renderPanel({ corpusLabel: "Chemical elements" });
+    expect(screen.getByText("Editing: Chemical elements")).not.toBeNull();
   });
 
   it("closing (Close button) returns focus to the element named by returnFocusTo", () => {
@@ -249,6 +277,7 @@ describe("TuningPanel (showcase Task 7)", () => {
     rerender(
       <TuningPanel
         open={false}
+        corpusLabel="Synthetic corpus"
         tuning={DEFAULT_TUNING}
         appliedTuning={DEFAULT_TUNING}
         onTuningChange={vi.fn()}
@@ -258,6 +287,7 @@ describe("TuningPanel (showcase Task 7)", () => {
         onThresholdsChange={vi.fn()}
         thresholdsError={null}
         cardSize={DEFAULT_CARD_SIZE}
+        computedCardSize={DEFAULT_CARD_SIZE}
         onCardSizeChange={vi.fn()}
         isSynthetic
         syntheticSize={5000}
@@ -292,11 +322,9 @@ describe("TuningPanel (showcase Task 7)", () => {
       renderPanel({ tuningError: "tuning.pinchGain must be a finite number > 0, got -1" });
       const text = document.body.textContent ?? "";
       expect(text).not.toMatch(/→/);
-      // Every alphabetic run of 3+ letters must not be entirely uppercase,
-      // except "JSON" — a genuine acronym ("Copy as JSON"), not a
-      // stylistic shout, the same distinction the visual-restraint spec
-      // draws ("no ALL-CAPS labels").
-      const shouting = (text.match(/\b[A-Z]{3,}\b/g) ?? []).filter((word) => word !== "JSON");
+      // Every alphabetic run of 3+ letters must not be entirely uppercase
+      // (the visual-restraint spec: "no ALL-CAPS labels").
+      const shouting = text.match(/\b[A-Z]{3,}\b/g) ?? [];
       expect(shouting).toEqual([]);
     });
   });

@@ -1445,7 +1445,7 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText(/mid · 4\.0×/);
     });
 
-    it("Copy as JSON hands over the thresholds the map is using, not an invalid draft", async () => {
+    it("Copy settings leaves out an invalid draft: the thresholds the map is using are the defaults", async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
       await renderApp();
@@ -1455,10 +1455,100 @@ describe("App (showcase Task 5)", () => {
       fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
       expect(screen.getByRole("alert")).not.toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Copy as JSON" }));
+      fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
       await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-      const payload = JSON.parse(writeText.mock.calls[0]?.[0] as string) as { thresholds: unknown };
-      expect(payload.thresholds).toEqual(DEFAULT_THRESHOLDS);
+      expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: {} });
+    });
+
+    describe("per-corpus values (slice G)", () => {
+      async function openOn(corpus: "elements" | "constellations"): Promise<void> {
+        fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: corpus } });
+        await screen.findByText(territoryButtonText(corpus === "elements" ? elementsSpec : constellationsSpec));
+      }
+
+      function cardWidth(): string {
+        return (screen.getByLabelText(/Card width/) as HTMLInputElement).value;
+      }
+
+      it("an edit on one corpus survives a switch away and back, and does not leak into another", async () => {
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        await openOn("elements");
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        const baselineWidth = cardWidth();
+        fireEvent.change(screen.getByLabelText(/Card width/), { target: { value: "280" } });
+
+        await openOn("constellations");
+        expect(cardWidth()).toBe(baselineWidth);
+        await openOn("elements");
+        expect(cardWidth()).toBe("280");
+      });
+
+      it("a draft error stays on the corpus it was made on", async () => {
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        await openOn("elements");
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        fireEvent.change(screen.getByLabelText(/Mid at/), { target: { value: "10" } });
+        expect(screen.getByRole("alert")).not.toBeNull();
+
+        await openOn("constellations");
+        expect(screen.queryByRole("alert")).toBeNull();
+        await openOn("elements");
+        expect(screen.getByRole("alert")).not.toBeNull();
+      });
+
+      it("Reset returns only the current corpus to its own values", async () => {
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        await openOn("constellations");
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        fireEvent.change(screen.getByLabelText(/Card width/), { target: { value: "300" } });
+        await openOn("elements");
+        const baselineWidth = cardWidth();
+        fireEvent.change(screen.getByLabelText(/Card width/), { target: { value: "280" } });
+
+        fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+        expect(cardWidth()).toBe(baselineWidth);
+        await openOn("constellations");
+        expect(cardWidth()).toBe("300");
+      });
+
+      it("the panel names the corpus it edits", async () => {
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        await openOn("elements");
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        expect(screen.getByText("Editing: Chemical elements")).not.toBeNull();
+      });
+
+      it("Copy settings copies an empty display at the corpus's values, then only what changed", async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.assign(navigator, { clipboard: { writeText } });
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        await openOn("elements");
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+
+        fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: {} });
+
+        fireEvent.change(screen.getByLabelText(/Fade band/), { target: { value: "0.4" } });
+        fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+        expect(JSON.parse(writeText.mock.calls[1]?.[0] as string)).toEqual({ display: { tuning: { fadeBand: 0.4 } } });
+      });
+
+      it("Copy settings says it could not copy when there is no clipboard", async () => {
+        Object.assign(navigator, { clipboard: undefined });
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+
+        expect(() => fireEvent.click(screen.getByRole("button", { name: "Copy settings" }))).not.toThrow();
+        await screen.findByText("Could not copy to clipboard.");
+      });
     });
 
     it("Reset restores the panel's tuning/thresholds controls to their defaults and clears the error", async () => {

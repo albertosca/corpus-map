@@ -1,14 +1,5 @@
 import type { CorpusMapHandle, LodThresholds, MapNode, MapSpec, Tuning } from "corpus-map";
-import {
-  CorpusMap,
-  DARK_THEME,
-  DEFAULT_THEME,
-  DEFAULT_THRESHOLDS,
-  DEFAULT_TUNING,
-  relatedItems,
-  resolveThresholds,
-  resolveTuning,
-} from "corpus-map";
+import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, resolveTuning } from "corpus-map";
 import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { Drawer } from "./components/Drawer";
@@ -19,6 +10,7 @@ import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
 import { ZoomControls } from "./components/ZoomControls";
 import { type GalleryEntry, gallery, syntheticLabel } from "./corpora";
+import { type CardSize, resolveDisplay } from "./corpora/display";
 import { createHashWriter, type DeepLink, parseDeepLink, writeHash } from "./deepLink";
 import { token } from "./tokens";
 import { useColourScheme } from "./useColourScheme";
@@ -149,6 +141,17 @@ interface CurrentCorpus {
  */
 const DEFAULT_PANEL_CARD_SIZE = { width: 200, height: 96 };
 
+/** What the tuning panel holds for one corpus: the drafts its controls show, the last values that resolved, and why a draft did not. */
+interface PanelValues {
+  tuningDraft: Tuning;
+  appliedTuning: Tuning;
+  tuningError: string | null;
+  thresholdsDraft: LodThresholds;
+  appliedThresholds: LodThresholds;
+  thresholdsError: string | null;
+  cardSize: CardSize;
+}
+
 /** The synthetic corpus's own defaults (`demo/corpora/synthetic.ts`): seed 1, 5,000 items. */
 const DEFAULT_SYNTHETIC_SIZE = 5000;
 const DEFAULT_SYNTHETIC_SEED = 1;
@@ -239,14 +242,12 @@ export function App({ loadArxiv }: AppProps = {}) {
   // every field's own range input is already bounded to a valid interval
   // (`TuningPanel`'s `CARD_SIZE_FIELDS`), so there is no combination left
   // for the library to reject.
+  //
+  // Each corpus keeps its own set (slice G): `edits` holds only the corpora
+  // the panel has changed, and a corpus without an entry shows its gallery
+  // baseline (`panelBaseline` below). Nothing is persisted.
   const [panelOpen, setPanelOpen] = useState(false);
-  const [tuningDraft, setTuningDraft] = useState<Tuning>(DEFAULT_TUNING);
-  const [appliedTuning, setAppliedTuning] = useState<Tuning>(DEFAULT_TUNING);
-  const [tuningError, setTuningError] = useState<string | null>(null);
-  const [thresholdsDraft, setThresholdsDraft] = useState<LodThresholds>(DEFAULT_THRESHOLDS);
-  const [appliedThresholds, setAppliedThresholds] = useState<LodThresholds>(DEFAULT_THRESHOLDS);
-  const [thresholdsError, setThresholdsError] = useState<string | null>(null);
-  const [cardSize, setCardSize] = useState(DEFAULT_PANEL_CARD_SIZE);
+  const [edits, setEdits] = useState<Partial<Record<GalleryEntry["id"], PanelValues>>>({});
   const [syntheticSize, setSyntheticSize] = useState(DEFAULT_SYNTHETIC_SIZE);
   const [syntheticSeed, setSyntheticSeed] = useState(DEFAULT_SYNTHETIC_SEED);
   // Focused when the panel closes -- the gear button in `TopBar`, the same
@@ -324,6 +325,29 @@ export function App({ loadArxiv }: AppProps = {}) {
 
   const activeEntry = gallery.find((entry) => entry.id === corpusId);
   if (!activeEntry) throw new Error(`unknown corpus id: ${corpusId}`);
+
+  // The corpus's own values before any edit: its gallery `display` over the
+  // library defaults, through the library's validation, so an entry whose
+  // values do not resolve fails the gallery test rather than a visitor.
+  const computedCardSize = DEFAULT_PANEL_CARD_SIZE;
+  const panelBaseline = useMemo<PanelValues>(() => {
+    const values = resolveDisplay(activeEntry.display, computedCardSize);
+    const tuning = resolveTuning(values.tuning);
+    const thresholds = resolveThresholds(values.thresholds);
+    return {
+      tuningDraft: tuning,
+      appliedTuning: tuning,
+      tuningError: null,
+      thresholdsDraft: thresholds,
+      appliedThresholds: thresholds,
+      thresholdsError: null,
+      cardSize: values.cardSize,
+    };
+  }, [activeEntry, computedCardSize]);
+  const panelValues = edits[corpusId] ?? panelBaseline;
+  const updatePanelValues = (change: Partial<PanelValues>) => {
+    setEdits((previous) => ({ ...previous, [corpusId]: { ...(previous[corpusId] ?? panelBaseline), ...change } }));
+  };
 
   // Adjusted during render, not in an effect — the same pattern
   // `CorpusMap.tsx` itself uses for its own `fitBasis` (compare a stored
@@ -450,12 +474,13 @@ export function App({ loadArxiv }: AppProps = {}) {
   // (`labelClasses.medium > large`) leaves `appliedTuning` exactly where it
   // was and surfaces the thrown `RangeError`'s own message.
   const handleTuningDraftChange = (next: Tuning) => {
-    setTuningDraft(next);
     try {
-      setAppliedTuning(resolveTuning(next));
-      setTuningError(null);
+      updatePanelValues({ tuningDraft: next, appliedTuning: resolveTuning(next), tuningError: null });
     } catch (error) {
-      setTuningError(error instanceof RangeError ? error.message : String(error));
+      updatePanelValues({
+        tuningDraft: next,
+        tuningError: error instanceof RangeError ? error.message : String(error),
+      });
     }
   };
 
@@ -464,23 +489,19 @@ export function App({ loadArxiv }: AppProps = {}) {
   // `midAt > nearAt` throws, `appliedThresholds` stays put, and the
   // message shows in the panel.
   const handleThresholdsDraftChange = (next: LodThresholds) => {
-    setThresholdsDraft(next);
     try {
-      setAppliedThresholds(resolveThresholds(next));
-      setThresholdsError(null);
+      updatePanelValues({ thresholdsDraft: next, appliedThresholds: resolveThresholds(next), thresholdsError: null });
     } catch (error) {
-      setThresholdsError(error instanceof RangeError ? error.message : String(error));
+      updatePanelValues({
+        thresholdsDraft: next,
+        thresholdsError: error instanceof RangeError ? error.message : String(error),
+      });
     }
   };
 
+  // Back to the current corpus's own values; every other corpus keeps its edits.
   const handleReset = () => {
-    setTuningDraft(DEFAULT_TUNING);
-    setAppliedTuning(DEFAULT_TUNING);
-    setTuningError(null);
-    setThresholdsDraft(DEFAULT_THRESHOLDS);
-    setAppliedThresholds(DEFAULT_THRESHOLDS);
-    setThresholdsError(null);
-    setCardSize(DEFAULT_PANEL_CARD_SIZE);
+    setEdits(({ [corpusId]: _discarded, ...kept }) => kept);
     setSyntheticSize(DEFAULT_SYNTHETIC_SIZE);
     setSyntheticSeed(DEFAULT_SYNTHETIC_SEED);
   };
@@ -543,9 +564,9 @@ export function App({ loadArxiv }: AppProps = {}) {
             legend
             headingLevel={2}
             theme={scheme === "dark" ? DARK_THEME : DEFAULT_THEME}
-            tuning={appliedTuning}
-            thresholds={appliedThresholds}
-            cardSize={cardSize}
+            tuning={panelValues.appliedTuning}
+            thresholds={panelValues.appliedThresholds}
+            cardSize={panelValues.cardSize}
             onViewChange={viewStore.set}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
             selectedId={selectedId}
@@ -588,16 +609,18 @@ export function App({ loadArxiv }: AppProps = {}) {
       />
       <TuningPanel
         open={panelOpen}
-        tuning={tuningDraft}
-        appliedTuning={appliedTuning}
+        corpusLabel={corpora.find((entry) => entry.id === corpusId)?.label ?? activeEntry.label}
+        tuning={panelValues.tuningDraft}
+        appliedTuning={panelValues.appliedTuning}
         onTuningChange={handleTuningDraftChange}
-        tuningError={tuningError}
-        thresholds={thresholdsDraft}
-        appliedThresholds={appliedThresholds}
+        tuningError={panelValues.tuningError}
+        thresholds={panelValues.thresholdsDraft}
+        appliedThresholds={panelValues.appliedThresholds}
         onThresholdsChange={handleThresholdsDraftChange}
-        thresholdsError={thresholdsError}
-        cardSize={cardSize}
-        onCardSizeChange={setCardSize}
+        thresholdsError={panelValues.thresholdsError}
+        cardSize={panelValues.cardSize}
+        computedCardSize={computedCardSize}
+        onCardSizeChange={(cardSize) => updatePanelValues({ cardSize })}
         isSynthetic={corpusId === "synthetic"}
         syntheticSize={syntheticSize}
         onSyntheticSizeChange={setSyntheticSize}
