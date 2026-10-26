@@ -3,6 +3,7 @@ import { validateSpec } from "corpus-map";
 import { withGroupNames } from "../../tools/group-names/groupNamesFile";
 import arxivGroupNames from "./arxiv.groups.json";
 import { constellationsSpec } from "./constellations";
+import type { DisplaySettings } from "./display";
 import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
 import { syntheticSpec } from "./synthetic";
@@ -15,8 +16,8 @@ export type CorpusId = "arxiv" | "elements" | "constellations" | "synthetic";
  * enough to ship in the main bundle and carries its `spec` synchronously.
  */
 export type GalleryEntry =
-  | { id: "arxiv"; label: string; load: () => Promise<MapSpec> }
-  | { id: Exclude<CorpusId, "arxiv">; label: string; spec: MapSpec };
+  | { id: "arxiv"; label: string; load: () => Promise<MapSpec>; display?: DisplaySettings }
+  | { id: Exclude<CorpusId, "arxiv">; label: string; spec: MapSpec; display?: DisplaySettings };
 
 /**
  * Vite emits the JSON as an asset for this URL pattern, in dev and in the build.
