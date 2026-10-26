@@ -1,7 +1,8 @@
-import type { CorpusMapHandle, LodThresholds, MapNode, MapSpec, Tuning } from "corpus-map";
+import type { CorpusMapHandle, LodThresholds, MapSpec, Tuning } from "corpus-map";
 import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, resolveTuning } from "corpus-map";
-import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
+import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
 import { Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
 import { createViewStore, Indicator } from "./components/Indicator";
@@ -14,68 +15,6 @@ import { type CardSize, resolveDisplay } from "./corpora/display";
 import { createHashWriter, type DeepLink, parseDeepLink, writeHash } from "./deepLink";
 import { token } from "./tokens";
 import { useColourScheme } from "./useColourScheme";
-
-interface ElementMeta {
-  name: string;
-  atomicNumber: number;
-}
-
-interface StarMeta {
-  constellation: string;
-  magnitude: number;
-}
-
-interface ArxivMeta {
-  year: number;
-}
-
-function renderElementCard(node: MapNode) {
-  const meta = node.meta as ElementMeta;
-  return (
-    <div style={{ padding: 8, minWidth: 120 }}>
-      <strong>{meta.name}</strong>
-      <div>#{meta.atomicNumber}</div>
-    </div>
-  );
-}
-
-function renderStarCard(node: MapNode) {
-  const meta = node.meta as StarMeta;
-  return (
-    <div style={{ padding: 8, minWidth: 120 }}>
-      <strong>{node.label}</strong>
-      <div>{meta.constellation}</div>
-      <div>mag {meta.magnitude}</div>
-    </div>
-  );
-}
-
-function renderArxivCard(node: MapNode) {
-  const meta = node.meta as ArxivMeta | undefined;
-  return (
-    <div style={{ padding: 8, minWidth: 160, maxWidth: 240 }}>
-      <strong style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-        {node.label}
-      </strong>
-      {meta?.year ? <div>{meta.year}</div> : null}
-    </div>
-  );
-}
-
-function renderSyntheticCard(node: MapNode) {
-  return (
-    <div style={{ padding: 8, minWidth: 120 }}>
-      <strong>{node.label}</strong>
-    </div>
-  );
-}
-
-const CARDS: Record<GalleryEntry["id"], (node: MapNode) => ReactNode> = {
-  arxiv: renderArxivCard,
-  elements: renderElementCard,
-  constellations: renderStarCard,
-  synthetic: renderSyntheticCard,
-};
 
 const shellStyle: CSSProperties = {
   position: "fixed",
@@ -132,15 +71,6 @@ interface CurrentCorpus {
   spec: MapSpec;
 }
 
-/**
- * Mirrors `src/cards/CardOverlay.tsx`'s own private `DEFAULT_CARD_SIZE`
- * (160x56) — not re-exported through `corpus-map`'s public door
- * (`src/index.ts`), so this is a demo-side copy rather than an import, the
- * same convention `floatingLayout.ts` already documents for the minimap's
- * own constants.
- */
-const DEFAULT_PANEL_CARD_SIZE = { width: 200, height: 96 };
-
 /** What the tuning panel holds for one corpus: the drafts its controls show, the last values that resolved, and why a draft did not. */
 interface PanelValues {
   tuningDraft: Tuning;
@@ -150,6 +80,29 @@ interface PanelValues {
   appliedThresholds: LodThresholds;
   thresholdsError: string | null;
   cardSize: CardSize;
+}
+
+/**
+ * The panel's values for a corpus before any edit: its gallery `display` over
+ * the library defaults and the computed card size, through the library's
+ * validation. Its own hook so the memo depends on primitives alone, apart
+ * from `App`'s render-phase load bookkeeping.
+ */
+function usePanelBaseline(display: GalleryEntry["display"], cardWidth: number, cardHeight: number): PanelValues {
+  return useMemo(() => {
+    const values = resolveDisplay(display, { width: cardWidth, height: cardHeight });
+    const tuning = resolveTuning(values.tuning);
+    const thresholds = resolveThresholds(values.thresholds);
+    return {
+      tuningDraft: tuning,
+      appliedTuning: tuning,
+      tuningError: null,
+      thresholdsDraft: thresholds,
+      appliedThresholds: thresholds,
+      thresholdsError: null,
+      cardSize: values.cardSize,
+    };
+  }, [display, cardWidth, cardHeight]);
 }
 
 /** The synthetic corpus's own defaults (`demo/corpora/synthetic.ts`): seed 1, 5,000 items. */
@@ -326,29 +279,6 @@ export function App({ loadArxiv }: AppProps = {}) {
   const activeEntry = gallery.find((entry) => entry.id === corpusId);
   if (!activeEntry) throw new Error(`unknown corpus id: ${corpusId}`);
 
-  // The corpus's own values before any edit: its gallery `display` over the
-  // library defaults, through the library's validation, so an entry whose
-  // values do not resolve fails the gallery test rather than a visitor.
-  const computedCardSize = DEFAULT_PANEL_CARD_SIZE;
-  const panelBaseline = useMemo<PanelValues>(() => {
-    const values = resolveDisplay(activeEntry.display, computedCardSize);
-    const tuning = resolveTuning(values.tuning);
-    const thresholds = resolveThresholds(values.thresholds);
-    return {
-      tuningDraft: tuning,
-      appliedTuning: tuning,
-      tuningError: null,
-      thresholdsDraft: thresholds,
-      appliedThresholds: thresholds,
-      thresholdsError: null,
-      cardSize: values.cardSize,
-    };
-  }, [activeEntry, computedCardSize]);
-  const panelValues = edits[corpusId] ?? panelBaseline;
-  const updatePanelValues = (change: Partial<PanelValues>) => {
-    setEdits((previous) => ({ ...previous, [corpusId]: { ...(previous[corpusId] ?? panelBaseline), ...change } }));
-  };
-
   // Adjusted during render, not in an effect — the same pattern
   // `CorpusMap.tsx` itself uses for its own `fitBasis` (compare a stored
   // basis against what render is about to show, react synchronously before
@@ -377,6 +307,19 @@ export function App({ loadArxiv }: AppProps = {}) {
           ? { id: currentAsync.id, spec: currentAsync.spec }
           : null;
   const hasError = currentAsync?.status === "error";
+
+  // The corpus's own values before any edit: its gallery `display` over the
+  // library defaults, through the library's validation, so an entry whose
+  // values do not resolve fails the gallery test rather than a visitor.
+  // The computed card size follows whichever spec is on screen (arXiv's
+  // arrives late; until then the library's own default).
+  const computedCardSize = current ? cardSizeOf(current.id, current.spec) : LOADING_CARD_SIZE;
+  const { width: computedWidth, height: computedHeight } = computedCardSize;
+  const panelBaseline = usePanelBaseline(activeEntry.display, computedWidth, computedHeight);
+  const panelValues = edits[corpusId] ?? panelBaseline;
+  const updatePanelValues = (change: Partial<PanelValues>) => {
+    setEdits((previous) => ({ ...previous, [corpusId]: { ...(previous[corpusId] ?? panelBaseline), ...change } }));
+  };
 
   useEffect(() => {
     const entry = gallery.find((candidate) => candidate.id === corpusId);
@@ -516,9 +459,6 @@ export function App({ loadArxiv }: AppProps = {}) {
       ? (current.spec.territories.find((territory) => territory.id === selected.territory)?.name ?? null)
       : null;
 
-  // The drawer's Related list (slice E): one index over the spec's edges, kept
-  // while the spec and the selection stay the same.
-  const currentSpec = current?.spec;
   const mapKey = current?.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current?.id;
   // The map keeps its hidden categories itself; the demo only watches them so
   // the drawer leaves out what the map dims. They belong to the map they were
@@ -528,6 +468,9 @@ export function App({ loadArxiv }: AppProps = {}) {
     ids: [],
   });
   const hiddenIds = hiddenOnMap.mapKey === mapKey ? hiddenOnMap.ids : NOTHING_HIDDEN;
+  // The drawer's Related list (slice E): one index over the spec's edges, kept
+  // while the spec and the selection stay the same.
+  const currentSpec = current?.spec;
   const related = useMemo(() => {
     if (!currentSpec || selectedId === null) return [];
     const hidden = new Set(hiddenIds);

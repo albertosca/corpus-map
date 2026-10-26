@@ -8,6 +8,7 @@ import { auditAccessibility, violationIds } from "../test/audit";
 // component itself dynamically (`await import("./App")`), per-test, so each
 // gets its own fresh module graph for `vi.doMock`/`vi.resetModules`.
 import type { AppProps } from "./App";
+import { cardSizeOf } from "./cards";
 import { DRAWER_MAXIMUM_WIDTH } from "./components/Drawer";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
@@ -1588,10 +1589,48 @@ describe("App (showcase Task 5)", () => {
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("77");
 
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe("200");
-      expect((screen.getByLabelText(/Card height/) as HTMLInputElement).value).toBe("96");
+      const computed = cardSizeOf("synthetic", syntheticSpec);
+      expect((screen.getByLabelText(/Card width/) as HTMLInputElement).value).toBe(String(computed.width));
+      expect((screen.getByLabelText(/Card height/) as HTMLInputElement).value).toBe(String(computed.height));
       expect((screen.getByLabelText(/Synthetic size/) as HTMLInputElement).value).toBe("5000");
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("1");
+    });
+
+    describe("computed card size (slice G)", () => {
+      function panelCardSize(): { width: number; height: number } {
+        return {
+          width: Number((screen.getByLabelText(/Card width/) as HTMLInputElement).value),
+          height: Number((screen.getByLabelText(/Card height/) as HTMLInputElement).value),
+        };
+      }
+
+      it("each corpus's panel starts at the card size computed from its own card titles", async () => {
+        await renderApp();
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        expect(panelCardSize()).toEqual(cardSizeOf("arxiv", TINY_ARXIV_SPEC));
+
+        fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+        await screen.findByText(territoryButtonText(elementsSpec));
+        expect(panelCardSize()).toEqual(cardSizeOf("elements", elementsSpec));
+
+        fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "constellations" } });
+        await screen.findByText(territoryButtonText(constellationsSpec));
+        expect(panelCardSize()).toEqual(cardSizeOf("constellations", constellationsSpec));
+      });
+
+      it("before arXiv's spec arrives, the panel opens on the library's default 160 x 56", async () => {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(() => new Promise<Response>(() => {})),
+        );
+        const { App } = await import("./App");
+        render(createElement(App));
+        expect(screen.getByText("Loading corpus…")).not.toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        expect(panelCardSize()).toEqual({ width: 160, height: 56 });
+      });
     });
 
     // task-7-review.md Minor finding #3: "regenerates only on a size/seed
