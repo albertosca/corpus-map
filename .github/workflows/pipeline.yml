@@ -9,7 +9,7 @@ jobs:
       run:
         working-directory: pipeline/arxiv
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # astral-sh/setup-uv publishes no floating major-version tag (verified
       # via `git ls-remote --tags`: only full semver, e.g. v10.2.0) — pinned
       # to the latest release instead.
