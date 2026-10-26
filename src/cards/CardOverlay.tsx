@@ -12,6 +12,9 @@ export const DEFAULT_CARD_SIZE = { width: 160, height: 56 };
 /** The card frame's left edge in the node's territory colour, tying a card to its region (spec slice D §4). */
 export const CARD_STRIPE_WIDTH = 4;
 
+/** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
+export const CARD_BORDER_WIDTH = 1;
+
 export interface CardOverlayProps {
   spec: MapSpec;
   viewport: Viewport;
@@ -85,16 +88,30 @@ export function CardOverlay({
               height: cardSize.height,
               boxSizing: "border-box",
               background: theme.cardBackground,
-              borderTop: `1px solid ${theme.cardBorder}`,
-              borderRight: `1px solid ${theme.cardBorder}`,
-              borderBottom: `1px solid ${theme.cardBorder}`,
+              borderTop: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
+              borderRight: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
+              borderBottom: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
               borderLeft: `${CARD_STRIPE_WIDTH}px solid ${stripe}`,
               borderRadius: 6,
               overflow: "hidden",
             }}
           >
             {renderCard(first)}
-            {card.ids.length > 1 ? <span data-group-badge="">{`+${card.ids.length - 1}`}</span> : null}
+            {/* Out of the flow, in the corner: a frame sized exactly to its content (as
+                `cardSizeFor` sizes it) clips anything placed below the renderer's block. */}
+            {card.ids.length > 1 ? (
+              <span
+                data-group-badge=""
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  padding: "0 4px",
+                  background: theme.cardBackground,
+                  borderBottomLeftRadius: 4,
+                }}
+              >{`+${card.ids.length - 1}`}</span>
+            ) : null}
           </div>
         );
       })}

@@ -1605,6 +1605,24 @@ describe("App (showcase Task 5)", () => {
       expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("1");
     });
 
+    it("Reset on another corpus leaves the synthetic corpus's size and seed alone", async () => {
+      await renderApp();
+      await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+      await screen.findByText(territoryButtonText(syntheticSpec));
+      fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+      fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "1000" } });
+      fireEvent.change(screen.getByLabelText(/Seed/), { target: { value: "77" } });
+
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await screen.findByText(territoryButtonText(elementsSpec));
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+
+      expect((screen.getByLabelText(/Synthetic size/) as HTMLInputElement).value).toBe("1000");
+      expect((screen.getByLabelText(/Seed/) as HTMLInputElement).value).toBe("77");
+    });
+
     describe("computed card size (slice G)", () => {
       function panelCardSize(): { width: number; height: number } {
         return {
@@ -1639,6 +1657,35 @@ describe("App (showcase Task 5)", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
         expect(panelCardSize()).toEqual({ width: 160, height: 56 });
+      });
+
+      // An edit made while arXiv loads must not pin the loading size: the
+      // card size follows the computed one until someone sets it.
+      it("an edit made while arXiv loads keeps the card size computed once its spec arrives", async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.assign(navigator, { clipboard: { writeText } });
+        let resolveLoad: (spec: MapSpec) => void = () => {};
+        const loadArxiv = vi.fn(
+          () =>
+            new Promise<MapSpec>((resolve) => {
+              resolveLoad = resolve;
+            }),
+        );
+        const { App } = await import("./App");
+        render(createElement<AppProps>(App, { loadArxiv }));
+        await waitFor(() => expect(loadArxiv).toHaveBeenCalledTimes(1));
+
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        fireEvent.change(screen.getByLabelText(/Fade band/), { target: { value: "0.4" } });
+        await act(async () => resolveLoad(TINY_ARXIV_SPEC));
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+
+        expect(panelCardSize()).toEqual(cardSizeOf("arxiv", TINY_ARXIV_SPEC));
+        fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({
+          display: { ...entryDisplay("arxiv"), tuning: { fadeBand: 0.4 } },
+        });
       });
     });
 

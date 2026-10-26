@@ -79,18 +79,19 @@ interface PanelValues {
   thresholdsDraft: LodThresholds;
   appliedThresholds: LodThresholds;
   thresholdsError: string | null;
-  cardSize: CardSize;
+  /** Set only by the entry's `display` or an edit; otherwise the computed size, read at render (arXiv's arrives late). */
+  cardSize: CardSize | undefined;
 }
 
 /**
  * The panel's values for a corpus before any edit: its gallery `display` over
- * the library defaults and the computed card size, through the library's
- * validation. Its own hook so the memo depends on primitives alone, apart
- * from `App`'s render-phase load bookkeeping.
+ * the library defaults, through the library's validation. The card size
+ * stays the entry's own, if any: the computed one is resolved at render, so
+ * an edit made before a spec arrives never pins the loading size.
  */
-function usePanelBaseline(display: GalleryEntry["display"], cardWidth: number, cardHeight: number): PanelValues {
+function usePanelBaseline(display: GalleryEntry["display"]): PanelValues {
   return useMemo(() => {
-    const values = resolveDisplay(display, { width: cardWidth, height: cardHeight });
+    const values = resolveDisplay(display, LOADING_CARD_SIZE);
     const tuning = resolveTuning(values.tuning);
     const thresholds = resolveThresholds(values.thresholds);
     return {
@@ -100,9 +101,9 @@ function usePanelBaseline(display: GalleryEntry["display"], cardWidth: number, c
       thresholdsDraft: thresholds,
       appliedThresholds: thresholds,
       thresholdsError: null,
-      cardSize: values.cardSize,
+      cardSize: display?.cardSize,
     };
-  }, [display, cardWidth, cardHeight]);
+  }, [display]);
 }
 
 /** The synthetic corpus's own defaults (`demo/corpora/synthetic.ts`): seed 1, 5,000 items. */
@@ -314,9 +315,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   // The computed card size follows whichever spec is on screen (arXiv's
   // arrives late; until then the library's own default).
   const computedCardSize = current ? cardSizeOf(current.id, current.spec) : LOADING_CARD_SIZE;
-  const { width: computedWidth, height: computedHeight } = computedCardSize;
-  const panelBaseline = usePanelBaseline(activeEntry.display, computedWidth, computedHeight);
+  const panelBaseline = usePanelBaseline(activeEntry.display);
   const panelValues = edits[corpusId] ?? panelBaseline;
+  const cardSize = panelValues.cardSize ?? computedCardSize;
   const updatePanelValues = (change: Partial<PanelValues>) => {
     setEdits((previous) => ({ ...previous, [corpusId]: { ...(previous[corpusId] ?? panelBaseline), ...change } }));
   };
@@ -445,6 +446,7 @@ export function App({ loadArxiv }: AppProps = {}) {
   // Back to the current corpus's own values; every other corpus keeps its edits.
   const handleReset = () => {
     setEdits(({ [corpusId]: _discarded, ...kept }) => kept);
+    if (corpusId !== "synthetic") return;
     setSyntheticSize(DEFAULT_SYNTHETIC_SIZE);
     setSyntheticSeed(DEFAULT_SYNTHETIC_SEED);
   };
@@ -509,7 +511,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             theme={scheme === "dark" ? DARK_THEME : DEFAULT_THEME}
             tuning={panelValues.appliedTuning}
             thresholds={panelValues.appliedThresholds}
-            cardSize={panelValues.cardSize}
+            cardSize={cardSize}
             onViewChange={viewStore.set}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
             selectedId={selectedId}
@@ -561,7 +563,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         appliedThresholds={panelValues.appliedThresholds}
         onThresholdsChange={handleThresholdsDraftChange}
         thresholdsError={panelValues.thresholdsError}
-        cardSize={panelValues.cardSize}
+        cardSize={cardSize}
         computedCardSize={computedCardSize}
         onCardSizeChange={(cardSize) => updatePanelValues({ cardSize })}
         isSynthetic={corpusId === "synthetic"}

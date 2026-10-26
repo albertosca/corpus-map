@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { cardSizeFor, type MapNode, type MapSpec } from "corpus-map";
 import { describe, expect, it } from "vitest";
+import { CARD_BORDER_WIDTH, CARD_STRIPE_WIDTH, DEFAULT_CARD_SIZE } from "../src/cards/CardOverlay";
 import { CARD_TEXT, CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
 import { arxivSpec, type CorpusId } from "./corpora";
 import arxivJson from "./corpora/arxiv.json";
@@ -67,13 +68,13 @@ describe("cardSizeOf", () => {
   });
 
   it("fits nine element names in ten on the elements card's one title line (16 px at 0.6 em per character)", () => {
-    const column = cardSizeOf("elements", elementsSpec).width - 2 * 8;
+    const column = cardSizeOf("elements", elementsSpec).width - 2 * 8 - CARD_STRIPE_WIDTH - CARD_BORDER_WIDTH;
     const names = elementsSpec.nodes.map((node) => CARD_TEXT.elements.title(node));
     const fitting = names.filter((name) => name.length * 9.6 <= column).length;
     expect(fitting / names.length).toBeGreaterThanOrEqual(0.9);
   });
 
   it("uses the library's default card size while a corpus is still loading", () => {
-    expect(LOADING_CARD_SIZE).toEqual({ width: 160, height: 56 });
+    expect(LOADING_CARD_SIZE).toEqual(DEFAULT_CARD_SIZE);
   });
 });

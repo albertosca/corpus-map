@@ -241,6 +241,8 @@ export declare const DEFAULT_CARD_SIZE: {
 };
 /** The card frame's left edge in the node's territory colour, tying a card to its region (spec slice D §4). */
 export declare const CARD_STRIPE_WIDTH = 4;
+/** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
+export declare const CARD_BORDER_WIDTH = 1;
 export interface CardOverlayProps {
     spec: MapSpec;
     viewport: Viewport;
@@ -276,11 +278,11 @@ export interface CardSizeOptions {
     extraLines?: number;
     /** Which label width the card fits, in (0, 1]; 0.9 fits nine titles in ten whole. Default 0.9. */
     percentile?: number;
-    /** Pixels on every side of the text. Default 8. */
+    /** Pixels on every side of the text; must leave a text column at `maximumWidth`. Default 8. */
     padding?: number;
-    /** The narrowest frame, padding included. Default 120. */
+    /** The narrowest frame, padding and borders included. Default 120. */
     minimumWidth?: number;
-    /** The widest frame, padding included. Default 240. */
+    /** The widest frame, padding and borders included. Default 240. */
     maximumWidth?: number;
     /** Measures a label on one line; defaults to the library's own estimate (0.6 × the font's px size per character). */
     measure?: (text: string, font: string) => {
@@ -291,8 +293,10 @@ export interface CardSizeOptions {
  * A card size fitted to the corpus's own labels, to pass as `CorpusMap`'s
  * `cardSize`. The label width at `percentile` (nearest rank) is split over
  * `titleLines`, the frame clamped to `[minimumWidth, maximumWidth]`; the
- * height holds the lines the title then takes plus `extraLines`. A label
- * longer than that is the card renderer's to clamp. Both sides are rounded
+ * height holds the lines the title then takes plus `extraLines`. Both sides
+ * include the padding and the card frame's borders (a 4 px stripe and 1 px
+ * across, 1 px top and bottom), so the renderer's own box is the padded text
+ * column. A label longer than that is the card renderer's to clamp. Both sides are rounded
  * up to whole pixels; invalid options throw a `RangeError` naming the
  * option.
  */

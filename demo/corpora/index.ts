@@ -74,6 +74,8 @@ export function syntheticLabel(size: number): string {
 export const gallery: GalleryEntry[] = [
   // Each `nearAt` is metric 18's answer for that corpus at its computed card
   // size (demo/corpora/nearAt.test.ts); the test turns red when one goes stale.
+  // 2.5 is the lowest candidate the metric tries, not a measured boundary:
+  // arXiv and elements might pass lower still.
   {
     id: "arxiv",
     label: "Computer-science papers (arXiv metadata)",
