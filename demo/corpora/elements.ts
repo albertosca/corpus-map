@@ -2,7 +2,10 @@ import type { MapNode, MapSpec, NodeState, Territory } from "corpus-map";
 
 /**
  * The periodic table, hydrogen through xenon (atomic numbers 1-54), placed by
- * group (x) and period (y). Territories are the standard chemical blocks.
+ * group (x) and period (y). Territories are the standard chemical blocks,
+ * under two declared families (`parent`): metals and nonmetals, with the
+ * metalloids between them standing alone. It is the gallery's one corpus with
+ * named families, as opposed to derived groups.
  */
 
 interface ElementSeed {
@@ -114,19 +117,31 @@ const TERRITORY_NAMES: Record<string, string> = {
   "noble-gases": "Noble Gases",
 };
 
+// Each family's children; a parent lists no members of its own (spec slice E §3).
+// The `family-` prefix keeps them apart from the leaf `nonmetals`.
+const FAMILY_CHILDREN: Record<string, string[]> = {
+  "family-metals": ["alkali-metals", "alkaline-earth", "transition-metals", "post-transition"],
+  "family-nonmetals": ["nonmetals", "halogens", "noble-gases"],
+};
+
+const FAMILY_NAMES: Record<string, string> = {
+  "family-metals": "Metals",
+  "family-nonmetals": "Nonmetals",
+};
+
 const VISITED_IDS = new Set(["h", "o", "fe", "ag", "xe"]);
 
 function elementById(id: string): ElementSeed {
-  const found = ELEMENTS.find((e) => e.id === id);
+  const found = ELEMENTS.find((element) => element.id === id);
   if (!found) throw new Error(`unknown element id ${id}`);
   return found;
 }
 
 function centroidOf(memberIds: string[]): [number, number] {
   const members = memberIds.map(elementById);
-  const x = members.reduce((sum, e) => sum + e.group, 0) / members.length;
-  const y = members.reduce((sum, e) => sum + e.period, 0) / members.length;
-  return [x, y];
+  const meanGroup = members.reduce((sum, element) => sum + element.group, 0) / members.length;
+  const meanPeriod = members.reduce((sum, element) => sum + element.period, 0) / members.length;
+  return [meanGroup, meanPeriod];
 }
 
 const territoryOf = new Map<string, string>();
@@ -134,23 +149,42 @@ for (const [territoryId, memberIds] of Object.entries(TERRITORY_MEMBERS)) {
   for (const memberId of memberIds) territoryOf.set(memberId, territoryId);
 }
 
-const territories: Territory[] = Object.entries(TERRITORY_MEMBERS).map(([id, members]) => ({
+const familyOf = new Map<string, string>();
+for (const [familyId, childIds] of Object.entries(FAMILY_CHILDREN)) {
+  for (const childId of childIds) familyOf.set(childId, familyId);
+}
+
+const leaves: Territory[] = Object.entries(TERRITORY_MEMBERS).map(([id, members]) => {
+  const parent = familyOf.get(id);
+  return {
+    id,
+    name: TERRITORY_NAMES[id] ?? id,
+    members,
+    centroid: centroidOf(members),
+    ...(parent === undefined ? {} : { parent }),
+  };
+});
+
+// Families come after the leaves, so the spec's first territory is still a block.
+const families: Territory[] = Object.entries(FAMILY_CHILDREN).map(([id, childIds]) => ({
   id,
-  name: TERRITORY_NAMES[id] ?? id,
-  members,
-  centroid: centroidOf(members),
+  name: FAMILY_NAMES[id] ?? id,
+  members: [],
+  centroid: centroidOf(childIds.flatMap((childId) => TERRITORY_MEMBERS[childId] ?? [])),
 }));
 
-const nodes: MapNode[] = ELEMENTS.map((el) => {
-  const state: NodeState | undefined = VISITED_IDS.has(el.id) ? "visited" : undefined;
+const territories: Territory[] = [...leaves, ...families];
+
+const nodes: MapNode[] = ELEMENTS.map((seed) => {
+  const state: NodeState | undefined = VISITED_IDS.has(seed.id) ? "visited" : undefined;
   return {
-    id: el.id,
-    label: el.symbol,
-    x: el.group,
-    y: el.period,
-    territory: territoryOf.get(el.id) ?? null,
+    id: seed.id,
+    label: seed.symbol,
+    x: seed.group,
+    y: seed.period,
+    territory: territoryOf.get(seed.id) ?? null,
     ...(state ? { state } : {}),
-    meta: { name: el.name, atomicNumber: el.atomicNumber },
+    meta: { name: seed.name, atomicNumber: seed.atomicNumber },
   };
 });
 

@@ -18,11 +18,16 @@ const BOXES: Array<[number, number]> = [
   [320, 480],
 ];
 
-/** Names drawn at the fitted view (active, not wider or taller than the box) that cross the box edge. */
+/**
+ * Names drawn at the fitted view (active, not wider or taller than the box) that cross the box edge.
+ * The fit is far (ratio 1, below the default `midAt`), where a scene with groups paints its group
+ * names and fades the territory names out, so those are the names checked, as `fitScene` keeps them.
+ */
 function cutNames(spec: MapSpec, width: number, height: number): string[] {
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   const viewport = fitScene(spec, scene, width, height, 24);
-  return scene.labels
+  const drawn = scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
+  return drawn
     .filter((label) => viewport.scale >= label.activeFromScale && label.width <= width && label.height <= height)
     .filter((label) => {
       const [horizontal, vertical] = toScreen(viewport, label.anchor[0], label.anchor[1]);
