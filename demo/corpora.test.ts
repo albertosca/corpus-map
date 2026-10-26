@@ -48,7 +48,7 @@ describe("arXiv loader", () => {
     expect(spec.territories.length).toBeGreaterThan(1);
   });
 
-  it("serves a load after a success from memory, without another 1.8 MB request", async () => {
+  it("serves a load after a success from memory, without another 1.4 MB request", async () => {
     const fetchStub = vi.fn(fetchArxivAsset);
     vi.stubGlobal("fetch", fetchStub);
     const load = (await arxivEntry()).load;

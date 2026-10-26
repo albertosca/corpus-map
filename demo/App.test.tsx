@@ -22,13 +22,13 @@ import {
   ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 } from "./components/floatingLayout";
 import { BUTTON_WIDTH } from "./components/ZoomControls";
-import { type CorpusId, gallery } from "./corpora";
+import { arxivSpec, type CorpusId, gallery } from "./corpora";
 import arxivJson from "./corpora/arxiv.json";
 import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
 import { syntheticSpec } from "./corpora/synthetic";
 
-/** A tiny, valid arXiv-shaped spec — stands in for the real 1.8 MB corpus.json in every test but the loading-state one. */
+/** A tiny, valid arXiv-shaped spec — stands in for the real 1.4 MB arxiv.json in every test but the loading-state one. */
 const TINY_ARXIV_SPEC: MapSpec = {
   version: "1",
   territories: [{ id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2"], centroid: [0, 0] }],
@@ -52,8 +52,8 @@ const TINY_ARXIV_SPEC: MapSpec = {
   ],
 };
 
-/** The shipped arXiv corpus's territories; its edges ship compact (`demo/corpora/edges.ts`), so the file as a whole is not a `MapSpec`. */
-const ARXIV_TERRITORIES = { territories: arxivJson.territories } as Pick<MapSpec, "territories">;
+/** The shipped arXiv corpus as the demo loads it: the file leaves out members, meta and full edges (`demo/corpora/compact.ts`), so it is not a `MapSpec` until expanded. */
+const ARXIV_TERRITORIES: Pick<MapSpec, "territories"> = arxivSpec(arxivJson);
 
 /** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name>, <count> item(s)"`. */
 function territoryButtonText(spec: Pick<MapSpec, "territories">, index = 0): string {

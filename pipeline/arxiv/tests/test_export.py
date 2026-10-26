@@ -15,12 +15,13 @@ from arxiv_corpus.export import (
     check_spec,
     clean_title,
     write_outputs,
+    year_of_id,
 )
 from arxiv_corpus.fetch import Paper
 
 
-def make_paper(id_: str, title: str, category: str, year: int = 2026, abstract: str = "an abstract") -> Paper:
-    return Paper(id=id_, title=title, abstract=abstract, category=category, year=year)
+def make_paper(paper_id: str, title: str, category: str, year: int = 2026, abstract: str = "an abstract") -> Paper:
+    return Paper(id=paper_id, title=title, abstract=abstract, category=category, year=year)
 
 
 def _nodes(spec: dict[str, object]) -> list[dict[str, object]]:
@@ -33,9 +34,9 @@ def _territories(spec: dict[str, object]) -> list[dict[str, object]]:
 
 def _walk_keys(value: object) -> Iterator[str]:
     if isinstance(value, dict):
-        for key, sub in value.items():
+        for key, child in value.items():
             yield key
-            yield from _walk_keys(sub)
+            yield from _walk_keys(child)
     elif isinstance(value, list):
         for item in value:
             yield from _walk_keys(item)
@@ -65,15 +66,15 @@ def test_clean_title_keeps_latex_markup_as_written() -> None:
 
 
 def test_build_spec_version_is_1() -> None:
-    spec = build_spec([make_paper("a", "A", "cs.CL")], np.array([[0.0, 0.0]]))
+    spec = build_spec([make_paper("2601.00001", "A", "cs.CL")], np.array([[0.0, 0.0]]))
     assert spec["version"] == "1"
 
 
 def test_build_spec_creates_one_territory_per_category_present_sorted_by_code() -> None:
     papers = [
-        make_paper("a", "Title A", "cs.LG"),
-        make_paper("b", "Title B", "cs.CL"),
-        make_paper("c", "Title C", "cs.CL"),
+        make_paper("2601.00001", "Title A", "cs.LG"),
+        make_paper("2601.00002", "Title B", "cs.CL"),
+        make_paper("2601.00003", "Title C", "cs.CL"),
     ]
     coordinates = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
 
@@ -83,26 +84,25 @@ def test_build_spec_creates_one_territory_per_category_present_sorted_by_code() 
 
 
 def test_build_spec_territory_name_comes_from_the_categories_module() -> None:
-    spec = build_spec([make_paper("a", "A", "cs.CL")], np.array([[0.0, 0.0]]))
+    spec = build_spec([make_paper("2601.00001", "A", "cs.CL")], np.array([[0.0, 0.0]]))
     assert _territories(spec)[0]["name"] == "Computation and Language"
 
 
-def test_build_spec_territory_members_are_in_paper_order() -> None:
-    papers = [
-        make_paper("b", "Title B", "cs.CL"),
-        make_paper("a", "Title A", "cs.LG"),
-        make_paper("c", "Title C", "cs.CL"),
-    ]
-    coordinates = np.array([[0.0, 0.0], [5.0, 5.0], [2.0, 2.0]])
+def test_build_spec_territories_carry_no_members_list() -> None:
+    """Every node names its territory; the demo derives `members` from that (compact.ts)."""
+    papers = [make_paper("2601.00002", "Title B", "cs.CL"), make_paper("2601.00003", "Title C", "cs.CL")]
 
-    spec = build_spec(papers, coordinates)
+    spec = build_spec(papers, np.array([[0.0, 0.0], [2.0, 2.0]]))
 
-    computation_and_language = next(territory for territory in _territories(spec) if territory["id"] == "cs.CL")
-    assert computation_and_language["members"] == ["b", "c"]
+    assert all("members" not in territory for territory in _territories(spec))
 
 
 def test_build_spec_centroid_is_the_mean_of_members_xy_rounded_to_three_decimals() -> None:
-    papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.CL"), make_paper("c", "C", "cs.CL")]
+    papers = [
+        make_paper("2601.00001", "A", "cs.CL"),
+        make_paper("2601.00002", "B", "cs.CL"),
+        make_paper("2601.00003", "C", "cs.CL"),
+    ]
     coordinates = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0]])
 
     spec = build_spec(papers, coordinates)
@@ -111,7 +111,7 @@ def test_build_spec_centroid_is_the_mean_of_members_xy_rounded_to_three_decimals
 
 
 def test_build_spec_node_coordinates_are_rounded_to_three_decimals() -> None:
-    spec = build_spec([make_paper("a", "A", "cs.CL")], np.array([[1.0 / 3, 2.0 / 3]]))
+    spec = build_spec([make_paper("2601.00001", "A", "cs.CL")], np.array([[1.0 / 3, 2.0 / 3]]))
 
     node = _nodes(spec)[0]
     assert node["x"] == 0.333
@@ -119,32 +119,60 @@ def test_build_spec_node_coordinates_are_rounded_to_three_decimals() -> None:
 
 
 def test_build_spec_node_label_is_the_cleaned_title() -> None:
-    spec = build_spec([make_paper("a", "A\nTitle   With Whitespace", "cs.CL")], np.array([[0.0, 0.0]]))
+    spec = build_spec([make_paper("2601.00001", "A\nTitle   With Whitespace", "cs.CL")], np.array([[0.0, 0.0]]))
     assert _nodes(spec)[0]["label"] == "A Title With Whitespace"
 
 
-def test_build_spec_node_meta_has_year_and_arxiv_url() -> None:
+def test_build_spec_nodes_carry_no_meta() -> None:
+    """Year and abstract-page url both follow from the id; the demo rebuilds them (compact.ts)."""
     spec = build_spec([make_paper("2601.00001", "A", "cs.CL", year=2026)], np.array([[0.0, 0.0]]))
-    assert _nodes(spec)[0]["meta"] == {"year": 2026, "url": "https://arxiv.org/abs/2601.00001"}
+    assert "meta" not in _nodes(spec)[0]
 
 
-def test_build_spec_node_id_and_url_handle_an_old_style_id_with_a_slash() -> None:
+def test_build_spec_keeps_an_old_style_id_with_a_slash() -> None:
     spec = build_spec([make_paper("cs/0112017", "Old style id", "cs.CL", year=2001)], np.array([[0.0, 0.0]]))
+    assert _nodes(spec)[0]["id"] == "cs/0112017"
 
-    node = _nodes(spec)[0]
-    assert node["id"] == "cs/0112017"
-    meta = cast(dict[str, object], node["meta"])
-    assert meta["url"] == "https://arxiv.org/abs/cs/0112017"
-    assert _territories(spec)[0]["members"] == ["cs/0112017"]
+
+@pytest.mark.parametrize(
+    ("paper_id", "year"),
+    [("2601.00001", 2025), ("cs/0112017", 2002), ("not-an-arxiv-id", 2026), ("2601.00001v2", 2026)],
+)
+def test_build_spec_refuses_a_paper_whose_year_its_id_does_not_give(paper_id: str, year: int) -> None:
+    """The payload leaves the year out, so it must be exactly what the demo reads back from the id."""
+    with pytest.raises(ValueError, match=paper_id):
+        build_spec([make_paper(paper_id, "A", "cs.CL", year=year)], np.array([[0.0, 0.0]]))
+
+
+@pytest.mark.parametrize(
+    ("paper_id", "year"),
+    [
+        ("2609.26779", 2026),
+        ("0704.0001", 2007),
+        ("1501.00001", 2015),
+        ("cs/0112017", 2001),
+        ("math/9901001", 1999),
+        ("hep-th/9108001", 1991),
+        ("math.GT/0309136", 2003),
+    ],
+)
+def test_year_of_id_reads_the_two_year_digits(paper_id: str, year: int) -> None:
+    """The same cases as `yearOfArxivId` in demo/corpora/compact.test.ts: the two must agree."""
+    assert year_of_id(paper_id) == year
+
+
+@pytest.mark.parametrize("paper_id", ["", "garbage", "2609.267", "26090.12345", "cs/011201", "2609.26779v2"])
+def test_year_of_id_has_no_year_for_what_is_not_an_arxiv_id(paper_id: str) -> None:
+    assert year_of_id(paper_id) is None
 
 
 def test_build_spec_node_territory_is_the_paper_category() -> None:
-    spec = build_spec([make_paper("a", "A", "cs.LG")], np.array([[0.0, 0.0]]))
+    spec = build_spec([make_paper("2601.00001", "A", "cs.LG")], np.array([[0.0, 0.0]]))
     assert _nodes(spec)[0]["territory"] == "cs.LG"
 
 
 def test_build_spec_raises_when_papers_and_xy_lengths_differ() -> None:
-    papers = [make_paper("a", "A", "cs.CL")]
+    papers = [make_paper("2601.00001", "A", "cs.CL")]
     coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
 
     with pytest.raises(ValueError, match="same length"):
@@ -152,7 +180,7 @@ def test_build_spec_raises_when_papers_and_xy_lengths_differ() -> None:
 
 
 def test_build_spec_never_contains_an_author_or_authors_key_anywhere() -> None:
-    papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
+    papers = [make_paper("2601.00001", "A", "cs.CL"), make_paper("2601.00002", "B", "cs.LG")]
     coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
 
     spec = build_spec(papers, coordinates)
@@ -166,7 +194,7 @@ def test_build_spec_never_contains_an_author_or_authors_key_anywhere() -> None:
 
 
 def _valid_spec() -> dict[str, object]:
-    papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
+    papers = [make_paper("2601.00001", "A", "cs.CL"), make_paper("2601.00002", "B", "cs.LG")]
     coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
     return build_spec(papers, coordinates)
 
@@ -193,13 +221,12 @@ def test_check_spec_rejects_a_node_whose_territory_does_not_exist() -> None:
         check_spec(spec)
 
 
-def test_check_spec_rejects_a_member_that_does_not_resolve() -> None:
+def test_check_spec_rejects_a_territory_no_node_names() -> None:
+    """The demo would derive an empty `members` list, which the library's `validateSpec` refuses."""
     spec = _valid_spec()
-    territory = dict(_territories(spec)[0])
-    territory["members"] = [*cast(list[str], territory["members"]), "ghost-id"]
-    spec["territories"] = [territory, *_territories(spec)[1:]]
+    spec["territories"] = [*_territories(spec), {"id": "cs.GL", "name": "General Literature", "centroid": [0, 0]}]
 
-    with pytest.raises(ValueError, match="ghost-id"):
+    with pytest.raises(ValueError, match=r"cs\.GL"):
         check_spec(spec)
 
 
@@ -213,23 +240,15 @@ def test_check_spec_rejects_a_non_finite_coordinate() -> None:
         check_spec(spec)
 
 
-def test_check_spec_rejects_a_node_whose_territory_does_not_list_it_as_a_member() -> None:
-    """Mirrors the library's `validateSpec`: membership must hold in both directions."""
+@pytest.mark.parametrize(("part", "key"), [("territories", "members"), ("nodes", "meta")])
+def test_check_spec_rejects_a_field_the_compact_payload_leaves_out(part: str, key: str) -> None:
+    """A stale `members` or `meta` would be kept by the demo as it is, never re-derived."""
     spec = _valid_spec()
-    node_id = cast(str, _nodes(spec)[0]["id"])
-    node_territory = cast(str, _nodes(spec)[0]["territory"])
+    first = dict(cast("list[dict[str, object]]", spec[part])[0])
+    first[key] = []
+    spec[part] = [first, *cast("list[dict[str, object]]", spec[part])[1:]]
 
-    patched_territories = []
-    for territory in _territories(spec):
-        if territory["id"] == node_territory:
-            copy = dict(territory)
-            copy["members"] = [member for member in cast("list[str]", territory["members"]) if member != node_id]
-            patched_territories.append(copy)
-        else:
-            patched_territories.append(territory)
-    spec["territories"] = patched_territories
-
-    with pytest.raises(ValueError, match="does not list"):
+    with pytest.raises(ValueError, match=key):
         check_spec(spec)
 
 
@@ -291,7 +310,7 @@ def test_attribution_and_license_note_match_spec_wording() -> None:
 
 
 def test_build_spec_carries_the_given_edges_as_lists() -> None:
-    papers = [make_paper("a", "A", "cs.CL"), make_paper("b", "B", "cs.LG")]
+    papers = [make_paper("2601.00001", "A", "cs.CL"), make_paper("2601.00002", "B", "cs.LG")]
     coordinates = np.array([[0.0, 0.0], [1.0, 1.0]])
 
     spec = build_spec(papers, coordinates, edges=[(0, 1, 87)])
@@ -302,7 +321,7 @@ def test_build_spec_carries_the_given_edges_as_lists() -> None:
 
 def test_build_spec_without_edges_has_no_edges_key() -> None:
     assert "edges" not in _valid_spec()
-    papers = [make_paper("a", "A", "cs.CL")]
+    papers = [make_paper("2601.00001", "A", "cs.CL")]
     assert "edges" not in build_spec(papers, np.array([[0.0, 0.0]]), edges=None)
 
 

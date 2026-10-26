@@ -2,11 +2,17 @@
 
 # Pipeline do corpus arXiv
 
-`fetch → embed → project → export` — flags: `--n` (papers, padrão 8000), `--floor` (mínimo por categoria, padrão 20), `--out` (padrão `demo/corpora`), `--cache-dir` (padrão `.cache`). Roda qualquer estágio sozinho, ou `all` para o pipeline inteiro: `uv run arxiv-corpus <fetch|embed|project|export|all> [flags]`.
+`fetch → embed → project → edges → export` — flags: `--n` (papers, padrão 8000), `--floor` (mínimo por categoria, padrão 20), `--out` (padrão `demo/corpora`), `--cache-dir` (padrão `.cache`). Roda qualquer estágio sozinho, ou `all` para o pipeline inteiro: `uv run arxiv-corpus <fetch|embed|project|edges|export|all> [flags]`.
 
 ## O que ele constrói
 
 Este pacote busca uma amostra de papers `cs.*` (ciência da computação) na API ao vivo do arXiv, embeda cada resumo (abstract) num vetor de 384 dimensões com um modelo local pequeno, projeta esses vetores em 2D com UMAP, e escreve `demo/corpora/arxiv.json` — um `MapSpec` do corpus-map, checado duas vezes: uma pelo próprio `export.py` deste pacote, e outra pelo `validateSpec` da biblioteca em `demo/corpora/arxiv.test.ts`, que é o teste que prova que a demo consegue de fato carregá-lo. `demo/corpora/arxiv.meta.json` registra como aquele arquivo foi produzido: a data, o formato da query, o modelo, os parâmetros do UMAP, e a contagem de papers por categoria. Cada categoria do arXiv vira um território no mapa; cada paper vira um nó, posicionado por quão semanticamente similar seu resumo é a todos os outros resumos da amostra — papers sobre tópicos parecidos ficam agrupados, e os territórios nomeados são as categorias `cs.*` que o próprio arXiv atribui.
+
+## Edges: papers relacionados entre categorias
+
+O estágio `edges` (spec slice E §8) liga cada paper aos vizinhos mais próximos em *outras* categorias: similaridade de cosseno sobre os embeddings em cache, calculada em blocos de 512 linhas para que a matriz 8000 × 8000 nunca fique inteira na memória. Um par só é mantido com similaridade 0,80 ou mais, e cada paper termina com no máximo três edges — cada paper propõe os seus três melhores, e então os pares mais pesados são mantidos primeiro enquanto as duas pontas ainda têm vaga, de modo que um paper com o qual muitos outros se parecem (um hub) não acumula dezenas. Pares dentro de uma mesma categoria ficam de fora de propósito: o mapa já mostra esses pela posição. Um paper cujo embedding é todo zero não se liga a nada.
+
+O `export` grava os edges no `arxiv.json` como triplas compactas `[sourceIndex, targetIndex, weightPercent]` (índices em `nodes`, o menor primeiro) e registra `floor`, `per_paper` e `count` sob `edges` no `arxiv.meta.json`; a demo os expande em `MapEdge`s ao carregar o arquivo, escrevendo o motivo de cada edge a partir das palavras que os dois títulos compartilham (`demo/corpora/edges.ts`), para que o arquivo não carregue esse texto duas vezes. O mesmo vale para dois outros campos que todo nó poderia carregar: os territórios saem sem `members` (cada nó já nomeia o seu território) e os nós sem `meta` (o ano e a url da página do resumo saem ambos do id do arXiv), e a demo reconstrói os dois ao carregar (`demo/corpora/compact.ts`), o que deixa o arquivo cerca de 30% menor. O `export` recusa um paper cujo ano de publicação não é o ano que o id dá, então o ano reconstruído nunca sai errado. O `edges.json` carrega a impressão digital dos embeddings, e o `export` recusa um `edges.json` de outros embeddings — rode `edges` de novo depois do `embed`. Sem um `edges.json`, o `export` escreve um spec sem edges.
 
 ## Fonte, licença e atribuição
 
@@ -38,7 +44,7 @@ Cada estágio guarda sua saída em cache sob `.cache/` (ignorado pelo git), ent�
 | `project` (UMAP) | 32,3 s, RSS de pico ~391 MB |
 | `export` | 0,3 s |
 | **Tempo total, do fetch ao export** | **~15 min 54 s** |
-| Saída | `arxiv.json` 1,79 MB (8.000 nós, 38 territórios); `arxiv.meta.json` 1,2 KB |
+| Saída | `arxiv.json` 1,38 MB (8.000 nós, 38 territórios); `arxiv.meta.json` 1,2 KB |
 
 38 das 40 categorias `cs.*` em `categories.py` viraram territórios — `cs.NA` e `cs.SY` genuinamente retornaram zero papers para a query de contagem inteira nesta execução, cross-lists incluídos, não só a própria categoria primária (ambas costumam ser cross-listed em vez de primárias em outro lugar: `math.NA` e `eess.SY`), o que é esperado, não um bug — `sample.py` dá cota `0` a uma categoria com `total == 0` em vez de forçar o piso (`floor`) numa categoria vazia.
 
@@ -63,4 +69,4 @@ rm -rf .cache/responses
 uv run arxiv-corpus all --n 8000 --floor 20
 ```
 
-O `fetch` pede os papers *mais recentes* de cada categoria, então uma vez que o cache de respostas suma, a próxima execução pega o que foi submetido ao arXiv desde então. `embed`, `project` e `export` funcionam todos a partir de uma impressão digital (fingerprint) dos papers que o `fetch` de fato escreveu, então uma atualização não consegue parear silenciosamente papers novos com coordenadas antigas (ou vice-versa), mesmo quando o corpus atualizado tem exatamente o mesmo número de papers por categoria. O layout do UMAP também não é garantidamente reprodutível bit a bit entre máquinas diferentes mesmo com `random_state` fixo — `arxiv.meta.json` registra os parâmetros usados, não uma promessa de que o UMAP de outra máquina reproduz as mesmas coordenadas. O `arxiv.json` commitado é o artefato; nada na demo ou na suíte de testes depende das suas coordenadas exatas.
+O `fetch` pede os papers *mais recentes* de cada categoria, então uma vez que o cache de respostas suma, a próxima execução pega o que foi submetido ao arXiv desde então. `embed`, `project`, `edges` e `export` funcionam todos a partir de uma impressão digital (fingerprint) dos papers que o `fetch` de fato escreveu, então uma atualização não consegue parear silenciosamente papers novos com coordenadas antigas (ou vice-versa), mesmo quando o corpus atualizado tem exatamente o mesmo número de papers por categoria. O layout do UMAP também não é garantidamente reprodutível bit a bit entre máquinas diferentes mesmo com `random_state` fixo — `arxiv.meta.json` registra os parâmetros usados, não uma promessa de que o UMAP de outra máquina reproduz as mesmas coordenadas. O `arxiv.json` commitado é o artefato; nada na demo ou na suíte de testes depende das suas coordenadas exatas.

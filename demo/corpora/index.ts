@@ -2,16 +2,16 @@ import type { MapSpec } from "corpus-map";
 import { validateSpec } from "corpus-map";
 import { withGroupNames } from "../../tools/group-names/groupNamesFile";
 import arxivGroupNames from "./arxiv.groups.json";
+import { withExpandedArxiv } from "./compact";
 import { constellationsSpec } from "./constellations";
 import type { DisplaySettings } from "./display";
-import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
 import { syntheticSpec } from "./synthetic";
 
 export type CorpusId = "arxiv" | "elements" | "constellations" | "synthetic";
 
 /**
- * arXiv is the only entry that loads lazily: its ~1.8 MB JSON must not block
+ * arXiv is the only entry that loads lazily: its ~1.4 MB JSON must not block
  * the shell's first paint (spec 4 §2, Risks). Every other corpus is small
  * enough to ship in the main bundle and carries its `spec` synchronously.
  */
@@ -27,13 +27,14 @@ const arxivUrl = new URL("./arxiv.json", import.meta.url).href;
 let pendingArxiv: Promise<MapSpec> | undefined;
 
 /**
- * The arXiv body as the demo shows it: compact edges expanded, then the group
+ * The arXiv body as the demo shows it: compact edges, territory members and
+ * node meta expanded (`withExpandedArxiv`), then the group
  * names Claude wrote (`arxiv.groups.json`, spec slice F §4) applied in place
  * of the provisional "Largest +N" ones. The tests build arXiv through this
  * too, so they check what the demo loads.
  */
 export function arxivSpec(body: unknown): MapSpec {
-  return validateSpec(withGroupNames(withExpandedEdges(body), arxivGroupNames));
+  return validateSpec(withGroupNames(withExpandedArxiv(body), arxivGroupNames));
 }
 
 async function fetchArxiv(): Promise<MapSpec> {

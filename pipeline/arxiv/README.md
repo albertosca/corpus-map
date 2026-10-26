@@ -12,7 +12,7 @@ This package fetches a sample of `cs.*` (computer science) papers from the live 
 
 The `edges` stage (spec slice E §8) links each paper to its nearest neighbours in *other* categories: cosine similarity over the cached embeddings, computed in blocks of 512 rows so the 8000 × 8000 matrix never sits in memory at once. A pair is kept only at similarity 0.80 or above, and each paper ends with at most three edges — every paper proposes its three best, then the heaviest pairs are kept first while both ends still have room, so a paper many others resemble (a hub) cannot collect dozens. Pairs inside one category are left out on purpose: the map already shows those by position. A paper whose embedding is all zeros links to nothing.
 
-`export` writes the edges into `arxiv.json` as compact `[sourceIndex, targetIndex, weightPercent]` triples (indexes into `nodes`, the lower first) and records `floor`, `per_paper` and `count` under `edges` in `arxiv.meta.json`; the demo expands them into `MapEdge`s when it loads the file, writing each edge's reason from the words the two titles share (`demo/corpora/edges.ts`), so the file does not carry that text twice. `edges.json` carries the embeddings' fingerprint, and `export` refuses an `edges.json` from different embeddings — re-run `edges` after `embed`. Without an `edges.json`, `export` writes a spec with no edges.
+`export` writes the edges into `arxiv.json` as compact `[sourceIndex, targetIndex, weightPercent]` triples (indexes into `nodes`, the lower first) and records `floor`, `per_paper` and `count` under `edges` in `arxiv.meta.json`; the demo expands them into `MapEdge`s when it loads the file, writing each edge's reason from the words the two titles share (`demo/corpora/edges.ts`), so the file does not carry that text twice. `edges.json` carries the embeddings' fingerprint, and `export` refuses an `edges.json` from different embeddings — re-run `edges` after `embed`. Without an `edges.json`, `export` writes a spec with no edges. The same goes for two other fields every node could carry: territories ship without `members` (each node already names its territory) and nodes without `meta` (the year and the abstract-page url both follow from the arXiv id), and the demo rebuilds both on load (`demo/corpora/compact.ts`), which keeps the file about 30% smaller. `export` refuses a paper whose publication year is not the year its id gives, so the rebuilt year is never wrong.
 
 ## Source, license, and attribution
 
@@ -44,7 +44,7 @@ Each stage caches its output under `.cache/` (git-ignored), so a failed or inter
 | `project` (UMAP) | 32.3 s, peak RSS ~391 MB |
 | `export` | 0.3 s |
 | **Total wall time, fetch through export** | **~15 m 54 s** |
-| Output | `arxiv.json` 1.79 MB (8,000 nodes, 38 territories); `arxiv.meta.json` 1.2 KB |
+| Output | `arxiv.json` 1.38 MB (8,000 nodes, 38 territories); `arxiv.meta.json` 1.2 KB |
 
 38 of the 40 `cs.*` categories in `categories.py` ended up as territories — `cs.NA` and `cs.SY` genuinely returned zero papers for the whole count query on this run, cross-listed papers included, not just their own primary category (both are commonly cross-listed rather than primary elsewhere: `math.NA` and `eess.SY`), which is expected, not a bug — `sample.py` gives a `total == 0` category a quota of `0` rather than forcing the floor onto an empty category.
 

@@ -554,7 +554,13 @@ def test_package_root_raises_when_no_pyproject_toml_is_found_above(tmp_path: Pat
 def _seed_cache(cache_directory: Path, embeddings: np.ndarray, categories: list[str]) -> None:
     """A fetch + embed + project cache written by hand: one paper per row, fingerprints agreeing."""
     papers = [
-        {"id": f"p{index}", "title": f"Paper {index}", "abstract": "an abstract", "category": category, "year": 2026}
+        {
+            "id": f"2610.{index:05d}",
+            "title": f"Paper {index}",
+            "abstract": "an abstract",
+            "category": category,
+            "year": 2026,
+        }
         for index, category in enumerate(categories)
     ]
     payload_text = json.dumps({"n": len(papers), "floor": 0, "fetched_at": "2026-10-25", "papers": papers})

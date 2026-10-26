@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { withDerivedMembers } from "../../demo/corpora/compact";
 import { type MapSpec, validateSpec } from "../../src/shared/spec";
 import {
   deriveTerritoryGroups,
@@ -68,9 +69,10 @@ async function readSpec(path: string, io: GroupNamesIo): Promise<{ spec?: MapSpe
     if (declaresGrouping(body)) {
       return { problem: `${path} declares group or parent: its groups are supplied, there is nothing to name` };
     }
-    // Naming never reads edges, and a corpus may ship them compact (arXiv does).
+    // Naming never reads edges, and a corpus may ship them compact (arXiv does);
+    // arXiv also ships its territories without members (demo/corpora/compact.ts).
     const { edges: _edges, ...rest } = body as Record<string, unknown>;
-    return { spec: validateSpec(rest) };
+    return { spec: validateSpec(withDerivedMembers(rest)) };
   } catch (error) {
     return { problem: `Cannot read ${path}: ${messageOf(error)}` };
   }

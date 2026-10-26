@@ -7,8 +7,8 @@ import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen } from "../../src/viewport/viewport";
 import arxiv from "./arxiv.json";
+import { withExpandedArxiv } from "./compact";
 import { constellationsSpec } from "./constellations";
-import { withExpandedEdges } from "./edges";
 import { elementsSpec } from "./elements";
 
 const BOXES: Array<[number, number]> = [
@@ -38,7 +38,7 @@ function cutNames(spec: MapSpec, width: number, height: number): string[] {
 
 describe("the fitted first view cuts no name", () => {
   const corpora: Array<[string, unknown]> = [
-    ["arXiv", withExpandedEdges(arxiv)],
+    ["arXiv", withExpandedArxiv(arxiv)],
     ["elements", elementsSpec],
     ["constellations", constellationsSpec],
   ];

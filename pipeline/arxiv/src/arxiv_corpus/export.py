@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
@@ -21,6 +22,29 @@ from arxiv_corpus.fetch import Paper
 
 ATTRIBUTION = "Thank you to arXiv for use of its open access interoperability."
 LICENSE_NOTE = "Metadata from arXiv, CC0 1.0; no full text; no author names."
+
+# `YYMM.NNNN` (2007-2014) or `YYMM.NNNNN` (2015 on).
+_NEW_STYLE_ID = re.compile(r"(\d{2})\d{2}\.\d{4,5}")
+# `archive[.XX]/YYMMNNN`, 1991-2007.
+_OLD_STYLE_ID = re.compile(r"[a-z-]+(?:\.[A-Z]{2})?/(\d{2})\d{5}")
+# Old-style ids started in 1991, so a two-digit year from 91 up is the 1900s.
+_FIRST_OLD_STYLE_YEAR = 91
+
+
+def year_of_id(paper_id: str) -> int | None:
+    """The year an arXiv id was registered, read from its `YY` digits; None for anything else.
+
+    Mirrors `yearOfArxivId` in `demo/corpora/compact.ts`, which rebuilds each node's year from
+    its id: the payload leaves the year out, so the two must read every id the same way.
+    """
+    new_style = _NEW_STYLE_ID.fullmatch(paper_id)
+    if new_style:
+        return 2000 + int(new_style.group(1))
+    old_style = _OLD_STYLE_ID.fullmatch(paper_id)
+    if old_style is None:
+        return None
+    two_digits = int(old_style.group(1))
+    return 1900 + two_digits if two_digits >= _FIRST_OLD_STYLE_YEAR else 2000 + two_digits
 
 
 def clean_title(raw: str) -> str:
@@ -39,15 +63,23 @@ def build_spec(
 ) -> dict[str, object]:
     """Build a corpus-map `MapSpec` from `papers` and their parallel `coordinates`.
 
-    One territory per category present among `papers` (sorted by code); its `members` are
-    the ids of that category's papers, in the same order they appear in `papers`, and its
-    `centroid` is the mean of their (unrounded) `coordinates` rows, rounded to 3 decimals. One node
-    per paper, in `papers` order, with `x`/`y` each rounded to 3 decimals and `meta` holding
-    only `year` and the arXiv abstract-page `url` -- never an author. `edges`, when given, are
-    `(low, high, weight)` node-index triples, written as lists.
+    One territory per category present among `papers` (sorted by code), whose `centroid` is
+    the mean of its papers' (unrounded) `coordinates` rows, rounded to 3 decimals. One node per
+    paper, in `papers` order, with `x`/`y` each rounded to 3 decimals -- never an author.
+    `edges`, when given, are `(low, high, weight)` node-index triples, written as lists.
+
+    The payload is compact: territories carry no `members` (each node names its territory)
+    and nodes carry no `meta` (the year and the abstract-page url follow from the id). The
+    demo rebuilds both on load (`demo/corpora/compact.ts`), so a paper whose `year` is not
+    the one its id gives is refused here, before it could be shown with the wrong year.
     """
     if len(papers) != len(coordinates):
         raise ValueError(f"papers and coordinates must be the same length, got {len(papers)} and {len(coordinates)}")
+    for paper in papers:
+        if year_of_id(paper.id) != paper.year:
+            raise ValueError(
+                f"paper {paper.id}: year {paper.year} is not the year its id gives ({year_of_id(paper.id)})"
+            )
 
     indices_by_territory: dict[str, list[int]] = {}
     nodes: list[dict[str, object]] = []
@@ -61,23 +93,17 @@ def build_spec(
                 "x": round(float(coordinates[index, 0]), 3),
                 "y": round(float(coordinates[index, 1]), 3),
                 "territory": paper.category,
-                "meta": {
-                    "year": paper.year,
-                    "url": f"https://arxiv.org/abs/{paper.id}",
-                },
             }
         )
 
     territories: list[dict[str, object]] = []
     for code in sorted(indices_by_territory):
         indices = indices_by_territory[code]
-        member_ids = [papers[index].id for index in indices]
         centroid = coordinates[indices].mean(axis=0)
         territories.append(
             {
                 "id": code,
                 "name": name_of(code),
-                "members": member_ids,
                 "centroid": [round(float(centroid[0]), 3), round(float(centroid[1]), 3)],
             }
         )
@@ -91,20 +117,20 @@ def build_spec(
 def check_spec(spec: dict[str, object]) -> None:
     """Sanity-check `spec` before it is written, raising `ValueError` on the first problem.
 
-    Checked: no duplicate node id, every node's territory names a known territory, that
-    territory in turn lists the node among its own members (and vice versa -- every
-    territory member resolves to a node that claims it), and every node coordinate is
-    finite. The two membership directions mirror the library's own `validateSpec`, which
-    requires both: the painter walks `members`, the tree walks `territory`, and they must
-    agree on which nodes a territory holds.
+    Checked: the payload is compact (no territory `members`, no node `meta`: the demo keeps
+    either as it finds it instead of deriving it), no duplicate node id, every node's
+    territory names a known territory, every territory is named by at least one node (the
+    demo derives its `members` from those nodes, and the library's `validateSpec` refuses an
+    empty list), and every node coordinate is finite.
     """
     territories = cast("list[dict[str, object]]", spec["territories"])
     nodes = cast("list[dict[str, object]]", spec["nodes"])
 
-    members_by_territory = {
-        cast(str, territory["id"]): cast("list[str]", territory["members"]) for territory in territories
-    }
-    territory_ids = set(members_by_territory)
+    for territory in territories:
+        if "members" in territory:
+            raise ValueError(f"territory {territory['id']}: carries members, which the demo derives")
+    territory_ids = {cast(str, territory["id"]) for territory in territories}
+    named_territories: set[str] = set()
 
     node_ids: set[str] = set()
     for node in nodes:
@@ -113,19 +139,19 @@ def check_spec(spec: dict[str, object]) -> None:
             raise ValueError(f"duplicate node id: {node_id}")
         node_ids.add(node_id)
 
-        territory = cast(str, node["territory"])
-        if territory not in territory_ids:
-            raise ValueError(f"node {node_id}: unknown territory {territory!r}")
-        if node_id not in members_by_territory[territory]:
-            raise ValueError(f"node {node_id}: territory {territory!r} does not list it among its members")
+        if "meta" in node:
+            raise ValueError(f"node {node_id}: carries meta, which the demo derives")
+        node_territory = cast(str, node["territory"])
+        if node_territory not in territory_ids:
+            raise ValueError(f"node {node_id}: unknown territory {node_territory!r}")
+        named_territories.add(node_territory)
 
         if not _is_finite(node["x"]) or not _is_finite(node["y"]):
             raise ValueError(f"node {node_id}: non-finite coordinate ({node['x']!r}, {node['y']!r})")
 
-    for territory_id, members in members_by_territory.items():
-        for member in members:
-            if member not in node_ids:
-                raise ValueError(f"territory {territory_id}: member {member!r} does not resolve")
+    unnamed = sorted(territory_ids - named_territories)
+    if unnamed:
+        raise ValueError(f"territory {unnamed[0]}: no node names it")
 
     for edge in cast("list[object]", spec.get("edges", [])):
         _check_edge(edge, len(nodes))

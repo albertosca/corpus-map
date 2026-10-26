@@ -15,14 +15,14 @@ import { staleGroups } from "../../tools/group-names/stale";
 import groupNamesJson from "./arxiv.groups.json";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
-// typed off the ~1.8 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
+// typed off the ~1.4 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
 // every one of the 8,000 nodes.
 import rawSpecJson from "./arxiv.json";
 import metaJson from "./arxiv.meta.json";
-import { withExpandedEdges } from "./edges";
+import { withExpandedArxiv } from "./compact";
 import { arxivSpec } from "./index";
 
-const rawSpec: unknown = withExpandedEdges(rawSpecJson);
+const rawSpec: unknown = withExpandedArxiv(rawSpecJson);
 /** What the demo loads: the corpus with Claude's group names applied (spec slice F §4). */
 const shippedSpec: MapSpec = arxivSpec(rawSpecJson);
 const meta: Record<string, unknown> = metaJson;

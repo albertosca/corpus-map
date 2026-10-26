@@ -1,6 +1,7 @@
 import type { MapNode, RelatedItem } from "corpus-map";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef } from "react";
+import { ARXIV_ABS_URL_PREFIX } from "../corpora/compact";
 import { token } from "../tokens";
 
 export interface DrawerProps {
@@ -181,7 +182,6 @@ interface ArxivMeta {
 }
 
 /** The only prefix an arXiv abstract-page URL is ever allowed to carry — everything else renders no link. */
-const ARXIV_ABS_URL_PREFIX = "https://arxiv.org/abs/";
 
 /** "Published <year>", the territory's full name, and the "Open on arXiv" link — the arXiv-specific layout. */
 function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: string | null }): ReactElement {
