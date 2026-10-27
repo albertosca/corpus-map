@@ -15,10 +15,11 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -29,6 +30,7 @@ import numpy as np
 from arxiv_corpus import blind, cluster, describe, naming
 from arxiv_corpus.categories import CATEGORIES, name_of
 from arxiv_corpus.claude import NAMING_MODEL, claude_ask
+from arxiv_corpus.claude_code import subscription_ask
 from arxiv_corpus.edges import EDGE_FLOOR, EDGES_PER_PAPER, cross_category_edges
 from arxiv_corpus.embed import BgeEmbedder, Embedder
 from arxiv_corpus.export import ATTRIBUTION, LICENSE_NOTE, Clustering, build_spec, clean_title, write_outputs
@@ -69,8 +71,8 @@ class Dependencies:
 
     `embedder` and `projector` are zero-argument factories, not instances: the real ones
     (`BgeEmbedder`, `UmapProjector`) load model weights at construction time, so they are
-    built only by the stage that actually needs them. `ask` is one too: the real one builds the
-    Claude client, which needs the API key only `name` and `check` use.
+    built only by the stage that actually needs them. `ask` is one too: the real one picks the
+    naming backend (`naming_backend`), which only `name` and `check` use.
     """
 
     client: Client
@@ -82,6 +84,20 @@ class Dependencies:
     ask: Callable[[], naming.Ask]
     naming_model: str
     cluster_settings: ClusterSettings
+
+
+NAMING_BACKENDS: dict[str, Callable[[str], naming.Ask]] = {"api": claude_ask, "subscription": subscription_ask}
+
+
+def naming_backend(environment: Mapping[str, str]) -> Callable[[str], naming.Ask]:
+    """`ARXIV_NAMING_BACKEND` picks how `name` and `check` reach Claude: `subscription` (the default, `claude -p`
+    on the owner's Claude Code login) or `api` (the SDK, billed to ANTHROPIC_API_KEY)."""
+    chosen = environment.get("ARXIV_NAMING_BACKEND", "subscription")
+    if chosen not in NAMING_BACKENDS:
+        raise ValueError(
+            f"unknown ARXIV_NAMING_BACKEND {chosen!r}; expected one of {', '.join(sorted(NAMING_BACKENDS))}"
+        )
+    return NAMING_BACKENDS[chosen]
 
 
 def make_dependencies(cache_directory: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
@@ -99,7 +115,7 @@ def make_dependencies(cache_directory: Path) -> Dependencies:  # pragma: no cove
         today=date.today,
         model_name=BgeEmbedder.MODEL,
         umap_params=UmapProjector.PARAMS,
-        ask=lambda: claude_ask(NAMING_MODEL),
+        ask=lambda: naming_backend(os.environ)(NAMING_MODEL),
         naming_model=NAMING_MODEL,
         cluster_settings=REAL_CLUSTER_SETTINGS,
     )

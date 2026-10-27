@@ -1073,3 +1073,21 @@ def test_make_dependencies_names_with_opus_and_the_real_settings(tmp_path: Path)
 
 def test_the_stages_run_in_pipeline_order() -> None:
     assert cli.STAGES == ("fetch", "embed", "project", "edges", "cluster", "name", "check", "export", "all")
+
+
+def test_the_naming_backend_defaults_to_the_subscription() -> None:
+    from arxiv_corpus import claude_code
+
+    assert cli.naming_backend({}) is claude_code.subscription_ask
+    assert cli.naming_backend({"ARXIV_NAMING_BACKEND": "subscription"}) is claude_code.subscription_ask
+
+
+def test_the_api_naming_backend_is_the_sdk_call() -> None:
+    from arxiv_corpus import claude
+
+    assert cli.naming_backend({"ARXIV_NAMING_BACKEND": "api"}) is claude.claude_ask
+
+
+def test_an_unknown_naming_backend_is_refused_by_name() -> None:
+    with pytest.raises(ValueError, match=r"'cli'.*api, subscription"):
+        cli.naming_backend({"ARXIV_NAMING_BACKEND": "cli"})
