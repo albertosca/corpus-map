@@ -84,6 +84,29 @@ describe("Drawer (showcase Task 6)", () => {
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
+  it("for arXiv, shows the paper's arXiv category with its code right under the year", () => {
+    const node: MapNode = {
+      ...ARXIV_NODE,
+      meta: {
+        year: 2026,
+        url: "https://arxiv.org/abs/2609.26779",
+        category: { id: "cs.AI", name: "Artificial Intelligence" },
+      },
+    };
+    renderWithReturnTarget(node, { isArxiv: true, territoryName: "Agents and Planning" });
+    const year = screen.getByText("Published 2026");
+    expect(year.nextElementSibling?.textContent).toBe("arXiv category: Artificial Intelligence (cs.AI)");
+  });
+
+  it.each([undefined, { id: "cs.AI" }, "cs.AI"])(
+    "for arXiv, shows no category line for a category of %j",
+    (category) => {
+      const node: MapNode = { ...ARXIV_NODE, meta: { year: 2026, url: "https://arxiv.org/abs/2609.26779", category } };
+      renderWithReturnTarget(node, { isArxiv: true, territoryName: "Agents and Planning" });
+      expect(screen.queryByText(/^arXiv category:/)).toBeNull();
+    },
+  );
+
   it("shows a non-arXiv node's meta fields as a definition list, no arXiv link", () => {
     renderWithReturnTarget(ELEMENT_NODE, { isArxiv: false, territoryName: "Nonmetal" });
     expect(screen.queryByRole("link", { name: "Open on arXiv" })).toBeNull();

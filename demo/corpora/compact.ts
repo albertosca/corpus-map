@@ -59,19 +59,47 @@ export function withDerivedMembers(body: unknown): unknown {
   return { ...(body as Record<string, unknown>), territories };
 }
 
+/** A paper's arXiv category, as the card and the drawer show it. */
+export interface ArxivCategory {
+  id: string;
+  name: string;
+}
+
+/** The body's `categories` table, keeping only well-formed `{ id, name }` entries in place. */
+function categoryTable(categories: unknown): Array<ArxivCategory | undefined> {
+  if (!Array.isArray(categories)) return [];
+  return categories.map((entry: unknown) =>
+    isRecord(entry) && typeof entry.id === "string" && typeof entry.name === "string"
+      ? { id: entry.id, name: entry.name }
+      : undefined,
+  );
+}
+
 /**
  * `body` with each node that ships without `meta` given `{ year, url }` from
- * its arXiv id (`yearOfArxivId`, `ARXIV_ABS_URL_PREFIX`); a node whose id is
- * not arXiv's gets none.
+ * its arXiv id (`yearOfArxivId`, `ARXIV_ABS_URL_PREFIX`) and `category` from
+ * its `category` index into the body's `categories` table; a node whose id is
+ * not arXiv's gets no year or url, and an index that names no table entry
+ * gets no category. The index and the table are stripped either way, since
+ * the spec has no place for them.
  */
 export function withArxivMeta(body: unknown): unknown {
   if (!isRecord(body) || !Array.isArray(body.nodes)) return body;
+  const table = categoryTable(body.categories);
   const nodes = body.nodes.map((node: unknown) => {
-    if (!isRecord(node) || "meta" in node || typeof node.id !== "string") return node;
+    if (!isRecord(node)) return node;
+    const { category: index, ...rest } = node;
+    if ("meta" in node || typeof node.id !== "string") return "category" in node ? rest : node;
     const year = yearOfArxivId(node.id);
-    return year === undefined ? node : { ...node, meta: { year, url: `${ARXIV_ABS_URL_PREFIX}${node.id}` } };
+    const category = typeof index === "number" && Number.isInteger(index) ? table[index] : undefined;
+    const meta = {
+      ...(year === undefined ? {} : { year, url: `${ARXIV_ABS_URL_PREFIX}${node.id}` }),
+      ...(category === undefined ? {} : { category }),
+    };
+    return Object.keys(meta).length === 0 ? rest : { ...rest, meta };
   });
-  return { ...body, nodes };
+  const { categories: _categories, ...withoutTable } = body;
+  return { ...withoutTable, nodes };
 }
 
 /**

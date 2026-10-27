@@ -2,6 +2,7 @@ import type { CardContext, CardSizeOptions, MapNode, MapSpec } from "corpus-map"
 import { cardSizeFor } from "corpus-map";
 import type { CSSProperties, ReactNode } from "react";
 import type { CorpusId } from "./corpora";
+import type { ArxivCategory } from "./corpora/compact";
 import type { CardSize } from "./corpora/display";
 
 interface ElementMeta {
@@ -16,6 +17,7 @@ interface StarMeta {
 
 interface ArxivMeta {
   year: number;
+  category?: ArxivCategory;
 }
 
 /** The text one corpus's card shows: its title, and the lines `cardSizeFor` sizes the frame for. */
@@ -97,12 +99,18 @@ function renderStarCard(node: MapNode, context: CardContext) {
   );
 }
 
+// The year and the category share the card's one detail line; a long
+// category name ends in an ellipsis instead of wrapping past the frame.
+const detailLineStyle: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+
 function renderArxivCard(node: MapNode, context: CardContext) {
   const meta = node.meta as ArxivMeta | undefined;
   return (
     <div style={frameStyle}>
       <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines, context)}>{node.label}</strong>
-      {meta?.year ? <div>{meta.year}</div> : null}
+      {meta?.year ? (
+        <div style={detailLineStyle}>{meta.category ? `${meta.year} · ${meta.category.name}` : meta.year}</div>
+      ) : null}
     </div>
   );
 }

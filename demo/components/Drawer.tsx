@@ -1,7 +1,7 @@
 import type { MapNode, RelatedItem } from "corpus-map";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 import { useEffect, useEffectEvent, useId, useRef } from "react";
-import { ARXIV_ABS_URL_PREFIX } from "../corpora/compact";
+import { ARXIV_ABS_URL_PREFIX, type ArxivCategory } from "../corpora/compact";
 import { token } from "../tokens";
 
 export interface DrawerProps {
@@ -179,6 +179,7 @@ function GenericMeta({ meta }: { meta: unknown }): ReactElement | null {
 interface ArxivMeta {
   year?: number;
   url?: string;
+  category?: ArxivCategory;
 }
 
 /** The only prefix an arXiv abstract-page URL is ever allowed to carry — everything else renders no link. */
@@ -187,6 +188,10 @@ interface ArxivMeta {
 function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: string | null }): ReactElement {
   const meta = node.meta as ArxivMeta | undefined;
   const year = typeof meta?.year === "number" ? meta.year : undefined;
+  // `meta` is never validated upstream (see the url guard below), so the
+  // category shows only when both of its fields really are text.
+  const category =
+    typeof meta?.category?.id === "string" && typeof meta.category.name === "string" ? meta.category : undefined;
   // Type-checked (`typeof === "string"`) is not enough on its own: `meta`
   // ultimately comes from a `MapSpec`, which `validateSpec` never reads
   // `meta` from (`src/shared/spec.ts`'s own doc comment says so), so
@@ -199,6 +204,11 @@ function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: 
   return (
     <>
       {year !== undefined ? <p style={metaLineStyle}>Published {year}</p> : null}
+      {category ? (
+        <p style={metaLineStyle}>
+          arXiv category: {category.name} ({category.id})
+        </p>
+      ) : null}
       {territoryName ? <p style={metaLineStyle}>{territoryName}</p> : null}
       {url ? (
         <p style={metaLineStyle}>

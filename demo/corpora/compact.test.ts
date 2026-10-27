@@ -85,6 +85,52 @@ describe("withArxivMeta", () => {
   it.each([null, 7, { territories: [] }])("returns %j as it was", (body) => {
     expect(withArxivMeta(body)).toBe(body);
   });
+
+  const categorised = {
+    ...slim,
+    categories: [
+      { id: "cs.AI", name: "Artificial Intelligence" },
+      { id: "cs.CL", name: "Computation and Language" },
+    ],
+    nodes: [
+      { ...slim.nodes[0], category: 1 },
+      { ...slim.nodes[1], category: 0 },
+      { ...slim.nodes[2], category: 1 },
+    ],
+  };
+
+  it("expands each node's category index into meta.category, and strips the index and the table", () => {
+    const expanded = withArxivMeta(categorised) as { nodes: Array<Record<string, unknown>> };
+    expect(expanded.nodes[0]?.meta).toEqual({
+      year: 2026,
+      url: `${ARXIV_ABS_URL_PREFIX}2609.00002`,
+      category: { id: "cs.CL", name: "Computation and Language" },
+    });
+    expect(expanded.nodes[1]?.meta).toMatchObject({ category: { id: "cs.AI", name: "Artificial Intelligence" } });
+    for (const node of expanded.nodes) expect(node).not.toHaveProperty("category");
+    expect(expanded).not.toHaveProperty("categories");
+  });
+
+  it.each([2, -1, 0.5, "0", null])(
+    "gives a node whose category is %j no meta.category, and the spec still loads",
+    (index) => {
+      const body = {
+        ...categorised,
+        nodes: [{ ...categorised.nodes[0], category: index }, ...categorised.nodes.slice(1)],
+      };
+      const expanded = withArxivMeta(body) as { nodes: Array<Record<string, unknown>> };
+      expect(expanded.nodes[0]?.meta).toEqual({ year: 2026, url: `${ARXIV_ABS_URL_PREFIX}2609.00002` });
+      expect(expanded.nodes[0]).not.toHaveProperty("category");
+      expect(() => validateSpec(withExpandedArxiv(body))).not.toThrow();
+    },
+  );
+
+  it("keeps a node's own meta when the body has categories, still stripping its index", () => {
+    const body = { ...categorised, nodes: [{ ...categorised.nodes[0], meta: { year: 1999 } }] };
+    const expanded = withArxivMeta(body) as { nodes: Array<Record<string, unknown>> };
+    expect(expanded.nodes[0]?.meta).toEqual({ year: 1999 });
+    expect(expanded.nodes[0]).not.toHaveProperty("category");
+  });
 });
 
 describe("withExpandedArxiv", () => {

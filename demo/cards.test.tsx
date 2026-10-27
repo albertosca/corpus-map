@@ -61,6 +61,31 @@ describe("CARDS", () => {
   });
 });
 
+describe("the arXiv card's detail line", () => {
+  const paper: MapNode = { ...SAMPLE_NODES.arxiv, meta: { year: 2026 } };
+  const detailOf = (node: MapNode) =>
+    render(CARDS.arxiv(node, { badgeCount: 0 })).container.querySelector("strong + div") as HTMLElement;
+
+  it("shows the year and the arXiv category on one ellipsised line", () => {
+    const detail = detailOf({
+      ...paper,
+      meta: { year: 2026, category: { id: "cs.AI", name: "Artificial Intelligence" } },
+    });
+    expect(detail.textContent).toBe("2026 · Artificial Intelligence");
+    expect(detail.style.whiteSpace).toBe("nowrap");
+    expect(detail.style.overflow).toBe("hidden");
+    expect(detail.style.textOverflow).toBe("ellipsis");
+  });
+
+  it("shows only the year when the paper has no category", () => {
+    expect(detailOf(paper).textContent).toBe("2026");
+  });
+
+  it("still sizes the card for one line under the title", () => {
+    expect(CARD_TEXT.arxiv.options.extraLines).toBe(1);
+  });
+});
+
 describe("cardSizeOf", () => {
   it.each<[CorpusId, MapSpec]>([
     ["arxiv", arxivSpec(arxivJson)],
