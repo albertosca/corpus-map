@@ -10,6 +10,8 @@ dependencies = ["numpy>=2", "httpx>=0.27,<1"]
 [project.optional-dependencies]
 # scikit-learn is declared, not just inherited through umap-learn: the cluster stage uses it directly.
 model = ["sentence-transformers>=6,<7", "umap-learn>=0.5.12,<0.6", "scikit-learn>=1.5,<2"]
+# Only the name and check stages call Claude; the tests use a fake client and never install this.
+naming = ["anthropic>=2.3,<3"]
 
 [project.scripts]
 arxiv-corpus = "arxiv_corpus.cli:main"
@@ -34,7 +36,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "PTH", "RUF"]
 strict = true
 mypy_path = "src"
 [[tool.mypy.overrides]]
-module = ["sentence_transformers.*", "umap.*", "scipy.*", "sklearn.*"]
+module = ["sentence_transformers.*", "umap.*", "scipy.*", "sklearn.*", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
