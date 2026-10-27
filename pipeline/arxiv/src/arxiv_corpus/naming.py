@@ -64,13 +64,16 @@ class Feedback:
     lost: list[tuple[str, str]]
 
 
-def names_schema(ids: Sequence[str]) -> dict[str, Any]:
+def names_schema(ids: Sequence[str], maximum_length: int) -> dict[str, Any]:
+    """The answer's shape, the length limit included: the prompt alone does not hold Claude to it."""
     return {
         "type": "object",
         "properties": {
             "names": {
                 "type": "object",
-                "properties": {identifier: {"type": "string"} for identifier in ids},
+                "properties": {
+                    identifier: {"type": "string", "minLength": 1, "maxLength": maximum_length} for identifier in ids
+                },
                 "required": list(ids),
                 "additionalProperties": False,
             }
@@ -158,6 +161,6 @@ def request_names(
     feedback: Mapping[str, Feedback] | None = None,
 ) -> tuple[dict[str, str], Answer]:
     ids = list(entries)
-    answer = ask(naming_prompt(level, entries, taken, feedback), names_schema(ids))
+    answer = ask(naming_prompt(level, entries, taken, feedback), names_schema(ids, _MAXIMUM_LENGTH[level]))
     names = parse_names(answer.text, ids, _MAXIMUM_LENGTH[level], (taken or {}).values())
     return names, answer

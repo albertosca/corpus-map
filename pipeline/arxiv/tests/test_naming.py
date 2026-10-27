@@ -50,11 +50,17 @@ def test_a_renaming_prompt_lists_taken_names_and_each_failed_score_with_its_lost
 
 
 def test_names_schema_requires_exactly_the_ids() -> None:
-    schema = naming.names_schema(["a", "b"])
+    schema = naming.names_schema(["a", "b"], 32)
     names = schema["properties"]["names"]
     assert names["required"] == ["a", "b"]
     assert names["additionalProperties"] is False
     assert set(names["properties"]) == {"a", "b"}
+
+
+def test_names_schema_holds_every_name_to_the_level_length() -> None:
+    schema = naming.names_schema(["a", "b"], 24)
+    properties = schema["properties"]["names"]["properties"]
+    assert properties == {identifier: {"type": "string", "minLength": 1, "maxLength": 24} for identifier in ("a", "b")}
 
 
 def test_parse_names_returns_the_names_by_id() -> None:
@@ -106,7 +112,7 @@ def test_request_names_asks_with_the_schema_and_parses_the_answer() -> None:
     assert names == {"g1-l1": "Tactile Grasping"}
     assert answer.input_tokens == 10
     prompt, schema = calls[0]
-    assert schema == naming.names_schema(["g1-l1"])
+    assert schema == naming.names_schema(["g1-l1"], naming.LEAF_NAME_MAXIMUM_LENGTH)
     assert _input_of(prompt)["taken"] == ["Legged Robots"]
 
 
