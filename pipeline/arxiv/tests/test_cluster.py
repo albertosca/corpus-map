@@ -74,3 +74,8 @@ def test_the_real_ranges_are_the_spec_values() -> None:
     assert range(18, 27) == cluster.LEAF_COUNTS
     assert range(5, 10) == cluster.GROUP_COUNTS
     assert cluster.NEIGHBOURS == 10
+
+
+def test_contiguity_of_a_corpus_smaller_than_the_neighbour_count_uses_every_other_paper() -> None:
+    coordinates = np.array([[0.0, 0.0], [0.0, 1.0], [9.0, 9.0]])
+    assert cluster.contiguity(coordinates, ["a", "a", "b"], neighbours=10) == pytest.approx(2 / 6)

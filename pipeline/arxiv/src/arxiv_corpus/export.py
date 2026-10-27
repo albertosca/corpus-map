@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -56,59 +57,100 @@ def clean_title(raw: str) -> str:
     return " ".join(raw.split())
 
 
+@dataclass(frozen=True)
+class Clustering:
+    """Each paper's leaf (parallel to the papers), each leaf's group, and the names of both."""
+
+    leaf_of: Sequence[str]
+    group_of: Mapping[str, str]
+    leaf_names: Mapping[str, str]
+    group_names: Mapping[str, str]
+
+
+def _centroid(coordinates: npt.NDArray[np.float64], indices: Sequence[int]) -> list[float]:
+    centroid = coordinates[list(indices)].mean(axis=0)
+    return [round(float(centroid[0]), 3), round(float(centroid[1]), 3)]
+
+
 def build_spec(
     papers: Sequence[Paper],
     coordinates: npt.NDArray[np.float64],
+    clustering: Clustering,
     edges: Sequence[tuple[int, int, int]] | None = None,
 ) -> dict[str, object]:
-    """Build a corpus-map `MapSpec` from `papers` and their parallel `coordinates`.
+    """Build a corpus-map `MapSpec` from `papers`, their parallel `coordinates` and their clusters.
 
-    One territory per category present among `papers` (sorted by code), whose `centroid` is
-    the mean of its papers' (unrounded) `coordinates` rows, rounded to 3 decimals. One node per
-    paper, in `papers` order, with `x`/`y` each rounded to 3 decimals -- never an author.
-    `edges`, when given, are `(low, high, weight)` node-index triples, written as lists.
+    Territories are the clusters: each group (no `parent`) followed by its leaves (`parent` = the
+    group), groups and leaves in id order. A centroid is the mean of its papers' (unrounded)
+    `coordinates` rows, rounded to 3 decimals -- a group's over all its papers, not over its leaves'
+    centroids. One node per paper, in `papers` order, naming its leaf, with `x`/`y` rounded to 3
+    decimals and `category` the index of its arXiv code in the top-level `categories` table (the
+    codes present, sorted, each with its name) -- never an author. `edges`, when given, are
+    `(low, high, weight)` node-index triples, written as lists.
 
-    The payload is compact: territories carry no `members` (each node names its territory)
-    and nodes carry no `meta` (the year and the abstract-page url follow from the id). The
-    demo rebuilds both on load (`demo/corpora/compact.ts`), so a paper whose `year` is not
-    the one its id gives is refused here, before it could be shown with the wrong year.
+    The payload is compact: territories carry no `members` (each node names its leaf, and a group's
+    members are its leaves') and nodes carry no `meta` (the year and the abstract-page url follow
+    from the id, the category from the table). The demo rebuilds both on load
+    (`demo/corpora/compact.ts`), so a paper whose `year` is not the one its id gives is refused
+    here, before it could be shown with the wrong year.
     """
     if len(papers) != len(coordinates):
         raise ValueError(f"papers and coordinates must be the same length, got {len(papers)} and {len(coordinates)}")
+    if len(clustering.leaf_of) != len(papers):
+        raise ValueError(f"the clustering covers {len(clustering.leaf_of)} papers, not {len(papers)}")
+    ungrouped = sorted(set(clustering.leaf_of) - set(clustering.group_of))
+    if ungrouped:
+        raise ValueError(f"leaf {ungrouped[0]} has no group")
     for paper in papers:
         if year_of_id(paper.id) != paper.year:
             raise ValueError(
                 f"paper {paper.id}: year {paper.year} is not the year its id gives ({year_of_id(paper.id)})"
             )
 
-    indices_by_territory: dict[str, list[int]] = {}
+    codes = sorted({paper.category for paper in papers})
+    category_index = {code: index for index, code in enumerate(codes)}
+    indices_by_leaf: dict[str, list[int]] = {}
     nodes: list[dict[str, object]] = []
-
     for index, paper in enumerate(papers):
-        indices_by_territory.setdefault(paper.category, []).append(index)
+        leaf = clustering.leaf_of[index]
+        indices_by_leaf.setdefault(leaf, []).append(index)
         nodes.append(
             {
                 "id": paper.id,
                 "label": clean_title(paper.title),
                 "x": round(float(coordinates[index, 0]), 3),
                 "y": round(float(coordinates[index, 1]), 3),
-                "territory": paper.category,
+                "territory": leaf,
+                "category": category_index[paper.category],
             }
         )
 
+    leaves_by_group: dict[str, list[str]] = {}
+    for leaf in sorted(indices_by_leaf):
+        leaves_by_group.setdefault(clustering.group_of[leaf], []).append(leaf)
     territories: list[dict[str, object]] = []
-    for code in sorted(indices_by_territory):
-        indices = indices_by_territory[code]
-        centroid = coordinates[indices].mean(axis=0)
+    for group in sorted(leaves_by_group):
+        leaves = leaves_by_group[group]
+        group_indices = sorted(index for leaf in leaves for index in indices_by_leaf[leaf])
         territories.append(
+            {"id": group, "name": clustering.group_names[group], "centroid": _centroid(coordinates, group_indices)}
+        )
+        territories.extend(
             {
-                "id": code,
-                "name": name_of(code),
-                "centroid": [round(float(centroid[0]), 3), round(float(centroid[1]), 3)],
+                "id": leaf,
+                "name": clustering.leaf_names[leaf],
+                "centroid": _centroid(coordinates, indices_by_leaf[leaf]),
+                "parent": group,
             }
+            for leaf in leaves
         )
 
-    spec: dict[str, object] = {"version": "1", "territories": territories, "nodes": nodes}
+    spec: dict[str, object] = {
+        "version": "1",
+        "categories": [{"id": code, "name": name_of(code)} for code in codes],
+        "territories": territories,
+        "nodes": nodes,
+    }
     if edges is not None:
         spec["edges"] = [list(edge) for edge in edges]
     return spec
@@ -118,18 +160,22 @@ def check_spec(spec: dict[str, object]) -> None:
     """Sanity-check `spec` before it is written, raising `ValueError` on the first problem.
 
     Checked: the payload is compact (no territory `members`, no node `meta`: the demo keeps
-    either as it finds it instead of deriving it), no duplicate node id, every node's
-    territory names a known territory, every territory is named by at least one node (the
-    demo derives its `members` from those nodes, and the library's `validateSpec` refuses an
-    empty list), and every node coordinate is finite.
+    either as it finds it instead of deriving it); parents are territories with no parent of
+    their own (two levels); no duplicate node id; every node names a known territory that is not
+    a parent; every leaf is named by at least one node (the demo derives its `members` from those
+    nodes, and the library's `validateSpec` refuses an empty leaf), while a parent is named by
+    none; every node coordinate is finite; every `categories` entry has a non-empty id and name,
+    and every node's `category` is an integer index into that table.
     """
     territories = cast("list[dict[str, object]]", spec["territories"])
     nodes = cast("list[dict[str, object]]", spec["nodes"])
+    category_count = _check_categories(spec.get("categories"))
 
     for territory in territories:
         if "members" in territory:
             raise ValueError(f"territory {territory['id']}: carries members, which the demo derives")
     territory_ids = {cast(str, territory["id"]) for territory in territories}
+    parents = _check_parents(territories, territory_ids)
     named_territories: set[str] = set()
 
     node_ids: set[str] = set()
@@ -144,17 +190,49 @@ def check_spec(spec: dict[str, object]) -> None:
         node_territory = cast(str, node["territory"])
         if node_territory not in territory_ids:
             raise ValueError(f"node {node_id}: unknown territory {node_territory!r}")
+        if node_territory in parents:
+            raise ValueError(f"node {node_id}: names {node_territory}, a parent; a node belongs to a leaf")
         named_territories.add(node_territory)
 
         if not _is_finite(node["x"]) or not _is_finite(node["y"]):
             raise ValueError(f"node {node_id}: non-finite coordinate ({node['x']!r}, {node['y']!r})")
+        category = node.get("category")
+        if not _is_integer(category) or not 0 <= cast(int, category) < category_count:
+            raise ValueError(f"node {node_id}: category {category!r} is not an index into the categories table")
 
-    unnamed = sorted(territory_ids - named_territories)
+    unnamed = sorted(territory_ids - parents - named_territories)
     if unnamed:
         raise ValueError(f"territory {unnamed[0]}: no node names it")
 
     for edge in cast("list[object]", spec.get("edges", [])):
         _check_edge(edge, len(nodes))
+
+
+def _check_categories(categories: object) -> int:
+    """The `categories` table: a list of `{"id", "name"}` with non-empty strings; returns its length."""
+    if not isinstance(categories, list):
+        raise ValueError("the spec has no categories table")
+    for entry in categories:
+        if not isinstance(entry, dict) or not all(
+            isinstance(entry.get(key), str) and entry[key] for key in ("id", "name")
+        ):
+            raise ValueError(f"categories entry {entry!r}: needs a non-empty id and name")
+    return len(categories)
+
+
+def _check_parents(territories: Sequence[dict[str, object]], territory_ids: set[str]) -> set[str]:
+    """The parents the territories declare: each a known territory with no parent of its own."""
+    parents: set[str] = set()
+    for territory in territories:
+        if "parent" in territory:
+            parent = cast(str, territory["parent"])
+            if parent not in territory_ids:
+                raise ValueError(f"territory {territory['id']}: unknown parent {parent!r}")
+            parents.add(parent)
+    for territory in territories:
+        if territory["id"] in parents and "parent" in territory:
+            raise ValueError(f"territory {territory['id']}: a parent with a parent; two levels only")
+    return parents
 
 
 def _check_edge(edge: object, node_count: int) -> None:

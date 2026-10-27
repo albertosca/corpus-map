@@ -88,7 +88,10 @@ def hierarchy(leaf_labels: NDArray[np.int64], group_labels: NDArray[np.int64]) -
 
 
 def contiguity(coordinates: NDArray[np.float64], leaf_of: Sequence[str], neighbours: int = NEIGHBOURS) -> float:
-    """Share of each paper's nearest map neighbours (itself excluded) that sit in its own leaf, overall."""
+    """Share of each paper's nearest map neighbours (itself excluded) that sit in its own leaf, overall.
+
+    A corpus with fewer papers than `neighbours + 1` uses every other paper as a neighbour."""
+    neighbours = min(neighbours, len(coordinates) - 1)
     finder = NearestNeighbors(n_neighbors=neighbours + 1).fit(coordinates)
     _distances, indices = finder.kneighbors(coordinates)
     labels = np.asarray(leaf_of)

@@ -1,10 +1,12 @@
-"""The `arxiv-corpus` command: fetch, embed, project, export -- and `all` in one shot.
+"""The `arxiv-corpus` command: fetch, embed, project, edges, cluster, name, check, export -- and `all`.
 
-Each stage reads the previous stage's cached intermediate under `<cache-dir>/stages/` and
-writes its own, so a failed run re-runs just the failed stage. The heavy, real-world wiring
-(network client, the real embedding model, the real projector) lives behind `make_dependencies`,
-a small factory tests replace wholesale -- so the base install and the test suite never need
-the optional `model` extra.
+`cluster` cuts the 2D map into Ward leaves under groups, `name` asks Claude to name them, `check`
+holds the names to a blind test, and `export` writes only names that passed it. Each stage reads
+the previous stage's cached intermediate under `<cache-dir>/stages/` and writes its own, so a
+failed run re-runs just the failed stage. The heavy, real-world wiring (network client, the real
+embedding model, the real projector, the Claude client) lives behind `make_dependencies`, a small
+factory tests replace wholesale -- so the base install and the test suite never need the optional
+`model` or `naming` extras, and never call Claude.
 """
 
 from __future__ import annotations
@@ -20,18 +22,21 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
-from arxiv_corpus.categories import CATEGORIES
+from arxiv_corpus import blind, cluster, describe, naming
+from arxiv_corpus.categories import CATEGORIES, name_of
+from arxiv_corpus.claude import NAMING_MODEL, claude_ask
 from arxiv_corpus.edges import EDGE_FLOOR, EDGES_PER_PAPER, cross_category_edges
 from arxiv_corpus.embed import BgeEmbedder, Embedder
-from arxiv_corpus.export import ATTRIBUTION, LICENSE_NOTE, build_spec, write_outputs
+from arxiv_corpus.export import ATTRIBUTION, LICENSE_NOTE, Clustering, build_spec, clean_title, write_outputs
 from arxiv_corpus.fetch import BASE_URL, Client, Paper, http_get
 from arxiv_corpus.project import Projector, UmapProjector, rescale
 from arxiv_corpus.sample import quotas
 
-STAGES = ("fetch", "embed", "project", "edges", "export", "all")
+STAGES = ("fetch", "embed", "project", "edges", "cluster", "name", "check", "export", "all")
 
 DEFAULT_PAPER_COUNT = 8000
 DEFAULT_FLOOR = 20
@@ -44,12 +49,28 @@ QUERY_SHAPE = (
 
 
 @dataclass(frozen=True)
+class ClusterSettings:
+    """The cut ranges, how many central titles the namer sees, and how many titles per leaf the test holds out."""
+
+    leaf_counts: range
+    group_counts: range
+    central_titles: int
+    held_out_per_leaf: int
+
+
+REAL_CLUSTER_SETTINGS = ClusterSettings(
+    cluster.LEAF_COUNTS, cluster.GROUP_COUNTS, describe.CENTRAL_TITLES, blind.HELD_OUT_PER_LEAF
+)
+
+
+@dataclass(frozen=True)
 class Dependencies:
     """Everything a stage needs from the outside world, gathered in one place.
 
     `embedder` and `projector` are zero-argument factories, not instances: the real ones
     (`BgeEmbedder`, `UmapProjector`) load model weights at construction time, so they are
-    built only by the stage that actually needs them.
+    built only by the stage that actually needs them. `ask` is one too: the real one builds the
+    Claude client, which needs the API key only `name` and `check` use.
     """
 
     client: Client
@@ -58,6 +79,9 @@ class Dependencies:
     today: Callable[[], date]
     model_name: str
     umap_params: dict[str, object]
+    ask: Callable[[], naming.Ask]
+    naming_model: str
+    cluster_settings: ClusterSettings
 
 
 def make_dependencies(cache_directory: Path) -> Dependencies:  # pragma: no cover -- real network + model wiring
@@ -75,6 +99,9 @@ def make_dependencies(cache_directory: Path) -> Dependencies:  # pragma: no cove
         today=date.today,
         model_name=BgeEmbedder.MODEL,
         umap_params=UmapProjector.PARAMS,
+        ask=lambda: claude_ask(NAMING_MODEL),
+        naming_model=NAMING_MODEL,
+        cluster_settings=REAL_CLUSTER_SETTINGS,
     )
 
 
@@ -157,6 +184,22 @@ def _edges_path(cache_directory: Path) -> Path:
 
 def _edges_fingerprint_path(cache_directory: Path) -> Path:
     return _stage_dir(cache_directory) / "edges.fingerprint"
+
+
+def _clusters_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "clusters.json"
+
+
+def _names_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "names.json"
+
+
+def _check_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "check.json"
+
+
+def _check_failed_path(cache_directory: Path) -> Path:
+    return _stage_dir(cache_directory) / "check-failed.json"
 
 
 def _dependency_version(distribution: str) -> str | None:
@@ -321,35 +364,277 @@ def _cached_edges(cache_directory: Path, current_fingerprint: str) -> list[tuple
     return [(low, high, weight) for low, high, weight in json.loads(edges_path.read_text(encoding="utf-8"))]
 
 
+def _current_papers(cache_directory: Path) -> tuple[str, str]:
+    """The cached papers' text and fingerprint, refused when the coordinates came from another fetch."""
+    papers_path = _papers_path(cache_directory)
+    _require_cached(papers_path, prior_stage="fetch", what="papers")
+    _require_cached(_coordinates_path(cache_directory), prior_stage="project", what="projected coordinates")
+    coordinates_fingerprint_path = _coordinates_fingerprint_path(cache_directory)
+    _require_cached(coordinates_fingerprint_path, prior_stage="project", what="coordinates fingerprint")
+    payload_text = papers_path.read_text(encoding="utf-8")
+    current_fingerprint = _fingerprint(payload_text.encode("utf-8"))
+    if current_fingerprint != coordinates_fingerprint_path.read_text(encoding="utf-8"):
+        raise ValueError(
+            "the cached coordinates were produced from a different papers.json than the one now in the "
+            "cache — run 'arxiv-corpus embed' (then 'project') to refresh them"
+        )
+    return payload_text, current_fingerprint
+
+
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _text_fingerprint(path: Path) -> str:
+    return _fingerprint(path.read_bytes())
+
+
+def _load_clusters(cache_directory: Path, papers_fingerprint: str) -> Any:
+    """`clusters.json`, refused unless it was cut from these papers and these coordinates."""
+    path = _clusters_path(cache_directory)
+    _require_cached(path, prior_stage="cluster", what="clusters")
+    clusters = _read_json(path)
+    coordinates_fingerprint = _text_fingerprint(_coordinates_path(cache_directory))
+    if clusters["fingerprint"] != papers_fingerprint or clusters["coordinates"] != coordinates_fingerprint:
+        raise ValueError(
+            "the cached clusters were cut from other papers or coordinates than the ones now in the cache "
+            "— run 'arxiv-corpus cluster' to refresh them"
+        )
+    return clusters
+
+
+def _load_names(cache_directory: Path, papers_fingerprint: str) -> tuple[Any, Any]:
+    """`clusters.json` and `names.json`, refused unless the names were given to these clusters."""
+    clusters = _load_clusters(cache_directory, papers_fingerprint)
+    path = _names_path(cache_directory)
+    _require_cached(path, prior_stage="name", what="names")
+    names = _read_json(path)
+    if names["clusters"] != _text_fingerprint(_clusters_path(cache_directory)):
+        raise ValueError(
+            "the cached names were given to other clusters than the ones now in the cache "
+            "— run 'arxiv-corpus name' to refresh them"
+        )
+    return clusters, names
+
+
+def _load_check(cache_directory: Path, papers_fingerprint: str) -> Any:
+    """The passed blind-test report, refused unless it tested the names now in the cache."""
+    _load_names(cache_directory, papers_fingerprint)
+    path = _check_path(cache_directory)
+    _require_cached(path, prior_stage="check", what="blind-test result that passed")
+    report = _read_json(path)
+    if report["names"] != _text_fingerprint(_names_path(cache_directory)):
+        raise ValueError(
+            "the cached blind test tested other names than the ones now in the cache "
+            "— run 'arxiv-corpus check' to test them"
+        )
+    return report
+
+
+def run_cluster(deps: Dependencies, cache_directory: Path) -> None:
+    """Cut the map into leaves and groups (Ward), score the cuts, and describe every cluster for naming."""
+    payload_text, current_fingerprint = _current_papers(cache_directory)
+    embeddings_path = _embeddings_path(cache_directory)
+    _require_cached(embeddings_path, prior_stage="embed", what="embeddings")
+    papers = [Paper(**fields) for fields in json.loads(payload_text)["papers"]]
+    coordinates = np.load(_coordinates_path(cache_directory)).astype(np.float64)
+    settings = deps.cluster_settings
+    largest = max(settings.leaf_counts.stop, settings.group_counts.stop) - 1
+    if largest >= len(papers):
+        raise ValueError(f"{largest} clusters need more than {len(papers)} papers")
+
+    tree = cluster.ward_tree(coordinates)
+    leaf_cut = cluster.best_cut(tree, coordinates, settings.leaf_counts)
+    group_cut = cluster.best_cut(tree, coordinates, settings.group_counts)
+    nested = cluster.hierarchy(leaf_cut.labels, group_cut.labels)
+    share = cluster.contiguity(coordinates, nested.leaf_of)
+    unit_embeddings = describe.unit_rows(np.load(embeddings_path).astype(np.float64))
+    group_members = {
+        group: sorted(index for leaf in leaves for index in nested.leaf_members[leaf])
+        for group, leaves in nested.group_leaves.items()
+    }
+    clusters = {
+        "fingerprint": current_fingerprint,
+        "coordinates": _text_fingerprint(_coordinates_path(cache_directory)),
+        "leaf_count": leaf_cut.count,
+        "group_count": group_cut.count,
+        "silhouettes": {
+            "leaves": {str(count): value for count, value in leaf_cut.silhouettes.items()},
+            "groups": {str(count): value for count, value in group_cut.silhouettes.items()},
+        },
+        "contiguity": share,
+        "leaf_of": nested.leaf_of,
+        "group_of": nested.group_of,
+        "group_leaves": nested.group_leaves,
+        "leaves": describe.describe(nested.leaf_members, papers, unit_embeddings, settings.central_titles),
+        "groups": describe.describe(group_members, papers, unit_embeddings, settings.central_titles),
+    }
+    _clusters_path(cache_directory).write_text(json.dumps(clusters), encoding="utf-8")
+    print(f"{leaf_cut.count} leaves in {group_cut.count} groups, contiguity {share:.2f}")
+
+
+def _entry(description: Any, papers: Sequence[Any]) -> dict[str, object]:
+    """What the namer sees of one cluster: its central titles, distinctive words, categories and size."""
+    return {
+        "size": description["size"],
+        "titles": [clean_title(papers[index]["title"]) for index in description["central"]],
+        "words": description["words"],
+        "categories": description["categories"],
+    }
+
+
+def _leaf_entries(clusters: Any, papers: Sequence[Any]) -> dict[str, dict[str, object]]:
+    return {identifier: _entry(description, papers) for identifier, description in clusters["leaves"].items()}
+
+
+def _group_entries(clusters: Any, papers: Sequence[Any], leaf_names: dict[str, str]) -> dict[str, dict[str, object]]:
+    return {
+        identifier: {
+            **_entry(description, papers),
+            "leaves": [leaf_names[leaf] for leaf in clusters["group_leaves"][identifier]],
+        }
+        for identifier, description in clusters["groups"].items()
+    }
+
+
+def _usage(answers: Sequence[naming.Answer]) -> dict[str, int]:
+    return {
+        "calls": len(answers),
+        "input_tokens": sum(answer.input_tokens for answer in answers),
+        "output_tokens": sum(answer.output_tokens for answer in answers),
+    }
+
+
+def run_name(deps: Dependencies, cache_directory: Path) -> None:
+    """Ask Claude for a name for every leaf, then every group (seeing its leaves' names), and cache them."""
+    payload_text, current_fingerprint = _current_papers(cache_directory)
+    clusters = _load_clusters(cache_directory, current_fingerprint)
+    papers = json.loads(payload_text)["papers"]
+    ask = deps.ask()
+    leaf_names, leaf_answer = naming.request_names(ask, "leaf", _leaf_entries(clusters, papers))
+    group_names, group_answer = naming.request_names(ask, "group", _group_entries(clusters, papers, leaf_names))
+    names = {
+        "clusters": _text_fingerprint(_clusters_path(cache_directory)),
+        "prompt_version": naming.PROMPT_VERSION,
+        "model": deps.naming_model,
+        "leaves": leaf_names,
+        "groups": group_names,
+        "usage": _usage([leaf_answer, group_answer]),
+    }
+    _names_path(cache_directory).write_text(json.dumps(names, indent=1), encoding="utf-8")
+
+
+def _renamer(ask: naming.Ask, level: naming.Level, entries: Callable[[], dict[str, dict[str, object]]]) -> blind.Rename:
+    """Re-names only the failing ids, keeping the others' names as taken, with the blind test's feedback."""
+
+    def rename(
+        failing: set[str], kept: dict[str, str], feedback: dict[str, naming.Feedback]
+    ) -> tuple[dict[str, str], naming.Answer]:
+        every = entries()
+        return naming.request_names(
+            ask, level, {identifier: every[identifier] for identifier in sorted(failing)}, kept, feedback
+        )
+
+    return rename
+
+
+def _level_report(result: blind.LevelResult) -> dict[str, object]:
+    return {"names": result.names, "passed": result.passed, "attempts": result.attempts}
+
+
+def run_check(deps: Dependencies, cache_directory: Path) -> None:
+    """Hold the names to the blind test: leaves against the arXiv categories, then groups.
+
+    A failing leaf or group is re-named with feedback, at most `blind.MAXIMUM_RENAMES` times.
+    A pass writes `check.json` (the names `export` uses); a failure writes `check-failed.json`,
+    removes any earlier pass, and stops with the report's path.
+    """
+    payload_text, current_fingerprint = _current_papers(cache_directory)
+    clusters, names = _load_names(cache_directory, current_fingerprint)
+    papers = json.loads(payload_text)["papers"]
+    settings = deps.cluster_settings
+    leaf_members: dict[str, list[int]] = {}
+    for index, leaf in enumerate(clusters["leaf_of"]):
+        leaf_members.setdefault(leaf, []).append(index)
+    central = {identifier: description["central"] for identifier, description in clusters["leaves"].items()}
+    drawn = blind.held_out(leaf_members, central, settings.held_out_per_leaf)
+    titles = [clean_title(papers[index]["title"]) for index in drawn]
+    ask = deps.ask()
+
+    codes = sorted({paper["category"] for paper in papers})
+    baseline_names = {code: name_of(code) for code in codes}
+    baseline, baseline_answer = blind.run_test(
+        ask, titles, [papers[index]["category"] for index in drawn], baseline_names
+    )
+    answers = [baseline_answer]
+
+    leaf_truth = [clusters["leaf_of"][index] for index in drawn]
+    leaves = blind.check_level(
+        ask,
+        _renamer(ask, "leaf", lambda: _leaf_entries(clusters, papers)),
+        titles,
+        leaf_truth,
+        names["leaves"],
+        lambda result: blind.leaf_gate(result, baseline.lift),
+    )
+    answers.extend(leaves.answers)
+    groups: blind.LevelResult | None = None
+    if leaves.passed:
+        group_truth = [clusters["group_of"][leaf] for leaf in leaf_truth]
+        groups = blind.check_level(
+            ask,
+            _renamer(ask, "group", lambda: _group_entries(clusters, papers, leaves.names)),
+            titles,
+            group_truth,
+            names["groups"],
+            blind.group_gate,
+        )
+        answers.extend(groups.answers)
+
+    passed = leaves.passed and groups is not None and groups.passed
+    report = {
+        "names": _text_fingerprint(_names_path(cache_directory)),
+        "passed": passed,
+        "seed": blind.SEED,
+        "held_out": len(drawn),
+        "baseline": {"names": sorted(baseline_names.values()), "overall": baseline.overall, "lift": baseline.lift},
+        "leaves": _level_report(leaves),
+        "groups": _level_report(groups) if groups is not None else None,
+        "usage": _usage(answers),
+    }
+    report_text = json.dumps(report, indent=1)
+    if not passed:
+        failed_path = _check_failed_path(cache_directory)
+        failed_path.write_text(report_text, encoding="utf-8")
+        _check_path(cache_directory).unlink(missing_ok=True)
+        raise ValueError(f"blind test failed after {blind.MAXIMUM_RENAMES} re-namings — report at {failed_path}")
+    _check_path(cache_directory).write_text(report_text, encoding="utf-8")
+    _check_failed_path(cache_directory).unlink(missing_ok=True)
+
+
 def run_export(deps: Dependencies, cache_directory: Path, out_directory: Path) -> None:
-    """Build the checked `MapSpec` from the cached papers and coordinates, and write it.
+    """Build the checked `MapSpec` from the cached papers, coordinates, clusters and passed names, and write it.
 
     Refuses, before reading anything else, if the cached coordinates were produced from a
     different `papers.json` than the one sitting in the cache now -- a refetch (same length
-    or not) must not get silently paired with stale coordinates from the fetch it replaced.
+    or not) must not get silently paired with stale coordinates from the fetch it replaced --
+    and then anything down the chain (clusters, names, the blind test) that no longer matches.
     """
-    papers_path = _papers_path(cache_directory)
-    _require_cached(papers_path, prior_stage="fetch", what="papers")
-    coordinates_path = _coordinates_path(cache_directory)
-    _require_cached(coordinates_path, prior_stage="project", what="projected coordinates")
-    coordinates_fingerprint_path = _coordinates_fingerprint_path(cache_directory)
-    _require_cached(coordinates_fingerprint_path, prior_stage="project", what="coordinates fingerprint")
-
-    payload_text = papers_path.read_text(encoding="utf-8")
-    current_fingerprint = _fingerprint(payload_text.encode("utf-8"))
-    consumed_fingerprint = coordinates_fingerprint_path.read_text(encoding="utf-8")
-    if current_fingerprint != consumed_fingerprint:
-        raise ValueError(
-            "the cached coordinates were produced from a different papers.json than the one now in the "
-            "cache — run 'arxiv-corpus embed' (then 'project') to refresh them before exporting"
-        )
-
+    payload_text, current_fingerprint = _current_papers(cache_directory)
+    report = _load_check(cache_directory, current_fingerprint)
+    clusters = _load_clusters(cache_directory, current_fingerprint)
     edges = _cached_edges(cache_directory, current_fingerprint)
     payload = json.loads(payload_text)
     papers = [Paper(**fields) for fields in payload["papers"]]
-    coordinates = np.load(coordinates_path)
+    coordinates = np.load(_coordinates_path(cache_directory))
 
-    spec = build_spec(papers, coordinates, edges=edges)
+    clustering = Clustering(
+        leaf_of=clusters["leaf_of"],
+        group_of=clusters["group_of"],
+        leaf_names=report["leaves"]["names"],
+        group_names=report["groups"]["names"],
+    )
+    spec = build_spec(papers, coordinates, clustering, edges=edges)
     per_category = dict(sorted(Counter(paper.category for paper in papers).items()))
     meta: dict[str, object] = {
         "fetched_at": payload["fetched_at"],
@@ -368,6 +653,18 @@ def run_export(deps: Dependencies, cache_directory: Path, out_directory: Path) -
     }
     if edges is not None:
         meta["edges"] = {"floor": EDGE_FLOOR, "per_paper": EDGES_PER_PAPER, "count": len(edges)}
+    meta["clusters"] = {
+        "leaves": clusters["leaf_count"],
+        "groups": clusters["group_count"],
+        "silhouettes": clusters["silhouettes"],
+        "contiguity": clusters["contiguity"],
+    }
+    names = _read_json(_names_path(cache_directory))
+    meta["naming"] = {
+        "model": names["model"],
+        "prompt_version": names["prompt_version"],
+        "check": {key: value for key, value in report.items() if key != "names"},
+    }
     write_outputs(spec, meta, out_directory)
 
 
@@ -398,6 +695,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_project(deps, cache_directory)
         if arguments.stage in {"edges", "all"}:
             run_edges(cache_directory)
+        if arguments.stage in {"cluster", "all"}:
+            run_cluster(deps, cache_directory)
+        if arguments.stage in {"name", "all"}:
+            run_name(deps, cache_directory)
+        if arguments.stage in {"check", "all"}:
+            run_check(deps, cache_directory)
         if arguments.stage in {"export", "all"}:
             run_export(deps, cache_directory, out_directory)
     except ValueError as error:
