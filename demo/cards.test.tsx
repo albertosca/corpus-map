@@ -81,6 +81,11 @@ describe("the arXiv card's detail line", () => {
     expect(detailOf(paper).textContent).toBe("2026");
   });
 
+  it("shows the category alone when the paper's id gives no year", () => {
+    const detail = detailOf({ ...paper, meta: { category: { id: "cs.AI", name: "Artificial Intelligence" } } });
+    expect(detail.textContent).toBe("Artificial Intelligence");
+  });
+
   it("still sizes the card for one line under the title", () => {
     expect(CARD_TEXT.arxiv.options.extraLines).toBe(1);
   });

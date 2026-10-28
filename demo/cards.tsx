@@ -16,7 +16,8 @@ interface StarMeta {
 }
 
 interface ArxivMeta {
-  year: number;
+  // Absent when the id's digits give no year (`yearOfArxivId`).
+  year?: number;
   category?: ArxivCategory;
 }
 
@@ -99,18 +100,18 @@ function renderStarCard(node: MapNode, context: CardContext) {
   );
 }
 
-// The year and the category share the card's one detail line; a long
-// category name ends in an ellipsis instead of wrapping past the frame.
+// The year and the category share the card's one detail line, either one
+// shown alone when the other is missing; a long category name ends in an
+// ellipsis instead of wrapping past the frame.
 const detailLineStyle: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
 
 function renderArxivCard(node: MapNode, context: CardContext) {
   const meta = node.meta as ArxivMeta | undefined;
+  const detail = [meta?.year, meta?.category?.name].filter(Boolean).join(" · ");
   return (
     <div style={frameStyle}>
       <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines, context)}>{node.label}</strong>
-      {meta?.year ? (
-        <div style={detailLineStyle}>{meta.category ? `${meta.year} · ${meta.category.name}` : meta.year}</div>
-      ) : null}
+      {detail ? <div style={detailLineStyle}>{detail}</div> : null}
     </div>
   );
 }

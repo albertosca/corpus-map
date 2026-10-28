@@ -165,8 +165,17 @@ describe("the arXiv corpus", () => {
     expect(lastLeaves?.names).toEqual(leaves.names);
     expect(lastGroups?.names).toEqual(groups.names);
     expect(lastLeaves?.overall).toBeGreaterThanOrEqual(OVERALL_FLOOR);
-    for (const share of Object.values(lastLeaves?.shares ?? {})) expect(share ?? 0).toBeGreaterThanOrEqual(LEAF_FLOOR);
-    for (const share of Object.values(lastGroups?.shares ?? {})) expect(share ?? 0).toBeGreaterThanOrEqual(GROUP_FLOOR);
+    // A null share is a cluster with no held-out titles: the pipeline's gate cannot fail it, so it must
+    // never ship untested; every shipped id has a share, and each share clears its floor.
+    const tested = (shares: Record<string, number | null> | undefined) =>
+      Object.entries(shares ?? {}).map(([identifier, share]) => {
+        expect(share, `${identifier} was never tested`).not.toBeNull();
+        return share as number;
+      });
+    expect(Object.keys(lastLeaves?.shares ?? {}).sort()).toEqual(Object.keys(leaves.names).sort());
+    expect(Object.keys(lastGroups?.shares ?? {}).sort()).toEqual(Object.keys(groups.names).sort());
+    for (const share of tested(lastLeaves?.shares)) expect(share).toBeGreaterThanOrEqual(LEAF_FLOOR);
+    for (const share of tested(lastGroups?.shares)) expect(share).toBeGreaterThanOrEqual(GROUP_FLOOR);
     // The tested names are the shipped names, level for level.
     const shipped = (territories: Territory[]) =>
       Object.fromEntries(territories.map((territory) => [territory.id, territory.name]));
