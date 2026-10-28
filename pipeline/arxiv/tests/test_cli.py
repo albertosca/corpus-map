@@ -61,7 +61,7 @@ class _Oracle:
 
     Names every leaf `Leaf <id>` and every group `Group <id>`; answers a leaf or group check
     with each title's true leaf or group (or with the first name offered, when `wrong`), and the
-    category baseline with a name other than the title's category, so the clusters beat it.
+    category baseline with a name other than the title's category (reported, never gated on).
     """
 
     def __init__(self, cache_directory: Path, wrong: bool = False) -> None:

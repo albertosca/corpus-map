@@ -19,7 +19,7 @@ HELD_OUT_PER_LEAF = 20
 LEAF_FLOOR = 0.40
 OVERALL_FLOOR = 0.60
 GROUP_FLOOR = 0.70
-MAXIMUM_RENAMES = 2
+MAXIMUM_RENAMES = 4
 # Lost titles shown per failing id when re-naming: enough to see the confusion, short enough to read.
 LOST_TITLES_SHOWN = 10
 
@@ -156,10 +156,14 @@ def _below(result: Score, floor: float) -> set[str]:
     return {identifier for identifier, share in result.shares.items() if share is not None and share < floor}
 
 
-def leaf_gate(result: Score, baseline_lift: float) -> tuple[bool, set[str]]:
-    """Each leaf at its floor, all together at theirs, and better than the arXiv categories."""
+def leaf_gate(result: Score) -> tuple[bool, set[str]]:
+    """Each leaf at its floor and all together at theirs.
+
+    The arXiv-category baseline is reported, never gated on: the lift caps at the number of names, so 18-26
+    leaves cannot beat 38 categories (owner ruling 2026-10-27, after the first real run).
+    """
     failing = _below(result, LEAF_FLOOR)
-    if result.overall < OVERALL_FLOOR or result.lift <= baseline_lift:
+    if result.overall < OVERALL_FLOOR:
         failing |= _below(result, OVERALL_FLOOR)
         return False, failing
     return not failing, failing

@@ -591,7 +591,7 @@ def run_check(deps: Dependencies, cache_directory: Path) -> None:
         titles,
         leaf_truth,
         names["leaves"],
-        lambda result: blind.leaf_gate(result, baseline.lift),
+        blind.leaf_gate,
     )
     answers.extend(leaves.answers)
     groups: blind.LevelResult | None = None
