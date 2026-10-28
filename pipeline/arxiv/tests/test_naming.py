@@ -118,7 +118,7 @@ def test_request_names_asks_with_the_schema_and_parses_the_answer() -> None:
 
 def test_request_names_holds_a_group_name_to_the_group_length() -> None:
     def ask(_prompt: str, _schema: dict[str, object]) -> naming.Answer:
-        return naming.Answer(_answer({"g1": "x" * 25}), "model", 1, 1)
+        return naming.Answer(_answer({"g1": "x" * 21}), "model", 1, 1)
 
-    with pytest.raises(naming.NamingError, match="longer than 24"):
+    with pytest.raises(naming.NamingError, match="longer than 20"):
         naming.request_names(ask, "group", {"g1": ENTRIES["g1-l1"]})

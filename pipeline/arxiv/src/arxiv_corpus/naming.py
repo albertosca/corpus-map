@@ -9,10 +9,11 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 LEAF_NAME_MAXIMUM_LENGTH = 32
-# The library's group-name budget (src/shared, GROUP_NAME_MAXIMUM_LENGTH).
-GROUP_NAME_MAXIMUM_LENGTH = 24
+# A family name is drawn whole at the fitted view on the smallest box the demo's fit tests (320 px, minus the
+# fit's 24 px padding on each side): the group-name style costs about 13 px a character, so 20 x 13 <= 272.
+GROUP_NAME_MAXIMUM_LENGTH = 20
 # Every prompt ends with this marker and its input as JSON, so a test double can read what was asked.
 INPUT_MARKER = "Input (JSON):"
 
