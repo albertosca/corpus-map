@@ -28,7 +28,7 @@ import { constellationsSpec } from "./corpora/constellations";
 import { elementsSpec } from "./corpora/elements";
 import { syntheticSpec } from "./corpora/synthetic";
 
-/** A tiny, valid arXiv-shaped spec — stands in for the real 1.4 MB arxiv.json in every test but the loading-state one. */
+/** A tiny, valid arXiv-shaped spec — stands in for the real 1.5 MB arxiv.json in every test but the loading-state one. */
 const TINY_ARXIV_SPEC: MapSpec = {
   version: "1",
   territories: [{ id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2"], centroid: [0, 0] }],

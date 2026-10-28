@@ -9,7 +9,7 @@ import { syntheticSpec } from "./synthetic";
 export type CorpusId = "arxiv" | "elements" | "constellations" | "synthetic";
 
 /**
- * arXiv is the only entry that loads lazily: its ~1.4 MB JSON must not block
+ * arXiv is the only entry that loads lazily: its ~1.5 MB JSON must not block
  * the shell's first paint (spec 4 §2, Risks). Every other corpus is small
  * enough to ship in the main bundle and carries its `spec` synchronously.
  */

@@ -13,7 +13,7 @@ import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen, type Viewport } from "../../src/viewport/viewport";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
-// typed off the ~1.4 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
+// typed off the ~1.5 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
 // every one of the 8,000 nodes.
 import rawSpecJson from "./arxiv.json";
 import metaJson from "./arxiv.meta.json";
