@@ -841,6 +841,7 @@ def test_name_shows_the_namer_central_titles_and_a_group_its_leaves_names(tmp_pa
     assert leaf_entry["categories"] == clusters["leaves"]["g1-l1"]["categories"]
     assert prompts[1]["kind"] == "group"
     assert prompts[1]["entries"]["g1"]["leaves"] == ["Leaf g1-l1", "Leaf g1-l2"]
+    assert prompts[1]["taken"] == ["Leaf g1-l1", "Leaf g1-l2", "Leaf g2-l1"]
 
 
 def test_check_writes_the_report_and_export_writes_leaves_under_groups(
@@ -857,7 +858,11 @@ def test_check_writes_the_report_and_export_writes_leaves_under_groups(
     assert report["names"] == cli._fingerprint(names_text.encode("utf-8"))
     assert report["passed"] is True
     assert report["seed"] == blind.SEED
-    assert report["held_out"] == 3 * (PER_CLOUD - CLOUD_SETTINGS.central_titles)
+    clusters = _read(_stages(cache_directory) / "clusters.json")
+    family_central = {index for group in clusters["groups"].values() for index in group["central"]}
+    leaf_central = {index for leaf in clusters["leaves"].values() for index in leaf["central"]}
+    assert report["held_out"] == 3 * PER_CLOUD - len(leaf_central | family_central)
+    assert family_central - leaf_central
     assert report["baseline"]["names"] == ["Computation and Language", "Machine Learning"]
     assert report["baseline"]["overall"] == 0.0
     assert report["leaves"]["passed"] is True
@@ -985,6 +990,27 @@ def test_a_new_cluster_makes_check_and_export_ask_for_new_names(
         assert "run 'arxiv-corpus name'" in capsys.readouterr().err, stage
 
 
+def test_names_from_an_older_naming_prompt_make_check_and_export_ask_for_new_names(
+    cloud_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_directory = tmp_path / "cache"
+    out_directory = tmp_path / "out"
+    _seed_clouds(cache_directory)
+    for stage in ("cluster", "name", "check"):
+        assert _run(stage, cache_directory, out_directory) == 0
+    names_path = _stages(cache_directory) / "names.json"
+    names = _read(names_path)
+    names["prompt_version"] = naming.PROMPT_VERSION - 1
+    names_path.write_text(json.dumps(names, indent=1), encoding="utf-8")
+    capsys.readouterr()
+
+    for stage in ("check", "export"):
+        assert _run(stage, cache_directory, out_directory) == 2
+        error = capsys.readouterr().err
+        assert f"naming prompt version {naming.PROMPT_VERSION - 1}" in error, stage
+        assert "run 'arxiv-corpus name'" in error, stage
+
+
 def test_new_names_make_export_ask_for_a_new_check(
     cloud_dependencies: None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1091,3 +1117,67 @@ def test_the_api_naming_backend_is_the_sdk_call() -> None:
 def test_an_unknown_naming_backend_is_refused_by_name() -> None:
     with pytest.raises(ValueError, match=r"'cli'.*api, subscription"):
         cli.naming_backend({"ARXIV_NAMING_BACKEND": "cli"})
+
+
+def test_check_re_tests_on_fresh_titles_and_never_holds_out_a_central_title(tmp_path: Path) -> None:
+    cache_directory = tmp_path / "cache"
+    _seed_clouds(cache_directory)
+    settings = dataclasses.replace(CLOUD_SETTINGS, held_out_per_leaf=3)
+    deps = make_fake_dependencies(cache_directory, settings, wrong=True)
+    oracle = deps.ask()
+    checked: list[tuple[str, set[str]]] = []
+
+    def recording(prompt: str, schema: dict[str, Any]) -> naming.Answer:
+        payload = json.loads(prompt.split(naming.INPUT_MARKER, 1)[1])
+        if payload["kind"] == "check":
+            checked.append((payload["names"][0], {item["title"] for item in payload["titles"]}))
+        return oracle(prompt, schema)
+
+    deps = dataclasses.replace(deps, cluster_settings=settings, ask=lambda: recording)
+    cli.run_cluster(deps, cache_directory)
+    cli.run_name(deps, cache_directory)
+    with pytest.raises(ValueError, match="blind test failed"):
+        cli.run_check(deps, cache_directory)
+
+    baseline, *leaf_checks = checked
+    assert len(leaf_checks) == blind.MAXIMUM_RENAMES + 1
+    assert baseline[1] == leaf_checks[0][1]
+    first, second, third = (titles for _offered, titles in leaf_checks[:3])
+    assert not first & second and not first & third and not second & third
+    clusters = _read(_stages(cache_directory) / "clusters.json")
+    papers = _read(_stages(cache_directory) / "papers.json")["papers"]
+    central = {index for leaf in clusters["leaves"].values() for index in leaf["central"]}
+    central |= {index for group in clusters["groups"].values() for index in group["central"]}
+    central_titles = {export.clean_title(papers[index]["title"]) for index in central}
+    assert all(not titles & central_titles for _offered, titles in checked)
+
+
+def test_draws_fall_back_to_a_leaf_s_whole_pool_once_its_fresh_titles_run_out() -> None:
+    draw = cli._draws({"a": [0, 1, 2], "b": [3, 4, 5, 6, 7, 8]}, {"a": {0}, "b": {3}}, per_leaf=2)
+
+    assert draw(0) == draw(0)
+    assert set(draw(0)) & {0, 3} == set()
+    assert not set(draw(0)) & set(draw(1)) - {1, 2}
+    assert {index for index in draw(1) if index in (1, 2)} == {1, 2}
+    assert len([index for index in draw(2) if index >= 4]) == 1
+
+
+def test_a_renaming_keeps_clear_of_the_other_level_s_names() -> None:
+    prompts: list[Any] = []
+
+    def ask(prompt: str, _schema: dict[str, Any]) -> naming.Answer:
+        prompts.append(json.loads(prompt.split(naming.INPUT_MARKER, 1)[1]))
+        return naming.Answer(json.dumps({"names": {"g2": "Robots"}}), "fake", 1, 1)
+
+    rename = cli._renamer(ask, "group", lambda: {"g2": {"leaves": ["Robot legs"]}}, lambda: {"g2-l1": "Robot legs"})
+    feedback = {"g2": naming.Feedback(share=0.1, lost=[])}
+
+    assert rename({"g2"}, {"g1": "Language"}, feedback)[0] == {"g2": "Robots"}
+    assert prompts[0]["taken"] == ["Language", "Robot legs"]
+    with pytest.raises(naming.NamingError, match="Robot legs"):
+        cli._renamer(
+            lambda _prompt, _schema: naming.Answer(json.dumps({"names": {"g2": "Robot legs"}}), "fake", 1, 1),
+            "group",
+            lambda: {"g2": {"leaves": ["Robot legs"]}},
+            lambda: {"g2-l1": "Robot legs"},
+        )({"g2"}, {"g1": "Language"}, feedback)

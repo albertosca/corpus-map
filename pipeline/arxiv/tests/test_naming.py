@@ -83,6 +83,14 @@ def test_parse_names_returns_the_names_by_id() -> None:
         (_answer({"a": "Robot Hands", "b": "robot hands"}), "repeated"),
         (_answer({"a": "Robot Hands", "b": "Other"}), "Other"),
         (_answer({"a": "Robot Hands", "b": "other papers"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Other:"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Others"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Other/misc"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Misc & other"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Other-ML"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "\uff2f\uff54\uff48\uff45\uff52"}), "Other"),
+        (_answer({"a": "Robot Hands", "b": "Robot\nLegs"}), "inner spaces"),
+        (_answer({"a": "Robot Hands", "b": "Robot  Legs"}), "inner spaces"),
     ],
 )
 def test_parse_names_refuses_a_malformed_answer_with_the_raw_text(text: str, reason: str) -> None:
@@ -97,8 +105,9 @@ def test_parse_names_refuses_a_name_already_taken_in_any_case() -> None:
         naming.parse_names(_answer({"b": "ROBOT HANDS"}), ["b"], 32, taken_names=["Robot Hands"])
 
 
-def test_a_name_that_only_starts_with_other_letters_is_fine() -> None:
-    assert naming.parse_names(_answer({"a": "Otherworldly Graphics"}), ["a"], 32) == {"a": "Otherworldly Graphics"}
+def test_a_name_that_only_contains_other_letters_is_fine() -> None:
+    answer = _answer({"a": "Otherworldly Graphics", "b": "Mother-tongue NLP"})
+    assert naming.parse_names(answer, ["a", "b"], 32) == {"a": "Otherworldly Graphics", "b": "Mother-tongue NLP"}
 
 
 def test_request_names_asks_with_the_schema_and_parses_the_answer() -> None:

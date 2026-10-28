@@ -76,3 +76,10 @@ def test_ask_with_refuses_an_answer_that_stopped_early(stop_reason: str) -> None
 
 def test_the_naming_model_is_opus() -> None:
     assert claude.NAMING_MODEL == "claude-opus-5-5"
+
+
+def test_ask_with_refuses_an_answer_from_another_model() -> None:
+    message = _message()
+    message.model = "claude-sonnet-5-5"
+    with pytest.raises(naming.NamingError, match="claude-sonnet-5-5"):
+        claude.ask_with(_Client(message), "claude-opus-5-5", "Name these", SCHEMA)

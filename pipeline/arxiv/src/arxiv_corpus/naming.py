@@ -5,6 +5,8 @@ surrounding spaces, one over the length limit, or "Other" stops the stage with t
 """
 
 import json
+import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -18,6 +20,9 @@ GROUP_NAME_MAXIMUM_LENGTH = 20
 INPUT_MARKER = "Input (JSON):"
 
 Level = Literal["leaf", "group"]
+
+# "Other" as a word anywhere ("Misc & other", "Other-ML", "Others"), never inside one ("Otherworldly").
+_CATCH_ALL = re.compile(r"\bothers?\b")
 
 _MAXIMUM_LENGTH: dict[Level, int] = {"leaf": LEAF_NAME_MAXIMUM_LENGTH, "group": GROUP_NAME_MAXIMUM_LENGTH}
 
@@ -145,7 +150,9 @@ def parse_names(text: str, ids: Sequence[str], maximum_length: int, taken_names:
             raise NamingError(f"the name for {identifier} has surrounding spaces", text)
         if len(name) > maximum_length:
             raise NamingError(f"the name for {identifier} is longer than {maximum_length} characters", text)
-        if name.split()[0].casefold() == "other":
+        if name != " ".join(name.split()):
+            raise NamingError(f"the name for {identifier} has inner spaces other than single spaces", text)
+        if _CATCH_ALL.search(unicodedata.normalize("NFKC", name).casefold()):
             raise NamingError(f'the name for {identifier} uses "Other"', text)
         if name.casefold() in seen:
             raise NamingError(f"the name for {identifier} is repeated: {name!r}", text)

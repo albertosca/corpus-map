@@ -1,4 +1,5 @@
 import json
+import subprocess
 from collections.abc import Sequence
 from typing import Any
 
@@ -113,3 +114,29 @@ def test_child_environment_drops_the_api_key_so_the_call_uses_the_subscription()
     environment = {"PATH": "/bin", "ANTHROPIC_API_KEY": "secret", "HOME": "/home"}
     assert claude_code.child_environment(environment) == {"PATH": "/bin", "HOME": "/home"}
     assert "ANTHROPIC_API_KEY" in environment
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (subprocess.TimeoutExpired(["claude"], claude_code.TIMEOUT_SECONDS), "timed out"),
+        (FileNotFoundError(2, "No such file or directory", "claude"), "could not run"),
+    ],
+)
+def test_ask_through_reports_a_command_that_never_finished_as_a_naming_error(error: Exception, message: str) -> None:
+    def failing(_arguments: Sequence[str], _standard_input: str) -> claude_code.Completed:
+        raise error
+
+    with pytest.raises(naming.NamingError, match=message):
+        claude_code.ask_through(failing, "claude-opus-5-5", "Name these", SCHEMA)
+
+
+def test_child_environment_drops_every_variable_that_routes_the_call_off_the_subscription() -> None:
+    routing = {
+        "ANTHROPIC_API_KEY": "secret",
+        "ANTHROPIC_AUTH_TOKEN": "token",
+        "ANTHROPIC_BASE_URL": "https://proxy.example",
+        "CLAUDE_CODE_USE_BEDROCK": "1",
+        "CLAUDE_CODE_USE_VERTEX": "1",
+    }
+    assert claude_code.child_environment({"PATH": "/bin", **routing}) == {"PATH": "/bin"}

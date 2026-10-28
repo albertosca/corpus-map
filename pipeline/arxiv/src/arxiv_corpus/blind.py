@@ -6,7 +6,7 @@ and the lift (overall share times the number of names; 1.0 is chance) so differe
 """
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,6 +35,9 @@ class Score:
 Gate = Callable[[Score], tuple[bool, set[str]]]
 # (failing ids, names kept, feedback per failing id) -> (new names for the failing ids, the answer).
 Rename = Callable[[set[str], dict[str, str], dict[str, Feedback]], tuple[dict[str, str], Answer]]
+# The titles (and each one's true id) an attempt is judged on: a re-named id is re-tested on titles its
+# namer never saw, since the feedback shows it the titles the previous attempt lost.
+Sample = Callable[[int], tuple[Sequence[str], Sequence[str]]]
 
 
 @dataclass(frozen=True)
@@ -47,7 +50,7 @@ class LevelResult:
 
 def held_out(
     leaf_members: Mapping[str, Sequence[int]],
-    central: Mapping[str, Sequence[int]],
+    central: Mapping[str, Collection[int]],
     per_leaf: int = HELD_OUT_PER_LEAF,
     seed: int = SEED,
 ) -> list[int]:
@@ -177,16 +180,16 @@ def group_gate(result: Score) -> tuple[bool, set[str]]:
 def check_level(
     ask: Ask,
     rename: Rename,
-    titles: Sequence[str],
-    truth: Sequence[str],
+    sample: Sample,
     names: Mapping[str, str],
     gate: Gate,
 ) -> LevelResult:
-    """Tests the names; re-names only the failing ids, at most MAXIMUM_RENAMES times."""
+    """Tests the names on `sample(attempt)`; re-names only the failing ids, at most MAXIMUM_RENAMES times."""
     current = dict(names)
     attempts: list[dict[str, object]] = []
     answers: list[Answer] = []
     for attempt in range(MAXIMUM_RENAMES + 1):
+        titles, truth = sample(attempt)
         result, answer = run_test(ask, titles, truth, current)
         answers.append(answer)
         passed, failing = gate(result)

@@ -420,11 +420,17 @@ def _load_clusters(cache_directory: Path, papers_fingerprint: str) -> Any:
 
 
 def _load_names(cache_directory: Path, papers_fingerprint: str) -> tuple[Any, Any]:
-    """`clusters.json` and `names.json`, refused unless the names were given to these clusters."""
+    """`clusters.json` and `names.json`, refused unless the names were given to these clusters under the
+    current naming prompt (a rule added to the prompt, like the 20-character family cap, must reach them)."""
     clusters = _load_clusters(cache_directory, papers_fingerprint)
     path = _names_path(cache_directory)
     _require_cached(path, prior_stage="name", what="names")
     names = _read_json(path)
+    if names.get("prompt_version") != naming.PROMPT_VERSION:
+        raise ValueError(
+            f"the cached names came from naming prompt version {names.get('prompt_version')}, not the current "
+            f"{naming.PROMPT_VERSION} — run 'arxiv-corpus name' to refresh them"
+        )
     if names["clusters"] != _text_fingerprint(_clusters_path(cache_directory)):
         raise ValueError(
             "the cached names were given to other clusters than the ones now in the cache "
@@ -528,7 +534,10 @@ def run_name(deps: Dependencies, cache_directory: Path) -> None:
     papers = json.loads(payload_text)["papers"]
     ask = deps.ask()
     leaf_names, leaf_answer = naming.request_names(ask, "leaf", _leaf_entries(clusters, papers))
-    group_names, group_answer = naming.request_names(ask, "group", _group_entries(clusters, papers, leaf_names))
+    # A family never repeats one of its leaves' names: both are drawn on the map at once during the cross-fade.
+    group_names, group_answer = naming.request_names(
+        ask, "group", _group_entries(clusters, papers, leaf_names), _other_level(leaf_names)
+    )
     names = {
         "clusters": _text_fingerprint(_clusters_path(cache_directory)),
         "prompt_version": naming.PROMPT_VERSION,
@@ -540,15 +549,27 @@ def run_name(deps: Dependencies, cache_directory: Path) -> None:
     _names_path(cache_directory).write_text(json.dumps(names, indent=1), encoding="utf-8")
 
 
-def _renamer(ask: naming.Ask, level: naming.Level, entries: Callable[[], dict[str, dict[str, object]]]) -> blind.Rename:
-    """Re-names only the failing ids, keeping the others' names as taken, with the blind test's feedback."""
+def _other_level(names: Mapping[str, str]) -> dict[str, str]:
+    """The other level's names as `taken` entries, keyed apart so a leaf id never shadows a group id."""
+    return {f"other:{identifier}": name for identifier, name in names.items()}
+
+
+def _renamer(
+    ask: naming.Ask,
+    level: naming.Level,
+    entries: Callable[[], dict[str, dict[str, object]]],
+    other_names: Callable[[], Mapping[str, str]],
+) -> blind.Rename:
+    """Re-names only the failing ids, keeping the others' names and the other level's as taken, with the
+    blind test's feedback."""
 
     def rename(
         failing: set[str], kept: dict[str, str], feedback: dict[str, naming.Feedback]
     ) -> tuple[dict[str, str], naming.Answer]:
         every = entries()
+        taken = {**kept, **_other_level(other_names())}
         return naming.request_names(
-            ask, level, {identifier: every[identifier] for identifier in sorted(failing)}, kept, feedback
+            ask, level, {identifier: every[identifier] for identifier in sorted(failing)}, taken, feedback
         )
 
     return rename
@@ -558,8 +579,31 @@ def _level_report(result: blind.LevelResult) -> dict[str, object]:
     return {"names": result.names, "passed": result.passed, "attempts": result.attempts}
 
 
+def _draws(
+    leaf_members: Mapping[str, Sequence[int]], excluded: Mapping[str, set[int]], per_leaf: int
+) -> Callable[[int], list[int]]:
+    """The held-out papers of each attempt: attempt N is seeded `blind.SEED + N` and skips every paper drawn
+    before, so a re-named id is never re-tested on titles its feedback showed. A leaf whose fresh papers have
+    run out draws again from its whole pool (never its excluded ones) rather than go untested."""
+    drawn: list[list[int]] = []
+
+    def draw(attempt: int) -> list[int]:
+        while len(drawn) <= attempt:
+            seen = {index for previous in drawn for index in previous}
+            skipped = {
+                identifier: excluded[identifier] | seen
+                if set(members) - excluded[identifier] - seen
+                else excluded[identifier]
+                for identifier, members in leaf_members.items()
+            }
+            drawn.append(blind.held_out(leaf_members, skipped, per_leaf, seed=blind.SEED + len(drawn)))
+        return drawn[attempt]
+
+    return draw
+
+
 def run_check(deps: Dependencies, cache_directory: Path) -> None:
-    """Hold the names to the blind test: leaves against the arXiv categories, then groups.
+    """Hold the names to the blind test: leaves first, then groups, with the arXiv categories as a baseline.
 
     A failing leaf or group is re-named with feedback, at most `blind.MAXIMUM_RENAMES` times.
     A pass writes `check.json` (the names `export` uses); a failure writes `check-failed.json`,
@@ -572,10 +616,22 @@ def run_check(deps: Dependencies, cache_directory: Path) -> None:
     leaf_members: dict[str, list[int]] = {}
     for index, leaf in enumerate(clusters["leaf_of"]):
         leaf_members.setdefault(leaf, []).append(index)
-    central = {identifier: description["central"] for identifier, description in clusters["leaves"].items()}
-    drawn = blind.held_out(leaf_members, central, settings.held_out_per_leaf)
+    # Neither a leaf's central titles nor its family's: the namer saw both.
+    excluded = {
+        identifier: set(description["central"]) | set(clusters["groups"][clusters["group_of"][identifier]]["central"])
+        for identifier, description in clusters["leaves"].items()
+    }
+    draw = _draws(leaf_members, excluded, settings.held_out_per_leaf)
+    drawn = draw(0)
     titles = [clean_title(papers[index]["title"]) for index in drawn]
     ask = deps.ask()
+
+    def sample(truth_of: Callable[[int], str]) -> blind.Sample:
+        def attempt_sample(attempt: int) -> tuple[list[str], list[str]]:
+            indices = draw(attempt)
+            return [clean_title(papers[index]["title"]) for index in indices], [truth_of(index) for index in indices]
+
+        return attempt_sample
 
     codes = sorted({paper["category"] for paper in papers})
     baseline_names = {code: name_of(code) for code in codes}
@@ -584,24 +640,20 @@ def run_check(deps: Dependencies, cache_directory: Path) -> None:
     )
     answers = [baseline_answer]
 
-    leaf_truth = [clusters["leaf_of"][index] for index in drawn]
     leaves = blind.check_level(
         ask,
-        _renamer(ask, "leaf", lambda: _leaf_entries(clusters, papers)),
-        titles,
-        leaf_truth,
+        _renamer(ask, "leaf", lambda: _leaf_entries(clusters, papers), lambda: names["groups"]),
+        sample(lambda index: clusters["leaf_of"][index]),
         names["leaves"],
         blind.leaf_gate,
     )
     answers.extend(leaves.answers)
     groups: blind.LevelResult | None = None
     if leaves.passed:
-        group_truth = [clusters["group_of"][leaf] for leaf in leaf_truth]
         groups = blind.check_level(
             ask,
-            _renamer(ask, "group", lambda: _group_entries(clusters, papers, leaves.names)),
-            titles,
-            group_truth,
+            _renamer(ask, "group", lambda: _group_entries(clusters, papers, leaves.names), lambda: leaves.names),
+            sample(lambda index: clusters["group_of"][clusters["leaf_of"][index]]),
             names["groups"],
             blind.group_gate,
         )

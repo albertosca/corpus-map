@@ -153,6 +153,10 @@ class _Judge:
     current_names: dict[str, str]
 
 
+def _fixed(titles: list[str], truth: list[str]) -> blind.Sample:
+    return lambda _attempt: (titles, truth)
+
+
 def test_check_level_passes_first_time_with_one_call() -> None:
     truth = ["a", "a", "b", "b"]
     judge = _Judge(truth, [set()])
@@ -161,7 +165,7 @@ def test_check_level_passes_first_time_with_one_call() -> None:
     def rename(*_arguments: object) -> tuple[dict[str, str], naming.Answer]:
         raise AssertionError("no re-naming expected")
 
-    result = blind.check_level(judge, rename, ["t1", "t2", "t3", "t4"], truth, NAMES, blind.group_gate)
+    result = blind.check_level(judge, rename, _fixed(["t1", "t2", "t3", "t4"], truth), NAMES, blind.group_gate)
     assert result.passed
     assert len(result.attempts) == 1
     assert len(result.answers) == 1
@@ -181,7 +185,7 @@ def test_check_level_renames_only_the_failing_ids_with_feedback_and_passes_on_th
         judge.current_names = {**judge.current_names, "a": "Dexterous Grasping"}
         return {"a": "Dexterous Grasping"}, naming.Answer("{}", "namer", 50, 5)
 
-    result = blind.check_level(judge, rename, ["t1", "t2", "t3", "t4"], truth, NAMES, blind.group_gate)
+    result = blind.check_level(judge, rename, _fixed(["t1", "t2", "t3", "t4"], truth), NAMES, blind.group_gate)
     assert result.passed
     assert result.names == {**NAMES, "a": "Dexterous Grasping"}
     failing, kept, feedback = calls[0]
@@ -208,7 +212,7 @@ def test_check_level_stops_after_the_last_renaming_and_reports_every_attempt() -
         judge.current_names = {**judge.current_names, "a": name}
         return {"a": name}, naming.Answer("{}", "namer", 1, 1)
 
-    result = blind.check_level(judge, rename, ["t1", "t2", "t3", "t4"], truth, NAMES, blind.group_gate)
+    result = blind.check_level(judge, rename, _fixed(["t1", "t2", "t3", "t4"], truth), NAMES, blind.group_gate)
     assert not result.passed
     assert len(renamings) == blind.MAXIMUM_RENAMES
     assert len(result.attempts) == blind.MAXIMUM_RENAMES + 1
@@ -222,9 +226,38 @@ def test_check_level_stops_at_once_when_the_gate_fails_with_nothing_to_rename() 
     def rename(*_arguments: object) -> tuple[dict[str, str], naming.Answer]:
         raise AssertionError("nothing to re-name")
 
-    result = blind.check_level(judge, rename, ["t1", "t2"], truth, NAMES, lambda _score: (False, set()))
+    result = blind.check_level(judge, rename, _fixed(["t1", "t2"], truth), NAMES, lambda _score: (False, set()))
     assert not result.passed
     assert len(result.attempts) == 1
+
+
+def test_check_level_tests_each_attempt_on_its_own_sample_so_a_renaming_never_sees_its_test() -> None:
+    truth = ["a", "a", "b", "b"]
+    judge = _Judge(truth, [{0, 1}, set()])
+    judge.current_names = dict(NAMES)
+    drawn: list[int] = []
+    judged: list[list[str]] = []
+
+    def sample(attempt: int) -> tuple[list[str], list[str]]:
+        drawn.append(attempt)
+        return [f"attempt {attempt} title {position}" for position in range(4)], truth
+
+    def judge_and_record(prompt: str, schema: dict[str, Any]) -> naming.Answer:
+        judged.append([entry["title"] for entry in _input_of(prompt)["titles"]])
+        return judge(prompt, schema)
+
+    def rename(
+        _failing: set[str], _kept: dict[str, str], feedback: dict[str, naming.Feedback]
+    ) -> tuple[dict[str, str], naming.Answer]:
+        assert [title for title, _chosen in feedback["a"].lost] == ["attempt 0 title 0", "attempt 0 title 1"]
+        judge.current_names = {**judge.current_names, "a": "Dexterous Grasping"}
+        return {"a": "Dexterous Grasping"}, naming.Answer("{}", "namer", 50, 5)
+
+    result = blind.check_level(judge_and_record, rename, sample, NAMES, blind.group_gate)
+    assert result.passed
+    assert drawn == [0, 1]
+    assert judged[1] == [f"attempt 1 title {position}" for position in range(4)]
+    assert not set(judged[1]) & set(judged[0])
 
 
 def test_the_real_constants_are_the_spec_values() -> None:

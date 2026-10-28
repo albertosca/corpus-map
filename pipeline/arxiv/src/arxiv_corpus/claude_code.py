@@ -2,9 +2,9 @@
 
 `claude -p` with structured output held to the caller's schema. `--safe-mode`, `--strict-mcp-config`, a
 one-line system prompt and no tools keep the call to the prompt alone (the default context is over a hundred
-thousand tokens of agent instructions); no session is saved. The child never sees ANTHROPIC_API_KEY, which
-would otherwise route the call to the API instead of the subscription. Token counts are what the CLI reports:
-input includes the cached prompt it writes and reads.
+thousand tokens of agent instructions); no session is saved. The child never sees the variables that route
+the CLI off the subscription (an API key or token, a base URL, Bedrock or Vertex). Token counts are what the
+CLI reports: input includes the cached prompt it writes and reads.
 """
 
 import json
@@ -19,6 +19,16 @@ from arxiv_corpus.naming import Answer, Ask, NamingError
 
 SYSTEM_PROMPT = "You name clusters of research papers. Answer only with the JSON the schema asks for."
 TIMEOUT_SECONDS = 1800
+# Each one makes the CLI bill somewhere other than the owner's subscription.
+_ROUTING_VARIABLES = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -54,7 +64,12 @@ def command(model: str, schema: dict[str, Any]) -> list[str]:
 
 
 def ask_through(run: Run, model: str, prompt: str, schema: dict[str, Any]) -> Answer:
-    completed = run(command(model, schema), prompt)
+    try:
+        completed = run(command(model, schema), prompt)
+    except subprocess.TimeoutExpired:
+        raise NamingError(f"claude -p timed out after {TIMEOUT_SECONDS} s", "") from None
+    except OSError as error:
+        raise NamingError(f"could not run claude -p: {error}", "") from None
     if completed.exit_code != 0:
         raise NamingError(f"claude -p exited {completed.exit_code}: {completed.stderr.strip()}", completed.stdout)
     try:
@@ -80,7 +95,7 @@ def ask_through(run: Run, model: str, prompt: str, schema: dict[str, Any]) -> An
 
 
 def child_environment(environment: Mapping[str, str]) -> dict[str, str]:
-    return {key: value for key, value in environment.items() if key != "ANTHROPIC_API_KEY"}
+    return {key: value for key, value in environment.items() if key not in _ROUTING_VARIABLES}
 
 
 def subscription_ask(model: str = NAMING_MODEL) -> Ask:  # pragma: no cover -- spawns the real CLI

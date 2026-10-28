@@ -25,6 +25,8 @@ def ask_with(client: Any, model: str, prompt: str, schema: dict[str, Any]) -> An
     text = "".join(block.text for block in message.content if block.type == "text")
     if message.stop_reason in _EARLY_STOPS:
         raise NamingError(f"Claude stopped early ({message.stop_reason})", text)
+    if message.model != model:
+        raise NamingError(f"Claude answered with {message.model}, not {model}", text)
     return Answer(text, message.model, message.usage.input_tokens, message.usage.output_tokens)
 
 
