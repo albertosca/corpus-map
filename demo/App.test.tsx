@@ -56,9 +56,14 @@ const TINY_ARXIV_SPEC: MapSpec = {
 const ARXIV_TERRITORIES: Pick<MapSpec, "territories"> = arxivSpec(arxivJson);
 
 /** The exact text a far-regime territory button carries (`AccessibleTree`): `"<name>, <count> item(s)"`. */
+// Only a leaf is a button in the accessible tree: a family (some territory's
+// parent, no members of its own) renders as a heading.
 function territoryButtonText(spec: Pick<MapSpec, "territories">, index = 0): string {
-  const territory = spec.territories[index];
-  if (!territory) throw new Error(`spec has no territory at index ${index}`);
+  const leaves = spec.territories.filter(
+    (candidate) => !spec.territories.some((other) => other.parent === candidate.id),
+  );
+  const territory = leaves[index];
+  if (!territory) throw new Error(`spec has no leaf territory at index ${index}`);
   const count = territory.members.length;
   return `${territory.name}, ${count} ${count === 1 ? "item" : "items"}`;
 }

@@ -10,6 +10,10 @@
     "metric": "cosine",
     "random_state": 42
   },
+  "model_versions": {
+    "sentence_transformers": null,
+    "umap_learn": null
+  },
   "per_category": {
     "cs.AI": 1116,
     "cs.AR": 51,
@@ -56,5 +60,189 @@
     "floor": 0.8,
     "per_paper": 3,
     "count": 7283
+  },
+  "clusters": {
+    "leaves": 18,
+    "groups": 5,
+    "silhouettes": {
+      "leaves": {
+        "18": 0.363,
+        "19": 0.3565,
+        "20": 0.3511,
+        "21": 0.3528,
+        "22": 0.3519,
+        "23": 0.3434,
+        "24": 0.3442,
+        "25": 0.3426,
+        "26": 0.351
+      },
+      "groups": {
+        "5": 0.3954,
+        "6": 0.3846,
+        "7": 0.3725,
+        "8": 0.3647,
+        "9": 0.3491
+      }
+    },
+    "contiguity": 0.9734875
+  },
+  "naming": {
+    "model": "claude-opus-5-5",
+    "prompt_version": 2,
+    "check": {
+      "passed": true,
+      "seed": 20261027,
+      "held_out": 360,
+      "baseline": {
+        "names": [
+          "Artificial Intelligence",
+          "Computation and Language",
+          "Computational Complexity",
+          "Computational Engineering, Finance, and Science",
+          "Computational Geometry",
+          "Computer Science and Game Theory",
+          "Computer Vision and Pattern Recognition",
+          "Computers and Society",
+          "Cryptography and Security",
+          "Data Structures and Algorithms",
+          "Databases",
+          "Digital Libraries",
+          "Discrete Mathematics",
+          "Distributed, Parallel, and Cluster Computing",
+          "Emerging Technologies",
+          "Formal Languages and Automata Theory",
+          "General Literature",
+          "Graphics",
+          "Hardware Architecture",
+          "Human-Computer Interaction",
+          "Information Retrieval",
+          "Information Theory",
+          "Logic in Computer Science",
+          "Machine Learning",
+          "Mathematical Software",
+          "Multiagent Systems",
+          "Multimedia",
+          "Networking and Internet Architecture",
+          "Neural and Evolutionary Computing",
+          "Operating Systems",
+          "Other Computer Science",
+          "Performance",
+          "Programming Languages",
+          "Robotics",
+          "Social and Information Networks",
+          "Software Engineering",
+          "Sound",
+          "Symbolic Computation"
+        ],
+        "overall": 0.6777777777777778,
+        "lift": 25.755555555555556
+      },
+      "leaves": {
+        "names": {
+          "g1-l1": "LLM agent harnesses & agentic RL",
+          "g1-l2": "RAG, agent memory & benchmarks",
+          "g1-l3": "LLM social science & bias",
+          "g1-l4": "LLM agent security & attacks",
+          "g1-l5": "AI governance & human-AI use",
+          "g2-l1": "LLM quantization & decoding",
+          "g2-l2": "GPU systems & LLM serving",
+          "g2-l3": "Learning dynamics & diffusion",
+          "g2-l4": "Time-series & physics-ML models",
+          "g3-l1": "3D reconstruction & Gaussians",
+          "g3-l2": "Robot manipulation & VLA",
+          "g3-l3": "Vision-language models",
+          "g4-l1": "Algorithms, graphs & complexity",
+          "g4-l2": "Coding theory & capacity bounds",
+          "g4-l3": "Wireless communication & 6G",
+          "g4-l4": "Graph learning & federated GNNs",
+          "g5-l1": "Medical imaging & clinical AI",
+          "g5-l2": "Speech, audio & EEG models"
+        },
+        "passed": true,
+        "attempts": [
+          {
+            "names": {
+              "g1-l1": "LLM agent harnesses & agentic RL",
+              "g1-l2": "RAG, agent memory & benchmarks",
+              "g1-l3": "LLM social science & bias",
+              "g1-l4": "LLM agent security & attacks",
+              "g1-l5": "AI governance & human-AI use",
+              "g2-l1": "LLM quantization & decoding",
+              "g2-l2": "GPU systems & LLM serving",
+              "g2-l3": "Learning dynamics & diffusion",
+              "g2-l4": "Time-series & physics-ML models",
+              "g3-l1": "3D reconstruction & Gaussians",
+              "g3-l2": "Robot manipulation & VLA",
+              "g3-l3": "Vision-language models",
+              "g4-l1": "Algorithms, graphs & complexity",
+              "g4-l2": "Coding theory & capacity bounds",
+              "g4-l3": "Wireless communication & 6G",
+              "g4-l4": "Graph learning & federated GNNs",
+              "g5-l1": "Medical imaging & clinical AI",
+              "g5-l2": "Speech, audio & EEG models"
+            },
+            "shares": {
+              "g1-l1": 0.45,
+              "g1-l2": 0.45,
+              "g1-l3": 0.35,
+              "g1-l4": 0.75,
+              "g1-l5": 0.7,
+              "g2-l1": 0.35,
+              "g2-l2": 0.7,
+              "g2-l3": 0.25,
+              "g2-l4": 0.8,
+              "g3-l1": 0.35,
+              "g3-l2": 0.8,
+              "g3-l3": 0.75,
+              "g4-l1": 0.95,
+              "g4-l2": 0.35,
+              "g4-l3": 0.85,
+              "g4-l4": 0.45,
+              "g5-l1": 0.85,
+              "g5-l2": 0.65
+            },
+            "overall": 0.6,
+            "lift": 10.799999999999999,
+            "failing": []
+          }
+        ]
+      },
+      "groups": {
+        "names": {
+          "g1": "LLM agents & society",
+          "g2": "Training & inference",
+          "g3": "Vision & robotics",
+          "g4": "Theory & networks",
+          "g5": "Medical & speech AI"
+        },
+        "passed": true,
+        "attempts": [
+          {
+            "names": {
+              "g1": "LLM agents & society",
+              "g2": "Training & inference",
+              "g3": "Vision & robotics",
+              "g4": "Theory & networks",
+              "g5": "Medical & speech AI"
+            },
+            "shares": {
+              "g1": 0.75,
+              "g2": 0.7375,
+              "g3": 0.8833333333333333,
+              "g4": 0.8125,
+              "g5": 0.825
+            },
+            "overall": 0.7916666666666666,
+            "lift": 3.958333333333333,
+            "failing": []
+          }
+        ]
+      },
+      "usage": {
+        "calls": 3,
+        "input_tokens": 66365,
+        "output_tokens": 29091
+      }
+    }
   }
 }

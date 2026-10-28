@@ -1,7 +1,5 @@
 import type { MapSpec } from "corpus-map";
 import { validateSpec } from "corpus-map";
-import { withGroupNames } from "../../tools/group-names/groupNamesFile";
-import arxivGroupNames from "./arxiv.groups.json";
 import { withExpandedArxiv } from "./compact";
 import { constellationsSpec } from "./constellations";
 import type { DisplaySettings } from "./display";
@@ -28,13 +26,13 @@ let pendingArxiv: Promise<MapSpec> | undefined;
 
 /**
  * The arXiv body as the demo shows it: compact edges, territory members and
- * node meta expanded (`withExpandedArxiv`), then the group
- * names Claude wrote (`arxiv.groups.json`, spec slice F §4) applied in place
- * of the provisional "Largest +N" ones. The tests build arXiv through this
- * too, so they check what the demo loads.
+ * node meta expanded (`withExpandedArxiv`). Its territories are the map's own
+ * clusters, leaves under declared families, named by the pipeline and held to
+ * its blind test (`pipeline/arxiv`). The tests build arXiv through this too,
+ * so they check what the demo loads.
  */
 export function arxivSpec(body: unknown): MapSpec {
-  return validateSpec(withGroupNames(withExpandedArxiv(body), arxivGroupNames));
+  return validateSpec(withExpandedArxiv(body));
 }
 
 async function fetchArxiv(): Promise<MapSpec> {

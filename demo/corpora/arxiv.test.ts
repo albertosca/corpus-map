@@ -11,8 +11,6 @@ import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen, type Viewport } from "../../src/viewport/viewport";
-import { staleGroups } from "../../tools/group-names/stale";
-import groupNamesJson from "./arxiv.groups.json";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
 // typed off the ~1.4 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
@@ -23,11 +21,62 @@ import { withExpandedArxiv } from "./compact";
 import { arxivSpec } from "./index";
 
 const rawSpec: unknown = withExpandedArxiv(rawSpecJson);
-/** What the demo loads: the corpus with Claude's group names applied (spec slice F §4). */
+/** What the demo loads: the corpus with its compact parts expanded, validated. */
 const shippedSpec: MapSpec = arxivSpec(rawSpecJson);
 const meta: Record<string, unknown> = metaJson;
 
 const ATTRIBUTION = "Thank you to arXiv for use of its open access interoperability.";
+
+/** The blind test's floors (`pipeline/arxiv/src/arxiv_corpus/blind.py`, spec §2.3 as amended 2026-10-28). */
+const LEAF_FLOOR = 0.25;
+const OVERALL_FLOOR = 0.6;
+const GROUP_FLOOR = 0.7;
+
+interface Attempt {
+  names: Record<string, string>;
+  overall: number;
+  shares: Record<string, number | null>;
+}
+
+interface LevelReport {
+  passed: boolean;
+  names: Record<string, string>;
+  attempts: Attempt[];
+}
+
+const naming = meta.naming as { model: string; check: { passed: boolean; leaves: LevelReport; groups: LevelReport } };
+
+const leavesOf = (spec: MapSpec): Territory[] => spec.territories.filter((territory) => territory.parent !== undefined);
+const familiesOf = (spec: MapSpec): Territory[] =>
+  spec.territories.filter((territory) => territory.parent === undefined);
+
+/**
+ * Share of each node's `neighbours` nearest map neighbours (itself excluded)
+ * that sit in its own territory, over the whole corpus: the pipeline's
+ * `contiguity`, by brute force so the test needs no index.
+ */
+function contiguity(nodes: readonly MapNode[], neighbours: number): number {
+  let same = 0;
+  for (const [index, node] of nodes.entries()) {
+    const nearestDistances: number[] = [];
+    const nearestIndices: number[] = [];
+    for (const [otherIndex, other] of nodes.entries()) {
+      if (otherIndex === index) continue;
+      const distance = (other.x - node.x) ** 2 + (other.y - node.y) ** 2;
+      if (nearestDistances.length === neighbours && distance >= (nearestDistances[neighbours - 1] ?? 0)) continue;
+      let position = nearestDistances.length;
+      while (position > 0 && (nearestDistances[position - 1] ?? 0) > distance) position -= 1;
+      nearestDistances.splice(position, 0, distance);
+      nearestIndices.splice(position, 0, otherIndex);
+      if (nearestDistances.length > neighbours) {
+        nearestDistances.pop();
+        nearestIndices.pop();
+      }
+    }
+    for (const nearest of nearestIndices) if (nodes[nearest]?.territory === node.territory) same += 1;
+  }
+  return same / (nodes.length * neighbours);
+}
 
 /** Every key present anywhere in `value`, walked recursively through objects and arrays. */
 function collectKeys(value: unknown, keys: Set<string>): void {
@@ -49,12 +98,13 @@ describe("the arXiv corpus", () => {
   });
 
   // Canary: proves the check above actually runs, rather than the corpus
-  // just happening to be well-formed. Every territory the export produced
-  // has at least FLOOR (20) member papers that claim it, so dropping any
-  // one territory leaves those nodes pointing at an unknown territory id.
-  it("canary: validateSpec throws once a territory is removed from a copy of the spec", () => {
+  // just happening to be well-formed. Every leaf the export produced has
+  // member papers that claim it, so dropping one leaves those nodes
+  // pointing at an unknown territory id.
+  it("canary: validateSpec throws once a leaf is removed from a copy of the spec", () => {
     const spec = rawSpec as MapSpec;
-    const broken = { ...spec, territories: spec.territories.slice(1) };
+    const [firstLeaf] = leavesOf(spec);
+    const broken = { ...spec, territories: spec.territories.filter((territory) => territory !== firstLeaf) };
     expect(() => validateSpec(broken)).toThrow(SpecError);
   });
 
@@ -63,9 +113,65 @@ describe("the arXiv corpus", () => {
     expect(spec.nodes.length).toBeGreaterThanOrEqual(5000);
   });
 
-  it("has at least 30 territories", () => {
+  it("has 18-26 leaves, each under a declared family, in 5-9 families that hold no papers themselves", () => {
     const spec = validateSpec(rawSpec);
-    expect(spec.territories.length).toBeGreaterThanOrEqual(30);
+    const leaves = leavesOf(spec);
+    const families = familiesOf(spec);
+    expect(leaves.length).toBeGreaterThanOrEqual(18);
+    expect(leaves.length).toBeLessThanOrEqual(26);
+    expect(families.length).toBeGreaterThanOrEqual(5);
+    expect(families.length).toBeLessThanOrEqual(9);
+    const familyIds = new Set(families.map((family) => family.id));
+    for (const leaf of leaves) expect(familyIds.has(leaf.parent ?? "")).toBe(true);
+    for (const family of families) expect(family.members).toEqual([]);
+    for (const family of families) expect(leaves.some((leaf) => leaf.parent === family.id)).toBe(true);
+  });
+
+  it("keeps each paper's arXiv category as node meta, from the arXiv category table", () => {
+    const spec = validateSpec(rawSpec);
+    const categories = new Set<string>();
+    for (const node of spec.nodes) {
+      const category = (node.meta as { category?: { id?: unknown; name?: unknown } } | undefined)?.category;
+      expect(typeof category?.id).toBe("string");
+      expect(category?.id as string).toMatch(/^cs\.[A-Z]{2}$/);
+      expect(typeof category?.name).toBe("string");
+      categories.add(category?.id as string);
+    }
+    // The categories cut across the territories: far more of them than leaves.
+    expect(categories.size).toBeGreaterThan(leavesOf(spec).length);
+  });
+
+  it("territories are spatially contiguous: at least 90% of each paper's 10 nearest neighbours share its leaf", () => {
+    const spec = validateSpec(rawSpec);
+    expect(contiguity(spec.nodes, 10)).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("canary: contiguity falls far below 0.90 once the leaves are dealt out round-robin", () => {
+    const spec = validateSpec(rawSpec);
+    const leafIds = leavesOf(spec).map((leaf) => leaf.id);
+    const shuffled = spec.nodes.map((node, index) => ({ ...node, territory: leafIds[index % leafIds.length] ?? "" }));
+    expect(contiguity(shuffled, 10)).toBeLessThan(0.2);
+  });
+
+  it("its names passed the pipeline's blind test, at the floors spec §2.3 sets", () => {
+    expect(naming.check.passed).toBe(true);
+    const spec = validateSpec(rawSpec);
+    const leaves = naming.check.leaves;
+    const groups = naming.check.groups;
+    expect(leaves.passed).toBe(true);
+    expect(groups.passed).toBe(true);
+    const lastLeaves = leaves.attempts[leaves.attempts.length - 1];
+    const lastGroups = groups.attempts[groups.attempts.length - 1];
+    expect(lastLeaves?.names).toEqual(leaves.names);
+    expect(lastGroups?.names).toEqual(groups.names);
+    expect(lastLeaves?.overall).toBeGreaterThanOrEqual(OVERALL_FLOOR);
+    for (const share of Object.values(lastLeaves?.shares ?? {})) expect(share ?? 0).toBeGreaterThanOrEqual(LEAF_FLOOR);
+    for (const share of Object.values(lastGroups?.shares ?? {})) expect(share ?? 0).toBeGreaterThanOrEqual(GROUP_FLOOR);
+    // The tested names are the shipped names, level for level.
+    const shipped = (territories: Territory[]) =>
+      Object.fromEntries(territories.map((territory) => [territory.id, territory.name]));
+    expect(shipped(leavesOf(spec))).toEqual(leaves.names);
+    expect(shipped(familiesOf(spec))).toEqual(groups.names);
   });
 
   it("carries no author or authors key, at any depth", () => {
@@ -86,23 +192,26 @@ describe("the arXiv corpus", () => {
     }
   });
 
-  it("every territory's members resolve and its centroid is finite (sanity on top of validateSpec)", () => {
+  it("every leaf has members, and every territory's centroid is finite (sanity on top of validateSpec)", () => {
     const spec = validateSpec(rawSpec);
+    for (const leaf of leavesOf(spec)) expect(leaf.members.length).toBeGreaterThan(0);
     for (const territory of spec.territories as Territory[]) {
-      expect(territory.members.length).toBeGreaterThan(0);
       expect(Number.isFinite(territory.centroid[0])).toBe(true);
       expect(Number.isFinite(territory.centroid[1])).toBe(true);
     }
   });
 
-  it("ships edges, every one across two territories, at most six per item", () => {
+  it("ships edges, every one across two arXiv categories, at most six per item", () => {
     const spec = validateSpec(rawSpec);
-    const territoryOf = new Map(spec.nodes.map((node) => [node.id, node.territory]));
+    const categoryOf = new Map(
+      spec.nodes.map((node) => [node.id, (node.meta as { category?: { id?: string } } | undefined)?.category?.id]),
+    );
     const degrees = new Map<string, number>();
     const edges = spec.edges ?? [];
     expect(edges.length).toBeGreaterThan(0);
     for (const edge of edges) {
-      expect(territoryOf.get(edge.source)).not.toBe(territoryOf.get(edge.target));
+      expect(categoryOf.get(edge.source)).toBeDefined();
+      expect(categoryOf.get(edge.source)).not.toBe(categoryOf.get(edge.target));
       degrees.set(edge.source, (degrees.get(edge.source) ?? 0) + 1);
       degrees.set(edge.target, (degrees.get(edge.target) ?? 0) + 1);
     }
@@ -167,30 +276,18 @@ function crossesEdge(box: DrawnBox, width: number, height: number): boolean {
   );
 }
 
-/** Spec slice F: the group names Claude wrote, applied by the demo at load. */
-describe("the arXiv group names", () => {
-  const file = groupNamesJson;
-  const scene = buildScene(shippedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-
-  it("are fresh: the names file matches the groups the corpus derives today", () => {
-    expect(staleGroups(validateSpec(rawSpec), file)).toEqual([]);
-  });
-
-  it("are what the loaded map's groups carry, member for member", () => {
-    const named = scene.groups.map((group) => ({ name: group.name, members: [...group.members].sort() }));
-    const expected = file.groups.map((group) => ({ name: group.name, members: [...group.members].sort() }));
-    expect(named).toEqual(expected);
-    expect(scene.groups.every((group) => !/ \+\d+$/.test(group.name))).toBe(true);
-  });
-
-  it("each fits a phone: 375 px minus the 16 px gutters, in the group-name style", () => {
+/** The family names the pipeline wrote, as the fitted view draws them. */
+describe("the arXiv family names", () => {
+  // The smallest box the fit tests (demo/corpora/fit.test.ts) minus the fit's
+  // 24 px padding: a wider name can never sit whole inside the fitted view.
+  it("each declared group name fits a phone: 320 px minus the fit's 24 px padding, in the group-name style", () => {
     const font = DEFAULT_THEME.territoryFonts.large;
-    const tooWide = file.groups
-      .map((group) => ({
-        name: group.name,
-        width: estimateText(group.name, font).width + GROUP_LETTER_SPACING * group.name.length,
+    const tooWide = familiesOf(shippedSpec)
+      .map((family) => ({
+        name: family.name,
+        width: estimateText(family.name, font).width + GROUP_LETTER_SPACING * family.name.length,
       }))
-      .filter((measured) => measured.width > 375 - 2 * 16);
+      .filter((measured) => measured.width > 320 - 2 * 24);
     expect(tooWide).toEqual([]);
   });
 });
@@ -214,14 +311,25 @@ describe("acceptance 2: the fitted arXiv view", () => {
     expect(regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis)).toBe("far");
   });
 
-  it("groups the 38 categories in 6, with the probe's contiguous pairs together", () => {
-    expect(scene.groups).toHaveLength(6);
+  it("groups the leaves in their declared families, every leaf in exactly one", () => {
+    const families = familiesOf(spec);
+    expect(scene.groups.map((group) => group.name).sort()).toEqual(families.map((family) => family.name).sort());
     const memberships = scene.groups.flatMap((group) => group.members);
-    expect([...memberships].sort()).toEqual(spec.territories.map((territory) => territory.id).sort());
-    const groupOf = (id: string) => scene.groups.find((group) => group.members.includes(id))?.id;
-    expect(groupOf("cs.RO")).toBe(groupOf("cs.CV"));
-    expect(groupOf("cs.GR")).toBe(groupOf("cs.CV"));
-    expect(groupOf("cs.MM")).toBe(groupOf("cs.SD"));
+    expect([...memberships].sort()).toEqual(
+      leavesOf(spec)
+        .map((leaf) => leaf.id)
+        .sort(),
+    );
+  });
+
+  it("at 1440x900 every family name is drawn at the fitted view (acceptance 3)", () => {
+    const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, 1440, 900, 24), 1440, 900, 1);
+    const drawn = new Set(boxes.map((box) => box.text));
+    expect(
+      familiesOf(spec)
+        .filter((family) => !drawn.has(family.name))
+        .map((family) => family.name),
+    ).toEqual([]);
   });
 
   for (const [width, height] of [
