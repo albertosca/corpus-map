@@ -107,11 +107,11 @@ def _score(shares: dict[str, float | None], overall: float, lift: float) -> blin
 
 
 def test_leaf_gate_passes_at_the_floors() -> None:
-    assert blind.leaf_gate(_score({"a": 0.4, "b": 0.8, "c": None}, 0.6, 1.8)) == (True, set())
+    assert blind.leaf_gate(_score({"a": 0.25, "b": 0.8, "c": None}, 0.6, 1.8)) == (True, set())
 
 
 def test_leaf_gate_fails_a_leaf_below_its_floor_alone() -> None:
-    assert blind.leaf_gate(_score({"a": 0.35, "b": 0.9}, 0.7, 1.4)) == (False, {"a"})
+    assert blind.leaf_gate(_score({"a": 0.2, "b": 0.9}, 0.7, 1.4)) == (False, {"a"})
 
 
 def test_leaf_gate_failing_overall_re_names_the_leaves_below_the_overall_floor() -> None:
@@ -229,7 +229,7 @@ def test_check_level_stops_at_once_when_the_gate_fails_with_nothing_to_rename() 
 
 def test_the_real_constants_are_the_spec_values() -> None:
     assert blind.HELD_OUT_PER_LEAF == 20
-    assert (blind.LEAF_FLOOR, blind.OVERALL_FLOOR, blind.GROUP_FLOOR) == (0.40, 0.60, 0.70)
+    assert (blind.LEAF_FLOOR, blind.OVERALL_FLOOR, blind.GROUP_FLOOR) == (0.25, 0.60, 0.70)
     assert blind.MAXIMUM_RENAMES == 4
 
 

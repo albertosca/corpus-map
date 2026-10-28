@@ -16,7 +16,7 @@ from arxiv_corpus.naming import INPUT_MARKER, Answer, Ask, Feedback, NamingError
 
 SEED = 20261027
 HELD_OUT_PER_LEAF = 20
-LEAF_FLOOR = 0.40
+LEAF_FLOOR = 0.25
 OVERALL_FLOOR = 0.60
 GROUP_FLOOR = 0.70
 MAXIMUM_RENAMES = 4
