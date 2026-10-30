@@ -119,3 +119,18 @@ describe.each([
     }
   });
 });
+
+/**
+ * The selected card sits over the map, and item labels paint dark (or light)
+ * plates on the canvas beneath it: a translucent card background lets that
+ * text show through as ghost text (seen in the browser at 0.96 alpha). The
+ * shared `cardBackground` therefore stays fully opaque in both themes.
+ */
+describe.each([
+  ["light", DEFAULT_THEME],
+  ["dark", DARK_THEME],
+] as const)("%s card background", (_name, theme) => {
+  it("is fully opaque so nothing painted beneath the card shows through", () => {
+    expect(parseColor(theme.cardBackground)[3]).toBe(1);
+  });
+});
