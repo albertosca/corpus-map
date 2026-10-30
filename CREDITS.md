@@ -30,7 +30,7 @@ Source of the pole-of-inaccessibility construction — the interior point of a p
 
 ## Christensen, Marks and Shieber (1995) — "An Empirical Study of Algorithms for Point-Feature Label Placement" — paper, no code used
 
-Source of the fixed eight-candidate-position idiom (right, left, above, below, then the four diagonals, tried in that priority order, the first that fits and overlaps nothing already placed wins) that `src/cards/layout.ts`'s `layoutCards` uses to place a card beside its point. Written from the paper's description of candidate position sets for point-feature labels; no code used.
+Source of the fixed eight-candidate-position idiom (right, left, above, below, then the four diagonals, tried in that priority order, the first that fits and overlaps nothing already placed wins) that `src/cards/placeSelectedCard.ts`'s `candidates` uses for the selected card's spots beside its point, there ranked by what each spot hides rather than taken first-fit. Written from the paper's description of candidate position sets for point-feature labels; no code used.
 
 ## Marching squares and Chaikin corner cutting — public algorithms, no code used
 

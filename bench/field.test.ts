@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateCorpus, TERRITORY_COUNT } from "../fixtures/synthetic/generate";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../src/labels/itemLabels";
 import { estimateText } from "../src/labels/placement";
 import { paint } from "../src/shared/paint";
 import { buildScene } from "../src/shared/scene";
@@ -49,6 +50,41 @@ describe("point field", () => {
     const medianMs = median(samples);
     console.log(
       `paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms)`,
+    );
+    expect(medianMs).toBeLessThan(BUDGET_MS);
+  });
+
+  it(`paints a near frame with item labels within ${BUDGET_MS}ms (median of ${SAMPLES})`, () => {
+    const spec = generateCorpus({ seed: 1, size: 10_000 });
+    // Eight times the mid frame's scale, about the same corner: a near view.
+    const viewport = { scale: 0.4, tx: 200, ty: 150 };
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    const itemLabels = placeItemLabels(
+      spec,
+      scene.labels,
+      { font: DEFAULT_ITEM_LABEL_FONT, width: DEFAULT_TUNING.itemLabelWidth, lines: DEFAULT_TUNING.itemLabelLines },
+      estimateText,
+    );
+    const frame = { regime: "near" as const, pointAlpha: 1, width: 1280, height: 800, itemLabels, itemLabelAlpha: 1 };
+
+    for (let index = 0; index < WARM_UPS; index += 1)
+      paint(new RecordingSurface(), scene, spec, viewport, frame, DEFAULT_THEME);
+    const samples: number[] = [];
+    let drawnTexts = 0;
+    for (let index = 0; index < SAMPLES; index += 1) {
+      const surface = new RecordingSurface();
+      const start = performance.now();
+      paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
+      samples.push(performance.now() - start);
+      drawnTexts = surface.texts.length;
+    }
+    // The same frame with the labels faded out draws only the names: the labels must add text on top of them.
+    const namesOnly = new RecordingSurface();
+    paint(namesOnly, scene, spec, viewport, { ...frame, itemLabelAlpha: 0 }, DEFAULT_THEME);
+    expect(drawnTexts).toBeGreaterThan(namesOnly.texts.length);
+    const medianMs = median(samples);
+    console.log(
+      `near paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms), ${drawnTexts} texts`,
     );
     expect(medianMs).toBeLessThan(BUDGET_MS);
   });

@@ -1,7 +1,6 @@
 // CorpusMap.d.ts
 import { type ReactElement, type ReactNode, type Ref } from "react";
 import { type HeadingLevel } from "./a11y/headingLevel";
-import { type CardContext } from "./cards/CardOverlay";
 import { type LodThresholds, type Regime } from "./lod/lod";
 import { type MinimapCorner } from "./minimap/Minimap";
 import { type Insets } from "./shared/insets";
@@ -38,12 +37,8 @@ export interface CorpusMapProps {
      * render.
      */
     spec: MapSpec;
-    /**
-     * Fills each card at near. `context.badgeCount` is the number the card's
-     * group badge shows in its top-right corner (0 without one); keep the
-     * first line clear of that corner when it is above 0.
-     */
-    renderCard: (node: MapNode, context: CardContext) => ReactNode;
+    /** Fills the selected item's card (shown at mid and near while its point is in the box). */
+    renderCard: (node: MapNode) => ReactNode;
     /** React 19 ref-as-prop; see `CorpusMapHandle`. */
     ref?: Ref<CorpusMapHandle> | undefined;
     /**
@@ -66,8 +61,9 @@ export interface CorpusMapProps {
     thresholds?: LodThresholds | undefined;
     /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
     tuning?: Partial<Tuning> | undefined;
+    /** Caps the accessible tree's item list (default 200). */
     cardCap?: number | undefined;
-    /** Card frame size, passed to `layoutCards`. Defaults to 160x56. */
+    /** The selected card's frame size. Defaults to 160x56. */
     cardSize?: {
         width: number;
         height: number;
@@ -245,10 +241,9 @@ export declare function paintFocusedNode(surface: Surface, scene: Scene, viewpor
 
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";
-import type { Regime } from "../lod/lod";
-import type { MapNode, MapSpec } from "../shared/spec";
+import type { MapNode } from "../shared/spec";
 import { type Theme } from "../shared/theme";
-import { type Viewport } from "../viewport/viewport";
+import type { SelectedCardPlacement } from "./placeSelectedCard";
 /** The library's own default card frame size, also `CorpusMap`'s default for `cardSize`. */
 export declare const DEFAULT_CARD_SIZE: {
     width: number;
@@ -258,35 +253,21 @@ export declare const DEFAULT_CARD_SIZE: {
 export declare const CARD_STRIPE_WIDTH = 4;
 /** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
 export declare const CARD_BORDER_WIDTH = 1;
-/**
- * What a card renderer knows about the card it fills, beyond its node.
- * `badgeCount` is the number the group badge in the card's top-right corner
- * shows ("+3" is 3), 0 when the card has no badge: a renderer keeps its first
- * line clear of that corner when it is above 0.
- */
-export interface CardContext {
-    badgeCount: number;
-}
 export interface CardOverlayProps {
-    spec: MapSpec;
-    viewport: Viewport;
-    regime: Regime;
-    cap: number;
-    width: number;
-    height: number;
-    /** Frame size passed to `layoutCards`. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
+    /** The selected item; the overlay renders its one card. */
+    node: MapNode;
+    placement: SelectedCardPlacement;
+    /** Frame size. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
     cardSize?: {
         width: number;
         height: number;
     } | undefined;
-    /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
-    opacity?: number | undefined;
-    theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
+    theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral" | "edge" | "territoryLabel"> | undefined;
     /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
     colours?: ReadonlyMap<string, string> | undefined;
-    renderCard: (node: MapNode, context: CardContext) => ReactNode;
+    renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({ spec, viewport, regime, cap, width, height, cardSize, opacity, theme, colours, renderCard, }: CardOverlayProps): ReactElement | null;
+export declare function CardOverlay({ node, placement, cardSize, theme, colours, renderCard, }: CardOverlayProps): ReactElement;
 
 // cards/cardSizeFor.d.ts
 import type { MapSpec } from "../shared/spec";
@@ -329,34 +310,47 @@ export declare function cardSizeFor(spec: MapSpec, options?: CardSizeOptions): {
     height: number;
 };
 
-// cards/layout.d.ts
-export interface CardAnchor {
-    id: string;
-    x: number;
-    y: number;
-}
-export interface PlacedCard {
-    ids: string[];
-    x: number;
-    y: number;
-}
+// cards/placeSelectedCard.d.ts
+export declare const NEAR_CARD_GAP = 6;
+export declare const FAR_CARD_GAP = 48;
+/** An edge the card would cover costs as much as this many points under it. */
+export declare const EDGE_CROSSING_COST = 4;
 /** Top-left corners of the eight candidates, in preference order: right, left, above, below, then the diagonals. */
 export declare function candidates(horizontal: number, vertical: number, width: number, height: number, gap: number): Array<[number, number]>;
+export interface SelectedCardInput {
+    anchor: readonly [number, number];
+    size: {
+        width: number;
+        height: number;
+    };
+    area: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    };
+    /** The selected item's drawn edges, as screen segments. */
+    edges: ReadonlyArray<readonly [readonly [number, number], readonly [number, number]]>;
+    /** The other on-screen, non-dimmed points. */
+    points: ReadonlyArray<readonly [number, number]>;
+}
+export interface SelectedCardPlacement {
+    left: number;
+    top: number;
+    /** From the point to the nearest point of the card's frame; only for a far-ring card. */
+    leader: {
+        from: [number, number];
+        to: [number, number];
+    } | null;
+}
 /**
- * Place a card beside each anchor, in the first of eight candidate positions
- * that stays inside the box and overlaps no placed card (Christensen, Marks and
- * Shieber 1995). An anchor with no free candidate joins the placed card nearest
- * to it, which becomes a group card. If no card has been placed yet and the
- * anchor has no free candidate, place its card anyway, clamped to the box corner.
- * A card larger than the box is placed at the box's corner (0, 0).
+ * The selected card's spot (spec item labels §4): of the eight candidates at
+ * `NEAR_CARD_GAP` then the eight at `FAR_CARD_GAP` that fit inside `area`,
+ * the cheapest, where each drawn edge crossing the card costs
+ * `EDGE_CROSSING_COST` and each point under it costs 1; ties go to the
+ * earlier candidate. Nothing fits: the near-right spot clamped into `area`.
  */
-export declare function layoutCards(anchors: readonly CardAnchor[], size: {
-    width: number;
-    height: number;
-}, box: {
-    width: number;
-    height: number;
-}, gap?: number): PlacedCard[];
+export declare function placeSelectedCard(input: SelectedCardInput): SelectedCardPlacement;
 
 // edges/EdgeMarkers.d.ts
 import { type ReactElement } from "react";
@@ -465,7 +459,6 @@ export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";
 export { CorpusMap } from "./CorpusMap";
-export type { CardContext } from "./cards/CardOverlay";
 export type { CardSizeOptions } from "./cards/cardSizeFor";
 export { cardSizeFor } from "./cards/cardSizeFor";
 export type { RelatedItem } from "./edges/related";
@@ -501,6 +494,87 @@ export declare function over(top: Rgba, bottom: Rgba): Rgba;
 /** WCAG 2.2 contrast ratio between two opaque colours. */
 export declare function contrastRatio(first: Rgba, second: Rgba): number;
 
+// labels/itemLabelAt.d.ts
+import type { Viewport } from "../viewport/viewport";
+import type { PlacedItemLabel } from "./itemLabels";
+import { type ItemLabelBox } from "./paintItemLabels";
+/** The id of the drawn plate under (horizontal, vertical), the last painted winning; `null` when none. */
+export declare function itemLabelAt(labels: readonly PlacedItemLabel[], viewport: Viewport, box: ItemLabelBox, horizontal: number, vertical: number): string | null;
+
+// labels/itemLabels.d.ts
+import type { MapSpec } from "../shared/spec";
+import type { Measure, PlacedLabel } from "./placement";
+/** Screen pixels between the point's centre and the bottom of its label's plate. */
+export declare const ITEM_LABEL_GAP = 6;
+export declare const ITEM_LABEL_PADDING: {
+    readonly horizontal: 4;
+    readonly vertical: 2;
+};
+/** Line height as a multiple of the font's px size. */
+export declare const ITEM_LABEL_LINE_HEIGHT = 1.25;
+export declare const ITEM_LABEL_RADIUS = 3;
+export declare const DEFAULT_ITEM_LABEL_FONT = "500 11px system-ui, sans-serif";
+/** The font's px size; 12 when it states none, as `estimateText` assumes. */
+export declare function fontPixels(font: string): number;
+/**
+ * Greedy word wrap into at most `maximumLines` lines of at most
+ * `maximumWidth` pixels; text left over ends the last line in an ellipsis,
+ * and a single word wider than the width is cut with one.
+ */
+export declare function wrapLabel(text: string, font: string, maximumWidth: number, maximumLines: number, measure: Measure): string[];
+/** An item's label plate and the scale from which it is drawn (spec item labels §2-3). */
+export interface PlacedItemLabel {
+    id: string;
+    territory: string | null;
+    anchor: readonly [number, number];
+    lines: string[];
+    width: number;
+    height: number;
+    /** The plate centre's screen offset from the point: straight up, its bottom `ITEM_LABEL_GAP` above it. */
+    offset: readonly [number, number];
+    /** Absolute scale, as `PlacedLabel.activeFromScale`. */
+    activeFromScale: number;
+}
+export interface ItemLabelOptions {
+    font: string;
+    width: number;
+    lines: number;
+}
+/**
+ * Every item's label plate, in priority order (`priority`, then edge count,
+ * then id), with the scale from which it is drawn: the territory names in
+ * `seeds` are placed first and never overlapped (spec item labels §3). The
+ * edge count reads `spec.edges`, not the scene, so a palette change never
+ * re-places the labels.
+ */
+export declare function placeItemLabels(spec: MapSpec, seeds: readonly PlacedLabel[], options: ItemLabelOptions, measure: Measure): PlacedItemLabel[];
+
+// labels/paintItemLabels.d.ts
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import { type Viewport } from "../viewport/viewport";
+import { type PlacedItemLabel } from "./itemLabels";
+export interface ItemLabelBox {
+    width: number;
+    height: number;
+    dimmed: ReadonlySet<string>;
+}
+/**
+ * The labels drawn at this scale, wherever they sit: position never enters
+ * the decision, as for territory names, so a pan cannot pop one; a plate
+ * larger than the canvas and a dimmed territory's items are left out.
+ */
+export declare function drawnItemLabels(labels: readonly PlacedItemLabel[], viewport: Viewport, box: ItemLabelBox): PlacedItemLabel[];
+/** The plate's screen rectangle at this viewport. */
+export declare function itemLabelRect(label: PlacedItemLabel, viewport: Viewport): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
+/** Each drawn label as a tooltip left open: a plate in `hoverBackground`, its lines in `hoverText`. */
+export declare function paintItemLabels(surface: Surface, labels: readonly PlacedItemLabel[], viewport: Viewport, theme: Theme, box: ItemLabelBox): void;
+
 // labels/paintLabels.d.ts
 import { type Presentation } from "../shared/presentation";
 import { type Scene } from "../shared/scene";
@@ -535,6 +609,38 @@ export interface LabelBox {
  * are drawn at `DIMMED_ALPHA` of their alpha, so after the others.
  */
 export declare function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void;
+
+// labels/placeBoxes.d.ts
+/** A label box to place: its world anchor, its screen size, and its centre's screen offset from the anchor. */
+export interface BoxInput {
+    id: string;
+    anchor: readonly [number, number];
+    width: number;
+    height: number;
+    offset: readonly [number, number];
+}
+/** A box placed before the others (a territory name), active from its own scale. */
+export interface FixedBox extends BoxInput {
+    activeFromScale: number;
+}
+/**
+ * The scale past which two boxes never overlap, generalising
+ * `separationScale` to boxes whose centres sit at a screen offset from their
+ * anchors: on one axis the boxes are apart once `|scale × delta + offsetDelta|`
+ * reaches the summed half size plus `LABEL_PADDING`, which holds for every
+ * scale from `(reach − sign(delta) × offsetDelta) / |delta|` on. With no
+ * offsets this is `separationScale`.
+ */
+export declare function offsetSeparation(horizontalDelta: number, verticalDelta: number, horizontalOffsetDelta: number, verticalOffsetDelta: number, halfWidth: number, halfHeight: number): number;
+/**
+ * Been, Daiches and Yap's active ranges for boxes already in priority order,
+ * after `fixed` (placed first, never moved): each box starts at the smallest
+ * scale at which it overlaps no box already active there. Placed boxes are
+ * bucketed on a uniform grid and each new box scans them ring by ring; a
+ * ring whose nearest possible member could not raise the box's scale ends
+ * the scan, so the result is exactly the all-pairs loop's.
+ */
+export declare function placeBoxes(ordered: readonly BoxInput[], fixed?: readonly FixedBox[]): number[];
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -599,6 +705,11 @@ export declare function signedDistance(point: Point, ring: Ring): number;
  * Mapbox's polylabel. `precision` is in world units.
  */
 export declare function poleOfInaccessibility(ring: Ring, precision: number): Point;
+
+// labels/sameLabels.d.ts
+import type { PlacedLabel } from "./placement";
+/** Whether two placements would seed item labels identically (a palette change rebuilds the scene, not its names). */
+export declare function sameLabels(first: readonly PlacedLabel[], second: readonly PlacedLabel[]): boolean;
 
 // labels/useMeasure.d.ts
 import { type Measure } from "./placement";
@@ -707,7 +818,11 @@ export interface LodThresholds {
     midAt: number;
     nearAt: number;
 }
-/** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
+/**
+ * Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime.
+ * `nearAt` is metric 18's answer over the demo corpora: the earliest zoom at which item labels name nearly as
+ * many on-screen items as they do at 6 (demo/corpora/labelledShare.ts, demo/corpora/nearAt.test.ts).
+ */
 export declare const DEFAULT_THRESHOLDS: LodThresholds;
 /**
  * Validated, defaulted thresholds: both fields finite and in
@@ -949,6 +1064,7 @@ export declare function usableArea(width: number, height: number, insets: Insets
 };
 
 // shared/paint.d.ts
+import type { PlacedItemLabel } from "../labels/itemLabels";
 import type { Regime } from "../lod/lod";
 import type { Viewport } from "../viewport/viewport";
 import { type Presentation } from "./presentation";
@@ -987,11 +1103,15 @@ export interface Frame {
     hovered?: string | null | undefined;
     /** How many edges an item draws (`Tuning.edgesPerNode`); absent means none. */
     edgesPerNode?: number | undefined;
+    /** Item labels placed for this spec (spec item labels §3); painted at near only. Absent means none. */
+    itemLabels?: readonly PlacedItemLabel[] | undefined;
+    /** The item labels' fade this frame (`cardOpacity`); absent means 0. */
+    itemLabelAlpha?: number | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
  * (largest first; with groups, the leaves' and the families' layers
- * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
+ * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the item labels at near, then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -1080,6 +1200,8 @@ export interface MapNode {
     state?: NodeState;
     badges?: string[];
     meta?: unknown;
+    /** Higher is labelled first at near (spec item labels §3); absent counts as 0. Finite. */
+    priority?: number;
 }
 export interface Territory {
     id: string;
@@ -1154,6 +1276,8 @@ export interface Surface {
     hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
     /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
     line(start: [number, number], end: [number, number], colour: string, width: number): void;
+    /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
+    plate(left: number, top: number, width: number, height: number, radius: number, fill: string): void;
     /**
      * Draws `draw`'s calls into one offscreen layer and composites it once at
      * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -1212,7 +1336,15 @@ export declare class RecordingSurface implements Surface {
         colour: string;
         width: number;
     }>;
-    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "layer" | "layerEnd">;
+    plates: Array<{
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+        radius: number;
+        fill: string;
+    }>;
+    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "plate" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
     circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
@@ -1222,6 +1354,7 @@ export declare class RecordingSurface implements Surface {
     outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
     line(start: [number, number], end: [number, number], colour: string, width: number): void;
+    plate(left: number, top: number, width: number, height: number, radius: number, fill: string): void;
     layer(alpha: number, draw: (surface: Surface) => void): void;
 }
 export declare function canvasSurface(context: CanvasRenderingContext2D): Surface;
@@ -1254,6 +1387,8 @@ export interface Theme {
      * least 3:1 over every page and fill. Absent falls back to `territoryLabel`.
      */
     edge?: string | undefined;
+    /** Font of the item labels at near (spec item labels §2); absent is `DEFAULT_ITEM_LABEL_FONT` ("500 11px system-ui, sans-serif"). */
+    itemLabelFont?: string | undefined;
     /**
      * Categorical colours for territories, assigned so that territories whose
      * visible borders touch get different colours (`territories/colour.ts`).
@@ -1305,6 +1440,10 @@ export interface Tuning {
     groupNamesUntil: number;
     /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
     edgesPerNode: number;
+    /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2). */
+    itemLabelWidth: number;
+    /** Most lines an item label wraps to; text past the last ends in an ellipsis. */
+    itemLabelLines: number;
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
