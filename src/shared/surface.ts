@@ -17,6 +17,8 @@ export interface Surface {
   hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
   /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
   line(start: [number, number], end: [number, number], colour: string, width: number): void;
+  /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
+  plate(left: number, top: number, width: number, height: number, radius: number, fill: string): void;
   /**
    * Draws `draw`'s calls into one offscreen layer and composites it once at
    * `alpha`, so shapes drawn inside never darken where they overlap (spec
@@ -37,6 +39,7 @@ export class RecordingSurface implements Surface {
   layers: number[] = [];
   hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
   lines: Array<{ from: [number, number]; to: [number, number]; colour: string; width: number }> = [];
+  plates: Array<{ left: number; top: number; width: number; height: number; radius: number; fill: string }> = [];
   calls: Array<
     | "clear"
     | "polygon"
@@ -47,6 +50,7 @@ export class RecordingSurface implements Surface {
     | "outline"
     | "ring"
     | "line"
+    | "plate"
     | "layer"
     | "layerEnd"
   > = [];
@@ -90,6 +94,10 @@ export class RecordingSurface implements Surface {
   line(start: [number, number], end: [number, number], colour: string, width: number) {
     this.calls.push("line");
     this.lines.push({ from: start, to: end, colour, width });
+  }
+  plate(left: number, top: number, width: number, height: number, radius: number, fill: string) {
+    this.calls.push("plate");
+    this.plates.push({ left, top, width, height, radius, fill });
   }
   layer(alpha: number, draw: (surface: Surface) => void) {
     this.calls.push("layer");
@@ -144,6 +152,18 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.lineWidth = width;
       context.stroke();
       context.restore();
+    },
+    plate(left, top, width, height, radius, fill) {
+      const corner = Math.min(radius, width / 2, height / 2);
+      context.beginPath();
+      context.moveTo(left + corner, top);
+      context.arcTo(left + width, top, left + width, top + height, corner);
+      context.arcTo(left + width, top + height, left, top + height, corner);
+      context.arcTo(left, top + height, left, top, corner);
+      context.arcTo(left, top, left + width, top, corner);
+      context.closePath();
+      context.fillStyle = fill;
+      context.fill();
     },
     hollowCircle(_id, horizontal, vertical, radius, colour, width) {
       context.save();

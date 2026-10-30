@@ -1,5 +1,7 @@
 import { paintFocusedNode, paintFocusedTerritory } from "../a11y/paintFocus";
 import { paintEdges } from "../edges/paintEdges";
+import type { PlacedItemLabel } from "../labels/itemLabels";
+import { paintItemLabels } from "../labels/paintItemLabels";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
 import { paintPoints } from "../points/paintPoints";
@@ -44,12 +46,16 @@ export interface Frame {
   hovered?: string | null | undefined;
   /** How many edges an item draws (`Tuning.edgesPerNode`); absent means none. */
   edgesPerNode?: number | undefined;
+  /** Item labels placed for this spec (spec item labels §3); painted at near only. Absent means none. */
+  itemLabels?: readonly PlacedItemLabel[] | undefined;
+  /** The item labels' fade this frame (`cardOpacity`); absent means 0. */
+  itemLabelAlpha?: number | undefined;
 }
 
 /**
  * The single place that decides paint order: the territory fill layer
  * (largest first; with groups, the leaves' and the families' layers
- * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
+ * cross-faded by `groupAlpha`), territory outlines, the families' outlines, points (then the item labels at near, then the hovered and the selected item's edges, then the selection ring), the keyboard-focus outline,
  * then names, so a name is never covered by a mark, by a territory's fill or
  * by the focus outline, and the focus outline is never covered by a
  * boundary or a point.
@@ -69,6 +75,12 @@ export function paint(
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
     paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);
+    const itemLabelAlpha = frame.itemLabelAlpha ?? 0;
+    if (frame.regime === "near" && itemLabelAlpha > 0 && frame.itemLabels) {
+      surface.globalAlpha(frame.pointAlpha * itemLabelAlpha);
+      paintItemLabels(surface, frame.itemLabels, viewport, theme, { width: frame.width, height: frame.height, dimmed });
+      surface.globalAlpha(frame.pointAlpha);
+    }
     const cap = frame.edgesPerNode ?? 0;
     const edgeBox = { width: frame.width, height: frame.height, cap, dimmed, restoreAlpha: frame.pointAlpha };
     if (cap > 0 && typeof frame.hovered === "string" && frame.hovered !== frame.selected)

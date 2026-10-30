@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PlacedItemLabel } from "../labels/itemLabels";
 import { estimateText } from "../labels/placement";
 import { paint } from "./paint";
 import { buildScene } from "./scene";
@@ -200,5 +201,59 @@ describe("a spec without groups", () => {
         "outlines": 2,
       }
     `);
+  });
+});
+
+describe("item labels in the point layer (spec item labels §7)", () => {
+  const withEdges = validateSpec({ ...spec, edges: [{ source: "b", target: "c", weight: 1 }] });
+  const edgeScene = buildScene(withEdges, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const label: PlacedItemLabel = {
+    id: "c",
+    territory: "large",
+    anchor: [9, 9],
+    lines: ["C"],
+    width: 20,
+    height: 16,
+    offset: [0, -14],
+    activeFromScale: 0,
+  };
+  const painted = (regime: "mid" | "near", itemLabelAlpha: number) => {
+    const surface = new RecordingSurface();
+    paint(
+      surface,
+      edgeScene,
+      withEdges,
+      { scale: 40, tx: 0, ty: 0 },
+      {
+        regime,
+        pointAlpha: 1,
+        width: 400,
+        height: 400,
+        selected: "b",
+        edgesPerNode: 3,
+        itemLabels: [label],
+        itemLabelAlpha,
+      },
+      DEFAULT_THEME,
+    );
+    return surface;
+  };
+
+  it("paints plates after the points and before the selected item's edges and ring, names last", () => {
+    const surface = painted("near", 0.5);
+    const calls = surface.calls;
+    const plate = calls.indexOf("plate");
+    expect(plate).toBeGreaterThan(calls.lastIndexOf("circle"));
+    expect(plate).toBeLessThan(calls.indexOf("line"));
+    expect(plate).toBeLessThan(calls.indexOf("ring"));
+    const itemText = surface.texts.findIndex((text) => text.text === "C");
+    expect(itemText).toBe(0);
+    expect(calls.lastIndexOf("text")).toBeGreaterThan(calls.lastIndexOf("ring"));
+    expect(surface.alphas.slice(0, 3)).toEqual([1, 0.5, 1]);
+  });
+
+  it("paints no plate at mid, or at near with the labels faded out", () => {
+    expect(painted("mid", 1).plates).toEqual([]);
+    expect(painted("near", 0).plates).toEqual([]);
   });
 });

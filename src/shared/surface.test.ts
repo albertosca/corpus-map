@@ -217,6 +217,29 @@ describe("canvasSurface", () => {
   });
 });
 
+describe("canvasSurface plate", () => {
+  it("fills one rounded rectangle through four arcs", () => {
+    const arcs: number[][] = [];
+    const fake = {
+      fillStyle: "",
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      arcTo: (...corner: number[]) => arcs.push(corner),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+    };
+    canvasSurface(fake as unknown as CanvasRenderingContext2D).plate(10, 20, 40, 16, 3, "#123456");
+    expect(arcs).toEqual([
+      [50, 20, 50, 36, 3],
+      [50, 36, 10, 36, 3],
+      [10, 36, 10, 20, 3],
+      [10, 20, 50, 20, 3],
+    ]);
+    expect(fake.fill).toHaveBeenCalledOnce();
+    expect(fake.fillStyle).toBe("#123456");
+  });
+});
+
 describe("RecordingSurface", () => {
   it("records the sequence of method calls", () => {
     const surface = new RecordingSurface();
