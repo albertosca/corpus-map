@@ -339,3 +339,17 @@ describe("validateSpec: edges", () => {
     expect(() => validateSpec(withEdges(edges))).toThrow(message);
   });
 });
+
+describe("MapNode.priority", () => {
+  function withNodePriority(priority: number | undefined) {
+    const node = priority === undefined ? { ...minimal.nodes[0] } : { ...minimal.nodes[0], priority };
+    return { ...minimal, nodes: [node] };
+  }
+
+  it("accepts an absent or finite priority and rejects NaN and Infinity, naming the node", () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() => validateSpec(withNodePriority(bad))).toThrow(/nodes\[0\]\.priority/);
+    expect(() => validateSpec(withNodePriority(2))).not.toThrow();
+    expect(() => validateSpec(withNodePriority(undefined))).not.toThrow();
+  });
+});

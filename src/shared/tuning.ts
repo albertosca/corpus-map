@@ -30,6 +30,10 @@ export interface Tuning {
   groupNamesUntil: number;
   /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
   edgesPerNode: number;
+  /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2). */
+  itemLabelWidth: number;
+  /** Most lines an item label wraps to; text past the last ends in an ellipsis. */
+  itemLabelLines: number;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -43,6 +47,8 @@ export const DEFAULT_TUNING: Tuning = {
   hoverRadius: 12,
   groupNamesUntil: 1.4,
   edgesPerNode: 3,
+  itemLabelWidth: 160,
+  itemLabelLines: 3,
 };
 
 function validateTuning(tuning: Tuning): void {
@@ -86,6 +92,12 @@ function validateTuning(tuning: Tuning): void {
   }
   if (!Number.isInteger(tuning.edgesPerNode) || tuning.edgesPerNode < 0) {
     throw new RangeError(`tuning.edgesPerNode must be an integer >= 0, got ${tuning.edgesPerNode}`);
+  }
+  if (!Number.isFinite(tuning.itemLabelWidth) || tuning.itemLabelWidth <= 0) {
+    throw new RangeError(`tuning.itemLabelWidth must be a finite number > 0, got ${tuning.itemLabelWidth}`);
+  }
+  if (!Number.isInteger(tuning.itemLabelLines) || tuning.itemLabelLines < 1) {
+    throw new RangeError(`tuning.itemLabelLines must be an integer >= 1, got ${tuning.itemLabelLines}`);
   }
   if (tuning.labelClasses.medium > tuning.labelClasses.large) {
     throw new RangeError(

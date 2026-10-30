@@ -26,6 +26,8 @@ export interface Theme {
    * least 3:1 over every page and fill. Absent falls back to `territoryLabel`.
    */
   edge?: string | undefined;
+  /** Font of the item labels at near (spec item labels §2); absent is `DEFAULT_ITEM_LABEL_FONT` ("500 11px system-ui, sans-serif"). */
+  itemLabelFont?: string | undefined;
   /**
    * Categorical colours for territories, assigned so that territories whose
    * visible borders touch get different colours (`territories/colour.ts`).

@@ -11,6 +11,8 @@ export interface MapNode {
   state?: NodeState;
   badges?: string[];
   meta?: unknown;
+  /** Higher is labelled first at near (spec item labels §3); absent counts as 0. Finite. */
+  priority?: number;
 }
 
 export interface Territory {
@@ -168,6 +170,7 @@ export function validateSpec(input: unknown): MapSpec {
     requireString(node.label, `${path}.label`);
     requireFinite(node.x, `${path}.x`);
     requireFinite(node.y, `${path}.y`);
+    if (node.priority !== undefined) requireFinite(node.priority, `${path}.priority`);
     const territory = node.territory === null ? null : requireString(node.territory, `${path}.territory`);
     if (territory !== null && !members.has(territory)) fail(`${path}.territory`, `unknown territory ${territory}`);
     if (territory !== null && declaredParents.has(territory))

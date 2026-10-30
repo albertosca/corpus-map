@@ -35,3 +35,13 @@ describe("edgesPerNode (spec slice E §6)", () => {
     }
   });
 });
+
+describe("item label tuning", () => {
+  it("defaults the item label to 160 px and 3 lines, and rejects bad values", () => {
+    expect(resolveTuning(undefined)).toMatchObject({ itemLabelWidth: 160, itemLabelLines: 3 });
+    expect(() => resolveTuning({ itemLabelWidth: 0 })).toThrow(/itemLabelWidth/);
+    expect(() => resolveTuning({ itemLabelWidth: Number.POSITIVE_INFINITY })).toThrow(/itemLabelWidth/);
+    expect(() => resolveTuning({ itemLabelLines: 0 })).toThrow(/itemLabelLines/);
+    expect(() => resolveTuning({ itemLabelLines: 1.5 })).toThrow(/itemLabelLines/);
+  });
+});
