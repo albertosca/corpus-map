@@ -41,7 +41,7 @@ describe("CARD_TEXT", () => {
 
 describe("CARDS", () => {
   it.each(CORPUS_IDS)("%s fills the frame, sets no minimum width and clamps its title to CARD_TEXT's lines", (id) => {
-    const { container } = render(CARDS[id](SAMPLE_NODES[id], { badgeCount: 0 }));
+    const { container } = render(CARDS[id](SAMPLE_NODES[id]));
     const frame = container.firstElementChild as HTMLElement;
     expect(frame.style.width).toBe("100%");
     expect(frame.style.minWidth).toBe("");
@@ -52,19 +52,15 @@ describe("CARDS", () => {
     expect(title.style.overflow).toBe("hidden");
   });
 
-  it.each(CORPUS_IDS)("%s keeps its title clear of a +12 group badge, and reserves nothing without one", (id) => {
-    const titleOf = (badgeCount: number) =>
-      render(CARDS[id](SAMPLE_NODES[id], { badgeCount })).container.querySelector("strong") as HTMLElement;
-    // "+12": three characters plus the badge's 4 px padding on each side.
-    expect(titleOf(12).style.paddingRight).toBe("calc(3ch + 8px)");
-    expect(titleOf(0).style.paddingRight).toBe("");
+  it.each(CORPUS_IDS)("%s reserves no badge space beside its title: one card, never a group", (id) => {
+    const title = render(CARDS[id](SAMPLE_NODES[id])).container.querySelector("strong") as HTMLElement;
+    expect(title.style.paddingRight).toBe("");
   });
 });
 
 describe("the arXiv card's detail line", () => {
   const paper: MapNode = { ...SAMPLE_NODES.arxiv, meta: { year: 2026 } };
-  const detailOf = (node: MapNode) =>
-    render(CARDS.arxiv(node, { badgeCount: 0 })).container.querySelector("strong + div") as HTMLElement;
+  const detailOf = (node: MapNode) => render(CARDS.arxiv(node)).container.querySelector("strong + div") as HTMLElement;
 
   it("shows the year and the arXiv category on one ellipsised line", () => {
     const detail = detailOf({

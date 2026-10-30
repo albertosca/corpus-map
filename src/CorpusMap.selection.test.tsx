@@ -56,8 +56,9 @@ describe("selection (spec slice C §3, §5)", () => {
     expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ id: "a" }));
   });
 
-  it("at near a press on a card selects its item, even away from the point", () => {
+  it("at near a press on the selected card names its item, even away from the point", () => {
     const onSelectedChange = vi.fn();
+    const onSelect = vi.fn();
     const { container } = render(
       <CorpusMap
         renderCard={card}
@@ -65,14 +66,18 @@ describe("selection (spec slice C §3, §5)", () => {
         width={400}
         height={300}
         defaultViewport={near}
+        defaultSelectedId="a"
         onSelectedChange={onSelectedChange}
+        onSelect={onSelect}
       />,
     );
-    // jsdom has no layout: put Alpha's card over an empty corner of the map.
+    // jsdom has no layout: put Alpha's card over an empty corner of the map,
+    // where a press would otherwise clear the selection.
     const alphaCard = container.querySelector('[data-card="a"]') as HTMLElement;
     vi.spyOn(alphaCard, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 10, 60, 30));
     press(surface(container), 30, 20);
-    expect(onSelectedChange).toHaveBeenLastCalledWith("a");
+    expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ id: "a" }));
+    expect(onSelectedChange).not.toHaveBeenCalled();
   });
 
   it("a press on empty map clears it", () => {

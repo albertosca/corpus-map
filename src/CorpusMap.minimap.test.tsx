@@ -63,6 +63,7 @@ function fakeCtx(): CanvasRenderingContext2D {
     fill: noop,
     stroke: noop,
     arc: noop,
+    arcTo: noop,
     fillText: noop,
     measureText: (text: string) => ({ width: text.length * 6 }),
     fillStyle: "",
@@ -420,6 +421,7 @@ describe("CorpusMap minimap (showcase Task 4)", () => {
           thresholds={{ midAt: 0, nearAt: 0 }}
           onSelect={onSelect}
           cardSize={NO_GROUPING}
+          defaultSelectedId="a"
           minimap={{ corner: "top-left" }}
         />,
       );

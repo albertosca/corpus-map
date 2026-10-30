@@ -61,6 +61,8 @@ function recordingContext(frames: Stroke[][]): CanvasRenderingContext2D {
     arc: (horizontal: number, vertical: number, radius: number) => {
       arc = { x: horizontal, y: vertical, r: radius };
     },
+    // An item label's plate is a rounded rectangle; its corners do not enter a ring.
+    arcTo: () => {},
     closePath: () => {},
     fill: () => {},
     stroke: () => {

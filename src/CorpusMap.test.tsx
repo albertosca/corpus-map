@@ -53,9 +53,12 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
-    expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ meta: { secret: 42 } }), { badgeCount: 0 });
+    expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ meta: { secret: 42 } }));
+    // One argument: the node alone (`CardContext` and its badge count are gone).
+    expect(renderCard.mock.calls[0]).toHaveLength(1);
   });
 
   it("never reads inside meta: a Proxy that throws on any property access still renders", () => {
@@ -80,6 +83,7 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
     expect(renderCard).toHaveBeenCalledTimes(1);
@@ -140,11 +144,13 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={thresholds}
         // Zero-size cards (map-feel Task 8): the card frame then collapses
-        // to a point offset from its anchor by exactly the 6 px layout gap
+        // to a point offset from its anchor by exactly the 6 px gap
         // (`left = anchorX + 6, top = anchorY`), so the assertions below —
         // which are about where the focus handler centres the anchor, not
-        // about card layout — only need that constant +6 added back in.
+        // about card placement — only need that constant +6 added back in.
+        // b is selected so its one card exists (no card without a selection).
         cardSize={{ width: 0, height: 0 }}
+        defaultSelectedId="b"
       />,
     );
 
@@ -159,14 +165,16 @@ describe("CorpusMap", () => {
   }, 15_000);
 
   // Explicit timeout: same budget as the test above, for the same reason.
-  it("lands with the card overlay fully faded in when a territory is focused from the tree (I1)", async () => {
+  it("lands with the item labels fully faded in when a territory is focused from the tree (I1)", async () => {
     const user = userEvent.setup();
-    // Landing exactly on `nearAt` (the pre-fix behaviour) puts `fade` at
-    // exactly 0 — cards mounted but invisible right after the one
-    // keyboard/AT action meant to show them. Any `nearAt` reproduces it;
-    // this one is picked only to keep well clear of the wheel clamp
+    // Landing exactly on `nearAt` (the pre-fix behaviour) puts the item
+    // labels' fade (`cardOpacity`) at exactly 0 — labels painted but
+    // invisible right after the one keyboard/AT action meant to show them.
+    // The fade reaches 1 at nearAt * (1 + fadeBand). Any `nearAt` reproduces
+    // it; this one is picked only to keep well clear of the wheel clamp
     // (nearAt * (1 + fadeBand) = 5, far under fitScale * 64).
     const thresholds = { midAt: 0.5, nearAt: 4 };
+    const onViewChange = vi.fn();
 
     render(
       <CorpusMap
@@ -175,17 +183,15 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={thresholds}
+        onViewChange={onViewChange}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: /South/ }));
 
-    const card = document.querySelector('[data-card="b"]') as HTMLElement | null;
-    expect(card).not.toBeNull();
-    // The opacity style lives on the overlay wrapper (CardOverlay.tsx), one
-    // level up from the card itself.
-    const overlay = card?.parentElement as HTMLElement;
-    expect(overlay.style.opacity).toBe("1");
+    const landed = onViewChange.mock.calls[onViewChange.mock.calls.length - 1]?.[0];
+    expect(landed?.regime).toBe("near");
+    expect(landed?.ratio).toBeGreaterThanOrEqual(thresholds.nearAt * (1 + DEFAULT_TUNING.fadeBand) - 1e-9);
   }, 15_000);
 
   // Explicit timeout: ~48 full renders + userEvent clicks measured at ~5.2s
@@ -212,6 +218,7 @@ describe("CorpusMap", () => {
         const horizontal = multiplier * 1.37 + 0.11;
         const vertical = horizontal * 0.73;
         swept += 1;
+        const onRegimeChange = vi.fn();
         const { unmount } = render(
           <CorpusMap
             spec={twoTerritories(horizontal, vertical)}
@@ -219,10 +226,11 @@ describe("CorpusMap", () => {
             width={width}
             height={height}
             thresholds={{ midAt: nearAt / 2, nearAt }}
+            onRegimeChange={onRegimeChange}
           />,
         );
         await user.click(screen.getByRole("button", { name: /South/ }));
-        if (document.querySelector('[data-card="b"]') === null)
+        if (onRegimeChange.mock.calls[onRegimeChange.mock.calls.length - 1]?.[0] !== "near")
           failures.push(`nearAt=${nearAt} multiplier=${multiplier} horizontal=${horizontal}`);
         unmount();
       }
@@ -262,7 +270,6 @@ describe("CorpusMap", () => {
       clientY: 150,
     });
     expect(onRegimeChange.mock.calls[onRegimeChange.mock.calls.length - 1]).toEqual(["near"]);
-    expect(container.querySelectorAll("[data-card]").length).toBeGreaterThan(0);
 
     // Swap to a same-shaped new spec. The refit sets the ratio straight
     // back to 1, which — with a 30% hysteresis band on a nearAt of 1.02
@@ -281,15 +288,14 @@ describe("CorpusMap", () => {
       />,
     );
     expect(onRegimeChange.mock.calls[onRegimeChange.mock.calls.length - 1]).toEqual(["mid"]);
-    expect(container.querySelectorAll("[data-card]")).toHaveLength(0);
   });
 
   it("repositions cards when the width changes without a remount (I2)", () => {
     // Zero-size cards (map-feel Task 8): keeps `left = anchorX + 6` exact
     // and predictable across the resize, rather than depending on which of
-    // `layoutCards`'s eight candidates a 160x56 default frame would land on
+    // `placeSelectedCard`'s candidates a 160x56 default frame would land on
     // at each width — this test is about reactivity to the width prop, not
-    // about card layout.
+    // about card placement. a is selected so its one card exists.
     const cardSize = { width: 0, height: 0 };
     const { container, rerender } = render(
       <CorpusMap
@@ -299,6 +305,7 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardSize={cardSize}
+        defaultSelectedId="a"
       />,
     );
     const before = (container.querySelector('[data-card="a"]') as HTMLElement).style.left;
@@ -310,6 +317,7 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardSize={cardSize}
+        defaultSelectedId="a"
       />,
     );
     const after = (container.querySelector('[data-card="a"]') as HTMLElement).style.left;
@@ -324,6 +332,7 @@ describe("CorpusMap", () => {
       nodes: [{ id: "z", label: "Zed", x: 100_000, y: 100_000, territory: null }],
     };
     // Zero-size cards, same reason as above: `left = anchorX + 6` exactly.
+    // The selection is controlled so it can name each spec's one item.
     const cardSize = { width: 0, height: 0 };
     const { container, rerender } = render(
       <CorpusMap
@@ -333,6 +342,7 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardSize={cardSize}
+        selectedId="a"
       />,
     );
     expect(container.querySelector('[data-card="a"]')).not.toBeNull();
@@ -344,6 +354,7 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardSize={cardSize}
+        selectedId="z"
       />,
     );
     const card = container.querySelector('[data-card="z"]') as HTMLElement | null;
@@ -359,6 +370,7 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
     const defaultCard = defaultContainer.querySelector('[data-card="a"]') as HTMLElement;
@@ -373,6 +385,7 @@ describe("CorpusMap", () => {
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
         cardSize={{ width: 90, height: 30 }}
+        defaultSelectedId="a"
       />,
     );
     const card = container.querySelector('[data-card="a"]') as HTMLElement;
@@ -392,6 +405,7 @@ describe("CorpusMap", () => {
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
     const button = container.querySelector('[data-card="a"] button') as HTMLElement;
@@ -581,6 +595,7 @@ function recordingContext(texts: Array<{ text: string; x: number; y: number }>):
     fill: noop,
     stroke: noop,
     arc: noop,
+    arcTo: noop,
     // Every territory is outlined since slice D, and `outline` brackets its
     // stroke in save/restore.
     save: noop,

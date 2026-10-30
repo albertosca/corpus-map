@@ -14,10 +14,16 @@ import {
 } from "react";
 import { AccessibleTree, itemCount } from "./a11y/AccessibleTree";
 import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
-import { type CardContext, CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
+import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
+import { placeSelectedCard, type SelectedCardPlacement } from "./cards/placeSelectedCard";
 import { EdgeMarkers } from "./edges/EdgeMarkers";
 import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
+import { drawnEdges } from "./edges/paintEdges";
 import type { RelatedItem } from "./edges/related";
+import { itemLabelAt } from "./labels/itemLabelAt";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "./labels/itemLabels";
+import { drawnItemLabels } from "./labels/paintItemLabels";
+import { sameLabels } from "./labels/sameLabels";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries, legendMaximumHeight } from "./legend/entries";
 import { Legend } from "./legend/Legend";
@@ -90,12 +96,8 @@ export interface CorpusMapProps {
    * render.
    */
   spec: MapSpec;
-  /**
-   * Fills each card at near. `context.badgeCount` is the number the card's
-   * group badge shows in its top-right corner (0 without one); keep the
-   * first line clear of that corner when it is above 0.
-   */
-  renderCard: (node: MapNode, context: CardContext) => ReactNode;
+  /** Fills the selected item's card (shown at mid and near while its point is in the box). */
+  renderCard: (node: MapNode) => ReactNode;
   /** React 19 ref-as-prop; see `CorpusMapHandle`. */
   ref?: Ref<CorpusMapHandle> | undefined;
   /**
@@ -118,8 +120,9 @@ export interface CorpusMapProps {
   thresholds?: LodThresholds | undefined;
   /** Every number the literature does not settle; see `DEFAULT_TUNING` for the source of each default. */
   tuning?: Partial<Tuning> | undefined;
+  /** Caps the accessible tree's item list (default 200). */
   cardCap?: number | undefined;
-  /** Card frame size, passed to `layoutCards`. Defaults to 160x56. */
+  /** The selected card's frame size. Defaults to 160x56. */
   cardSize?: { width: number; height: number } | undefined;
   theme?: Theme | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
@@ -336,10 +339,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const tuning = useMemo(() => resolveTuning(properties.tuning), [properties.tuning]);
   const cardCap = properties.cardCap ?? 200;
   const headingTag = resolveHeadingLevel(properties.headingLevel);
-  // Not memoized: `layoutCards` is cheap and already recomputed every render
-  // inside `CardOverlay`, so keying a memo on this object's identity would
-  // only add a stale-dependency risk (Task 7's lesson) for no benefit.
+  // Read by its two sides wherever a memo depends on it, never by identity:
+  // a fresh `cardSize` literal every render is not a change (Task 7's lesson).
   const cardSize = properties.cardSize ?? DEFAULT_CARD_SIZE;
+  const { width: cardWidth, height: cardHeight } = cardSize;
   const theme = properties.theme ?? DEFAULT_THEME;
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
@@ -429,6 +432,22 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       paletteKey,
       theme.territoryLabel,
     ],
+  );
+
+  // Seeds compared by value: a palette change rebuilds the scene but not its names (spec item labels §3).
+  // State, not a ref: React's "information from previous renders" pattern, which the compiler accepts.
+  const [seeds, setSeeds] = useState(scene.labels);
+  if (!sameLabels(seeds, scene.labels)) setSeeds(scene.labels);
+  const itemLabelFont = theme.itemLabelFont ?? DEFAULT_ITEM_LABEL_FONT;
+  const itemLabels = useMemo(
+    () =>
+      placeItemLabels(
+        spec,
+        seeds,
+        { font: itemLabelFont, width: tuning.itemLabelWidth, lines: tuning.itemLabelLines },
+        measure,
+      ),
+    [spec, seeds, itemLabelFont, tuning.itemLabelWidth, tuning.itemLabelLines, measure],
   );
 
   const groupsById = useMemo(() => new Map(scene.groups.map((group) => [group.id, group] as const)), [scene.groups]);
@@ -943,6 +962,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         selected,
         hovered: hoveredItem,
         edgesPerNode: tuning.edgesPerNode,
+        itemLabels,
+        itemLabelAlpha: cardOpacity,
       },
       theme,
     );
@@ -963,6 +984,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     selected,
     hoveredItem,
     tuning.edgesPerNode,
+    itemLabels,
+    cardOpacity,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
@@ -1207,12 +1230,19 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     if (hover !== null) setHover(null);
   };
 
-  // The topmost card under a client position, or null; a card below opacity
-  // 0.1 is invisible but still mounted (the hysteresis fade band keeps it in
-  // the DOM at opacity 0), so it neither takes a click on what the user sees
-  // as empty map (C2) nor hides the territory balloon there.
-  const visibleCardAt = (clientHorizontal: number, clientVertical: number): string | null =>
-    cardOpacity < 0.1 ? null : cardIdAt(rootReference.current, clientHorizontal, clientVertical);
+  // The selected card under a client position, or null; the one card is
+  // opaque whenever it is mounted, so it always takes the press.
+  const cardAt = (clientHorizontal: number, clientVertical: number): string | null =>
+    cardIdAt(rootReference.current, clientHorizontal, clientVertical);
+  // The drawn item label under a surface position, or null; a label below
+  // opacity 0.1 is invisible (the fade band paints it at that alpha), so it
+  // neither takes a click on what the user sees as empty map (C2) nor names
+  // an item there.
+  const itemLabelBox = { width, height, dimmed };
+  const labelNear = (position: { x: number; y: number }): string | null =>
+    next === "near" && cardOpacity >= 0.1
+      ? itemLabelAt(itemLabels, viewport, itemLabelBox, position.x, position.y)
+      : null;
 
   const tooltipReference = useRef<HTMLDivElement | null>(null);
   // A layout effect, so the first paint of a new balloon is already placed;
@@ -1258,7 +1288,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       if (previousHover !== null) setHover(null);
       return;
     }
-    const nearest = nearestPoint(position);
+    // A plate names its item, wherever on the plate the pointer is; otherwise the nearest point does.
+    const labelled = labelNear(position);
+    const labelledNode = labelled === null ? undefined : nodesById.get(labelled);
+    const nearest = labelledNode
+      ? (() => {
+          const [left, top] = toScreen(viewport, labelledNode.x, labelledNode.y);
+          return { id: labelledNode.id, x: left, y: top };
+        })()
+      : nearestPoint(position);
     if (nearest) {
       // Same node, same screen position as the currently shown hover:
       // skip the call rather than dispatch a freshly-allocated (but
@@ -1284,7 +1322,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const level = scene.groups.length > 0 && groupAlpha >= 0.5 ? "family" : "territory";
     const world = toWorld(viewport, position.x, position.y);
     const ids =
-      visibleCardAt(position.clientX, position.clientY) !== null
+      cardAt(position.clientX, position.clientY) !== null
         ? []
         : level === "family"
           ? familiesAt(scene, world, dimmed)
@@ -1420,8 +1458,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       goTo(markerId);
       return;
     }
-    const cardId = visibleCardAt(event.clientX, event.clientY);
-    const id = cardId ?? pointNear(position);
+    const cardId = cardAt(event.clientX, event.clientY);
+    const id = cardId ?? labelNear(position) ?? pointNear(position);
     requestSelection(id);
     const node = id === null ? undefined : nodesById.get(id);
     if (node && onSelect) onSelect(node);
@@ -1432,6 +1470,58 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // The hovered point's territory, named beside its label (spec categories §7).
   const pointNode = hover?.kind === "point" ? nodesById.get(hover.id) : undefined;
+  // A drawn plate already shows the item's name, so its point gets no tooltip (spec item labels §5).
+  const hoveredPointId = hover?.kind === "point" ? hover.id : null;
+  const pointTooltip = useMemo(
+    () =>
+      hoveredPointId !== null &&
+      !(
+        next === "near" &&
+        cardOpacity >= 0.1 &&
+        drawnItemLabels(itemLabels, viewport, { width, height, dimmed }).some((label) => label.id === hoveredPointId)
+      ),
+    [hoveredPointId, next, cardOpacity, itemLabels, viewport, width, height, dimmed],
+  );
+
+  // The selected item's one card (spec item labels §4): at mid and near, while its point is in the box.
+  // Memoized so the plain calls below run outside render, where the compiler
+  // cannot read them as mutating the memoized scene and insets.
+  const selectedCard = useMemo((): { node: MapNode; placement: SelectedCardPlacement } | null => {
+    if (selected === null || !selectedNode || next === "far") return null;
+    const anchor = toScreen(viewport, selectedNode.x, selectedNode.y);
+    if (anchor[0] < 0 || anchor[0] > width || anchor[1] < 0 || anchor[1] > height) return null;
+    const edges = drawnEdges(scene, selectedNode.id, tuning.edgesPerNode, dimmed).flatMap((edge) => {
+      const neighbour = scene.byId.get(edge.neighbour);
+      return neighbour ? [[anchor, toScreen(viewport, neighbour.x, neighbour.y)] as const] : [];
+    });
+    const points = visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY)
+      .filter((node) => node.id !== selectedNode.id)
+      .map((node) => toScreen(viewport, node.x, node.y));
+    return {
+      node: selectedNode,
+      placement: placeSelectedCard({
+        anchor,
+        size: { width: cardWidth, height: cardHeight },
+        area: usableArea(width, height, insets),
+        edges,
+        points,
+      }),
+    };
+  }, [
+    selected,
+    selectedNode,
+    next,
+    viewport,
+    width,
+    height,
+    scene,
+    tuning.edgesPerNode,
+    dimmed,
+    liveSpec,
+    cardWidth,
+    cardHeight,
+    insets,
+  ]);
   const pointTerritory = pointNode?.territory ? territoriesById.get(pointNode.territory) : undefined;
 
   return (
@@ -1480,21 +1570,18 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         <>
           {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: decorative — the accessible tree carries the real content and interaction; the canvas must stay hidden from AT regardless of default focusability. */}
           <canvas ref={canvasReference} aria-hidden="true" style={{ width, height, display: "block" }} />
-          <CardOverlay
-            spec={liveSpec}
-            viewport={viewport}
-            regime={next}
-            cap={cardCap}
-            width={width}
-            height={height}
-            cardSize={cardSize}
-            opacity={cardOpacity}
-            theme={theme}
-            colours={scene.colours}
-            renderCard={renderCard}
-          />
+          {selectedCard ? (
+            <CardOverlay
+              node={selectedCard.node}
+              placement={selectedCard.placement}
+              cardSize={cardSize}
+              theme={theme}
+              colours={scene.colours}
+              renderCard={renderCard}
+            />
+          ) : null}
           <EdgeMarkers markers={markers} theme={theme} />
-          {hover?.kind === "point" ? (
+          {hover?.kind === "point" && pointTooltip ? (
             <div
               data-hover={hover.id}
               aria-hidden="true"

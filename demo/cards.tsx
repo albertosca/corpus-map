@@ -1,4 +1,4 @@
-import type { CardContext, CardSizeOptions, MapNode, MapSpec } from "corpus-map";
+import type { CardSizeOptions, MapNode, MapSpec } from "corpus-map";
 import { cardSizeFor } from "corpus-map";
 import type { CSSProperties, ReactNode } from "react";
 import type { CorpusId } from "./corpora";
@@ -60,15 +60,8 @@ export function cardSizeOf(id: CorpusId, spec: MapSpec): CardSize {
 
 const frameStyle: CSSProperties = { padding: 8, width: "100%", boxSizing: "border-box", lineHeight: 1.25 };
 
-// The library's group badge ("+N", 4 px padding each side) sits over the
-// card's top-right corner; a grouped card's title stays out from under it.
-function badgeReserve(badgeCount: number): string | undefined {
-  return badgeCount > 0 ? `calc(${String(badgeCount).length + 1}ch + 8px)` : undefined;
-}
-
-function titleStyle(lines: number, context: CardContext): CSSProperties {
+function titleStyle(lines: number): CSSProperties {
   return {
-    paddingRight: badgeReserve(context.badgeCount),
     display: "-webkit-box",
     WebkitLineClamp: lines,
     WebkitBoxOrient: "vertical",
@@ -77,23 +70,21 @@ function titleStyle(lines: number, context: CardContext): CSSProperties {
   };
 }
 
-function renderElementCard(node: MapNode, context: CardContext) {
+function renderElementCard(node: MapNode) {
   const meta = node.meta as ElementMeta;
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.elements.options.titleLines, context)}>
-        {CARD_TEXT.elements.title(node)}
-      </strong>
+      <strong style={titleStyle(CARD_TEXT.elements.options.titleLines)}>{CARD_TEXT.elements.title(node)}</strong>
       <div>#{meta.atomicNumber}</div>
     </div>
   );
 }
 
-function renderStarCard(node: MapNode, context: CardContext) {
+function renderStarCard(node: MapNode) {
   const meta = node.meta as StarMeta;
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.constellations.options.titleLines, context)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.constellations.options.titleLines)}>{node.label}</strong>
       <div>{meta.constellation}</div>
       <div>mag {meta.magnitude}</div>
     </div>
@@ -105,26 +96,26 @@ function renderStarCard(node: MapNode, context: CardContext) {
 // ellipsis instead of wrapping past the frame.
 const detailLineStyle: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
 
-function renderArxivCard(node: MapNode, context: CardContext) {
+function renderArxivCard(node: MapNode) {
   const meta = node.meta as ArxivMeta | undefined;
   const detail = [meta?.year, meta?.category?.name].filter(Boolean).join(" · ");
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines, context)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.arxiv.options.titleLines)}>{node.label}</strong>
       {detail ? <div style={detailLineStyle}>{detail}</div> : null}
     </div>
   );
 }
 
-function renderSyntheticCard(node: MapNode, context: CardContext) {
+function renderSyntheticCard(node: MapNode) {
   return (
     <div style={frameStyle}>
-      <strong style={titleStyle(CARD_TEXT.synthetic.options.titleLines, context)}>{node.label}</strong>
+      <strong style={titleStyle(CARD_TEXT.synthetic.options.titleLines)}>{node.label}</strong>
     </div>
   );
 }
 
-export const CARDS: Record<CorpusId, (node: MapNode, context: CardContext) => ReactNode> = {
+export const CARDS: Record<CorpusId, (node: MapNode) => ReactNode> = {
   arxiv: renderArxivCard,
   elements: renderElementCard,
   constellations: renderStarCard,

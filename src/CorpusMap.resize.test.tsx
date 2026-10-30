@@ -51,11 +51,11 @@ class FakeResizeObserver {
 
   observe(target: Element): void {
     this.target = target;
-    const el = target as HTMLElement;
-    const styleWidth = Number.parseFloat(el.style.width);
-    const styleHeight = Number.parseFloat(el.style.height);
+    const element = target as HTMLElement;
+    const styleWidth = Number.parseFloat(element.style.width);
+    const styleHeight = Number.parseFloat(element.style.height);
     const explicitStyle =
-      el.style.width.endsWith("px") && el.style.height.endsWith("px")
+      element.style.width.endsWith("px") && element.style.height.endsWith("px")
         ? { width: styleWidth, height: styleHeight }
         : null;
     const initial = explicitStyle ?? currentMeasuredSize;
@@ -98,10 +98,11 @@ function latestObserver(): FakeResizeObserver {
 }
 
 // Zero-size cards (map-feel Task 8, and the reasoning in CorpusMap.test.tsx):
-// collapses `layoutCards`'s first candidate to exactly `(anchorX + 6,
-// anchorY)`, so a card's screen position is a direct, exact read of
-// `toScreen(vp, node.x, node.y)` — the same arithmetic this whole file's
-// assertions are built on.
+// collapses `placeSelectedCard`'s first candidate to exactly `(anchorX + 6,
+// anchorY)`, so the selected card's screen position is a direct, exact read
+// of `toScreen(viewport, node.x, node.y)` — the same arithmetic this whole
+// file's assertions are built on. Only the selected item has a card (spec
+// item labels §3), so every map here selects the node it reads.
 const NO_GROUPING = { width: 0, height: 0 };
 
 function cardLeft(container: HTMLElement, id = "a"): number {
@@ -124,10 +125,12 @@ const singleNodeSpec: MapSpec = {
 
 // A symmetric two-node spec: fitSpec centres the box on their midpoint (0,
 // 0), so each node's own screen position, plus the constant `anchorX + 6`
-// card offset, gives an exact, independent read of both `vp.scale` (from the
-// pixel distance between the two cards) and of where the box's own centre
-// world point (the midpoint, not either node) landed (from the cards'
-// midpoint) — without needing to read `vp` off the component directly.
+// card offset, gives an exact, independent read of both `viewport.scale`
+// (from the pixel distance between the two nodes) and of where the box's own
+// centre world point (the midpoint, not either node) landed (from the nodes'
+// midpoint) — without needing to read the viewport off the component. One
+// card shows at a time, so a test runs the same deterministic sequence once
+// selecting a and once selecting b, and reads each node from its own run.
 const twoNodeSpec: MapSpec = {
   version: "1",
   territories: [],
@@ -139,7 +142,7 @@ const twoNodeSpec: MapSpec = {
 
 describe("CorpusMap fills its parent (showcase Task 2)", () => {
   it("renders nothing (no canvas, no cards) before the first measured size", () => {
-    const { container } = render(<CorpusMap spec={singleNodeSpec} renderCard={(n) => <div>{n.label}</div>} />);
+    const { container } = render(<CorpusMap spec={singleNodeSpec} renderCard={(node) => <div>{node.label}</div>} />);
     expect(container.querySelector("canvas")).toBeNull();
     expect(container.querySelector("[data-card]")).toBeNull();
   });
@@ -148,9 +151,10 @@ describe("CorpusMap fills its parent (showcase Task 2)", () => {
     const { container } = render(
       <CorpusMap
         spec={singleNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
     act(() => {
@@ -167,11 +171,12 @@ describe("CorpusMap fills its parent (showcase Task 2)", () => {
     const { container } = render(
       <CorpusMap
         spec={singleNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
       />,
     );
     // Rendered immediately: the observer does fire once, automatically, on
@@ -195,37 +200,42 @@ describe("CorpusMap fills its parent (showcase Task 2)", () => {
 
 describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
   it("keeps the world point formerly at the old box centre at the new box centre, and keeps scale, on a measured resize", () => {
-    const { container } = render(
-      <CorpusMap
-        spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
-        cardSize={NO_GROUPING}
-        thresholds={{ midAt: 0, nearAt: 0 }}
-      />,
-    );
-    act(() => {
-      latestObserver().report(800, 600);
-    });
+    const run = (selected: "a" | "b") => {
+      const { container, unmount } = render(
+        <CorpusMap
+          spec={twoNodeSpec}
+          renderCard={(node) => <div>{node.label}</div>}
+          cardSize={NO_GROUPING}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          defaultSelectedId={selected}
+        />,
+      );
+      act(() => {
+        latestObserver().report(800, 600);
+      });
+      const before = { left: cardLeft(container, selected), top: cardTop(container, selected) };
+      act(() => {
+        latestObserver().report(1000, 700);
+      });
+      const after = { left: cardLeft(container, selected), top: cardTop(container, selected) };
+      unmount();
+      return { before, after };
+    };
+    const leftNode = run("a");
+    const rightNode = run("b");
     // worldBounds x: [-5, 5] (width 10), y widened to [-0.5, 0.5] (a flat
     // axis) — usable 752x552, scale = min(752/10, 552/1) = 75.2, bound by x.
     const FIT_SCALE = 75.2;
-    const beforeLeftA = cardLeft(container, "a");
-    const beforeLeftB = cardLeft(container, "b");
-    expect(beforeLeftA).toBeCloseTo(-5 * FIT_SCALE + 400 + 6, 6);
-    expect(beforeLeftB).toBeCloseTo(5 * FIT_SCALE + 400 + 6, 6);
-    expect(cardTop(container, "a")).toBeCloseTo(300, 6);
+    expect(leftNode.before.left).toBeCloseTo(-5 * FIT_SCALE + 400 + 6, 6);
+    expect(rightNode.before.left).toBeCloseTo(5 * FIT_SCALE + 400 + 6, 6);
+    expect(leftNode.before.top).toBeCloseTo(300, 6);
 
-    act(() => {
-      latestObserver().report(1000, 700);
-    });
     // Scale kept exactly; the old box centre's world point (0, 0), the
     // midpoint of the two nodes, lands exactly on the new box centre.
-    const afterLeftA = cardLeft(container, "a");
-    const afterLeftB = cardLeft(container, "b");
-    expect(afterLeftB - afterLeftA).toBeCloseTo(beforeLeftB - beforeLeftA, 9); // scale kept
-    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
-    expect(cardTop(container, "a")).toBeCloseTo(350, 9);
-    expect(cardTop(container, "b")).toBeCloseTo(350, 9);
+    expect(rightNode.after.left - leftNode.after.left).toBeCloseTo(rightNode.before.left - leftNode.before.left, 9); // scale kept
+    expect((leftNode.after.left + rightNode.after.left) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
+    expect(leftNode.after.top).toBeCloseTo(350, 9);
+    expect(rightNode.after.top).toBeCloseTo(350, 9);
   });
 
   it("keeps the world point formerly at the old box centre at the new box centre, and keeps scale, on an explicit-props resize (fix round 1: unify with measured)", () => {
@@ -240,39 +250,45 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     // the same keep-view treatment a measured resize gets. Same numbers and
     // arithmetic as the measured-resize test above, so the two are directly
     // comparable.
-    const { container, rerender } = render(
-      <CorpusMap
-        spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
-        cardSize={NO_GROUPING}
-        thresholds={{ midAt: 0, nearAt: 0 }}
-        width={800}
-        height={600}
-      />,
-    );
+    const run = (selected: "a" | "b") => {
+      const { container, rerender, unmount } = render(
+        <CorpusMap
+          spec={twoNodeSpec}
+          renderCard={(node) => <div>{node.label}</div>}
+          cardSize={NO_GROUPING}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          defaultSelectedId={selected}
+          width={800}
+          height={600}
+        />,
+      );
+      const before = { left: cardLeft(container, selected), top: cardTop(container, selected) };
+      rerender(
+        <CorpusMap
+          spec={twoNodeSpec}
+          renderCard={(node) => <div>{node.label}</div>}
+          cardSize={NO_GROUPING}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          defaultSelectedId={selected}
+          width={1000}
+          height={700}
+        />,
+      );
+      const after = { left: cardLeft(container, selected), top: cardTop(container, selected) };
+      unmount();
+      return { before, after };
+    };
+    const leftNode = run("a");
+    const rightNode = run("b");
     const FIT_SCALE = 75.2;
-    const beforeLeftA = cardLeft(container, "a");
-    const beforeLeftB = cardLeft(container, "b");
-    expect(beforeLeftA).toBeCloseTo(-5 * FIT_SCALE + 400 + 6, 6);
-    expect(beforeLeftB).toBeCloseTo(5 * FIT_SCALE + 400 + 6, 6);
-    expect(cardTop(container, "a")).toBeCloseTo(300, 6);
+    expect(leftNode.before.left).toBeCloseTo(-5 * FIT_SCALE + 400 + 6, 6);
+    expect(rightNode.before.left).toBeCloseTo(5 * FIT_SCALE + 400 + 6, 6);
+    expect(leftNode.before.top).toBeCloseTo(300, 6);
 
-    rerender(
-      <CorpusMap
-        spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
-        cardSize={NO_GROUPING}
-        thresholds={{ midAt: 0, nearAt: 0 }}
-        width={1000}
-        height={700}
-      />,
-    );
-    const afterLeftA = cardLeft(container, "a");
-    const afterLeftB = cardLeft(container, "b");
-    expect(afterLeftB - afterLeftA).toBeCloseTo(beforeLeftB - beforeLeftA, 9); // scale kept
-    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
-    expect(cardTop(container, "a")).toBeCloseTo(350, 9);
-    expect(cardTop(container, "b")).toBeCloseTo(350, 9);
+    expect(rightNode.after.left - leftNode.after.left).toBeCloseTo(rightNode.before.left - leftNode.before.left, 9); // scale kept
+    expect((leftNode.after.left + rightNode.after.left) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
+    expect(leftNode.after.top).toBeCloseTo(350, 9);
+    expect(rightNode.after.top).toBeCloseTo(350, 9);
   });
 
   it("treats a lone width (no height) as not explicit — falls through to the measured box", () => {
@@ -282,9 +298,10 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     const { container } = render(
       <CorpusMap
         spec={singleNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
         width={400}
       />,
     );
@@ -306,9 +323,10 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     const { container } = render(
       <CorpusMap
         spec={singleNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        defaultSelectedId="a"
         height={300}
       />,
     );
@@ -346,67 +364,76 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     // above already had to design around. Zooming away from the fit before
     // switching closes that gap: a refit-in-disguise would snap back to the
     // fitted view; a true no-op keeps the zoomed one.
-    const { container, rerender } = render(
-      <CorpusMap
-        spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
-        cardSize={NO_GROUPING}
-        thresholds={{ midAt: 0, nearAt: 0 }}
-        width={800}
-        height={600}
-      />,
-    );
-    expect(FakeResizeObserver.instances).toHaveLength(1);
-
+    //
     // Zoom OUT, anchored at the box's own centre (400, 300 in local/surface
     // coordinates — jsdom's default zero-rect `getBoundingClientRect`, same
     // as this file's other wheel-driven test). Zooming out, not in: the
     // fitted view already spans 752 of the 800px-wide box (24px padding
-    // each side), so zooming in would immediately push a card outside the
-    // box and off `visibleNodes`' screen cull — zooming out leaves headroom.
-    // `zoomTo`/`zoomAt` keep whatever world point is currently under the
-    // anchor fixed at that screen position, and world (0, 0) — the midpoint
-    // of the two nodes — is exactly what the fitted view already puts at
-    // (400, 300), so it stays there through the zoom; only the scale
+    // each side), so zooming in would immediately push a node outside the
+    // box, where the selected card is not shown — zooming out leaves
+    // headroom. `zoomTo`/`zoomAt` keep whatever world point is currently
+    // under the anchor fixed at that screen position, and world (0, 0) — the
+    // midpoint of the two nodes — is exactly what the fitted view already
+    // puts at (400, 300), so it stays there through the zoom; only the scale
     // changes, giving a real, non-default state to prove is preserved (not
     // reproduced by coincidence).
-    fireEvent.wheel(surface(container), { deltaY: 240, clientX: 400, clientY: 300 });
-    const zoomedLeftA = cardLeft(container, "a");
-    const zoomedLeftB = cardLeft(container, "b");
-    const zoomedTop = cardTop(container, "a");
-    const FIT_SPAN = 10 * 75.2; // the un-zoomed span between the two cards, for comparison
-    expect(zoomedLeftB - zoomedLeftA).toBeLessThan(FIT_SPAN * 0.9); // actually zoomed out
+    const run = (selected: "a" | "b") => {
+      const observersBefore = FakeResizeObserver.instances.length;
+      const { container, rerender, unmount } = render(
+        <CorpusMap
+          spec={twoNodeSpec}
+          renderCard={(node) => <div>{node.label}</div>}
+          cardSize={NO_GROUPING}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          defaultSelectedId={selected}
+          width={800}
+          height={600}
+        />,
+      );
+      expect(FakeResizeObserver.instances).toHaveLength(observersBefore + 1);
+      fireEvent.wheel(surface(container), { deltaY: 240, clientX: 400, clientY: 300 });
+      const zoomed = { left: cardLeft(container, selected), top: cardTop(container, selected) };
 
-    // Drop the props: falls through to `measured`, which this fake already
-    // reported as {800, 600} on `observe()` — the same value `fitBasis`
-    // already holds — so this must be a true no-op commit.
-    rerender(
-      <CorpusMap
-        spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
-        cardSize={NO_GROUPING}
-        thresholds={{ midAt: 0, nearAt: 0 }}
-      />,
-    );
-    // No new observer: the hook's effect has a stable `[ref]` dependency
-    // and never re-subscribes just because the box's source changed.
-    expect(FakeResizeObserver.instances).toHaveLength(1);
-    expect(cardLeft(container, "a")).toBeCloseTo(zoomedLeftA, 9);
-    expect(cardLeft(container, "b")).toBeCloseTo(zoomedLeftB, 9);
-    expect(cardTop(container, "a")).toBeCloseTo(zoomedTop, 9);
+      // Drop the props: falls through to `measured`, which this fake already
+      // reported as {800, 600} on `observe()` — the same value `fitBasis`
+      // already holds — so this must be a true no-op commit.
+      rerender(
+        <CorpusMap
+          spec={twoNodeSpec}
+          renderCard={(node) => <div>{node.label}</div>}
+          cardSize={NO_GROUPING}
+          thresholds={{ midAt: 0, nearAt: 0 }}
+          defaultSelectedId={selected}
+        />,
+      );
+      // No new observer: the hook's effect has a stable `[ref]` dependency
+      // and never re-subscribes just because the box's source changed.
+      expect(FakeResizeObserver.instances).toHaveLength(observersBefore + 1);
+      const switched = { left: cardLeft(container, selected), top: cardTop(container, selected) };
 
-    // The true parent size arrives later, as a genuinely new report on the
-    // same (persisting) observer — handled by the ordinary, unified
-    // keep-view box-change path, same as any other measured resize, and
-    // relative to the *zoomed* state just proven kept, not the original fit.
-    act(() => {
-      latestObserver().report(1000, 700);
-    });
-    const afterLeftA = cardLeft(container, "a");
-    const afterLeftB = cardLeft(container, "b");
-    expect(afterLeftB - afterLeftA).toBeCloseTo(zoomedLeftB - zoomedLeftA, 9); // scale kept
-    expect((afterLeftA + afterLeftB) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
-    expect(cardTop(container, "a")).toBeCloseTo(350, 9);
+      // The true parent size arrives later, as a genuinely new report on the
+      // same (persisting) observer — handled by the ordinary, unified
+      // keep-view box-change path, same as any other measured resize, and
+      // relative to the *zoomed* state just proven kept, not the original fit.
+      act(() => {
+        latestObserver().report(1000, 700);
+      });
+      const after = { left: cardLeft(container, selected), top: cardTop(container, selected) };
+      unmount();
+      return { zoomed, switched, after };
+    };
+    const leftNode = run("a");
+    const rightNode = run("b");
+    const FIT_SPAN = 10 * 75.2; // the un-zoomed span between the two nodes, for comparison
+    expect(rightNode.zoomed.left - leftNode.zoomed.left).toBeLessThan(FIT_SPAN * 0.9); // actually zoomed out
+
+    expect(leftNode.switched.left).toBeCloseTo(leftNode.zoomed.left, 9);
+    expect(rightNode.switched.left).toBeCloseTo(rightNode.zoomed.left, 9);
+    expect(leftNode.switched.top).toBeCloseTo(leftNode.zoomed.top, 9);
+
+    expect(rightNode.after.left - leftNode.after.left).toBeCloseTo(rightNode.zoomed.left - leftNode.zoomed.left, 9); // scale kept
+    expect((leftNode.after.left + rightNode.after.left) / 2).toBeCloseTo(500 + 6, 9); // old centre -> new centre
+    expect(leftNode.after.top).toBeCloseTo(350, 9);
   });
 
   it("does not reset the regime hysteresis on a box-only change", () => {
@@ -434,10 +461,10 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     const { container } = render(
       <CorpusMap
         spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={thresholds}
-        onRegimeChange={(r) => regimes.push(r)}
+        onRegimeChange={(regime) => regimes.push(regime)}
       />,
     );
     // 800x2000: X stays the binding dimension of fitSpec (as in
@@ -446,12 +473,12 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     act(() => {
       latestObserver().report(800, 2000);
     });
-    const el = surface(container);
+    const element = surface(container);
     let ratio = 1;
     const wheelToRatio = (target: number) => {
       const factor = target / ratio;
-      const deltaY = -Math.log(factor) / DEFAULT_TUNING.wheelSensitivity;
-      fireEvent.wheel(el, { deltaY, clientX: 0, clientY: 0 });
+      const wheelDelta = -Math.log(factor) / DEFAULT_TUNING.wheelSensitivity;
+      fireEvent.wheel(element, { deltaY: wheelDelta, clientX: 0, clientY: 0 });
       ratio = target;
     };
     wheelToRatio(6 ** (1 / 3));
@@ -474,12 +501,14 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
   });
 
   it("a spec swap after a resize refits (and does reset the regime)", () => {
+    // The selection is controlled so it can name each spec's item.
     const { container, rerender } = render(
       <CorpusMap
         spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        selectedId="a"
       />,
     );
     act(() => {
@@ -496,9 +525,10 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     rerender(
       <CorpusMap
         spec={farAway}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
         thresholds={{ midAt: 0, nearAt: 0 }}
+        selectedId="z"
       />,
     );
     const card = container.querySelector('[data-card="z"]') as HTMLElement | null;
@@ -516,7 +546,7 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
     };
     render(
       <Profiler id="resize-probe" onRender={onRenderProfile}>
-        <CorpusMap spec={singleNodeSpec} renderCard={(n) => <div>{n.label}</div>} cardSize={NO_GROUPING} />
+        <CorpusMap spec={singleNodeSpec} renderCard={(node) => <div>{node.label}</div>} cardSize={NO_GROUPING} />
       </Profiler>,
     );
     act(() => {
@@ -533,17 +563,17 @@ describe("CorpusMap resize keeps the view (showcase Task 2)", () => {
 describe("CorpusMap ignores a zero-area box (whole-branch review I3)", () => {
   it("a zero-height first box is not a fit basis: the first real size fits (explicit props)", () => {
     const views: CorpusMapView[] = [];
-    const props = {
+    const properties = {
       spec: twoNodeSpec,
-      renderCard: (n: MapNode) => <div>{n.label}</div>,
+      renderCard: (node: MapNode) => <div>{node.label}</div>,
       cardSize: NO_GROUPING,
-      onViewChange: (v: CorpusMapView) => views.push(v),
+      onViewChange: (view: CorpusMapView) => views.push(view),
     };
-    const { container, rerender } = render(<CorpusMap {...props} width={1280} height={0} />);
+    const { container, rerender } = render(<CorpusMap {...properties} width={1280} height={0} />);
     expect(container.querySelector("canvas")).toBeNull();
     expect(views).toEqual([]);
 
-    rerender(<CorpusMap {...props} width={1280} height={800} />);
+    rerender(<CorpusMap {...properties} width={1280} height={800} />);
     expect(container.querySelector("canvas")).not.toBeNull();
     expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
   });
@@ -553,9 +583,9 @@ describe("CorpusMap ignores a zero-area box (whole-branch review I3)", () => {
     const { container } = render(
       <CorpusMap
         spec={twoNodeSpec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         cardSize={NO_GROUPING}
-        onViewChange={(v) => views.push(v)}
+        onViewChange={(view) => views.push(view)}
       />,
     );
     act(() => {
@@ -573,15 +603,15 @@ describe("CorpusMap ignores a zero-area box (whole-branch review I3)", () => {
 
   it("a box that collapses to zero height and comes back keeps the view it had", () => {
     const views: CorpusMapView[] = [];
-    const props = {
+    const properties = {
       spec: twoNodeSpec,
-      renderCard: (n: MapNode) => <div>{n.label}</div>,
+      renderCard: (node: MapNode) => <div>{node.label}</div>,
       cardSize: NO_GROUPING,
-      onViewChange: (v: CorpusMapView) => views.push(v),
+      onViewChange: (view: CorpusMapView) => views.push(view),
     };
-    const { rerender } = render(<CorpusMap {...props} width={1280} height={800} />);
-    rerender(<CorpusMap {...props} width={1280} height={0} />);
-    rerender(<CorpusMap {...props} width={1280} height={800} />);
+    const { rerender } = render(<CorpusMap {...properties} width={1280} height={800} />);
+    rerender(<CorpusMap {...properties} width={1280} height={0} />);
+    rerender(<CorpusMap {...properties} width={1280} height={800} />);
     expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
   });
 });

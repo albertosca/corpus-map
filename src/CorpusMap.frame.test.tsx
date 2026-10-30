@@ -44,12 +44,13 @@ describe("CorpusMap frame-coalesced dragging (metric 13)", () => {
             // Zero-size cards (map-feel Task 8): a card's box then collapses
             // to a point offset from its anchor by exactly the layout gap
             // (`left = anchorX + 6`), so this test's pixel arithmetic — which
-            // is about the drag's frame-coalescing, not card layout — is
-            // unaffected by which of `layoutCards`'s eight candidates wins.
+            // is about the drag's frame-coalescing, not card placement — is
+            // unaffected by which of `placeSelectedCard`'s candidates wins.
             // A non-zero `cardSize` here would make the winning candidate
             // (and so the sign of `after - before`) flip mid-drag as the
-            // card nears the box edge.
+            // card nears the box edge. a is selected so its one card exists.
             cardSize={{ width: 0, height: 0 }}
+            defaultSelectedId="a"
           />
         </Profiler>,
       );
@@ -103,6 +104,7 @@ describe("CorpusMap frame-coalesced dragging (metric 13)", () => {
             height={300}
             thresholds={{ midAt: 0, nearAt: 0 }}
             cardSize={{ width: 0, height: 0 }}
+            defaultSelectedId="a"
             viewport={view}
             onViewportChange={(next) => {
               proposals.push(next);

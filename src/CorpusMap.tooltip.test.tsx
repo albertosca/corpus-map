@@ -281,9 +281,11 @@ describe("territory tooltip", () => {
   });
 
   it("is suppressed over a card", () => {
+    // The one card is the selection's (spec item labels §3).
     const { container, surface } = mount({
       thresholds: { midAt: 0, nearAt: 0 },
       renderCard: (node) => <div>{node.label}</div>,
+      defaultSelectedId: "north0",
     });
     const point = insideNorth();
     const cards = [...container.querySelectorAll<HTMLElement>("[data-card]")];

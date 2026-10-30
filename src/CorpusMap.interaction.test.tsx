@@ -2,6 +2,9 @@ import { fireEvent, render } from "@testing-library/react";
 import { act, Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "./labels/itemLabels";
+import { itemLabelRect } from "./labels/paintItemLabels";
+import { estimateText } from "./labels/placement";
 import type { MapSpec } from "./shared/spec";
 import { DEFAULT_TUNING } from "./shared/tuning";
 import { fitSpec } from "./viewport/fit";
@@ -31,25 +34,26 @@ function cardLeft(container: HTMLElement, id: string): number {
   return Number.parseFloat((container.querySelector(`[data-card="${id}"]`) as HTMLElement).style.left);
 }
 
-// A zero-size card frame collapses `layoutCards`'s first candidate to
-// exactly `(anchorX + 6, anchorY)` — no candidate can ever overlap another
-// placed card (a zero-area rectangle overlaps nothing) or run out of room,
-// so every anchor always keeps this same, predictable offset regardless of
-// where it sits in the box. Every test in this file that renders through
-// `renderMap` is about wheel/drag/click/regime math, not about card
-// layout, so this keeps their pixel arithmetic exactly what it was before
-// cards were laid out around their anchor instead of pinned to it — modulo
-// the constant +6 on `left` (`top` is unaffected, since `y - height / 2`
-// with `height = 0` is just `y`). Real card sizing and the group fallback
-// are covered by CardOverlay.test.tsx's dedicated tests and by the
-// group-click test below, which uses a real size on purpose.
+// A zero-size card frame puts `placeSelectedCard`'s first candidate exactly
+// at `(anchorX + 6, anchorY)`: a zero-area rectangle covers no point and no
+// edge, so the near-right spot always wins while it fits. The tests here that
+// read the selected card's `left` use it as a stand-in for its point's screen
+// position, so this keeps their arithmetic the point's own plus 6. Real card
+// sizing is covered by placeSelectedCard.test.ts and by the default-size test
+// below, which uses the shipped size on purpose.
 const NO_GROUPING = { width: 0, height: 0 };
 
-function renderMap(thresholds: { midAt: number; nearAt: number }, onRegimeChange?: (r: string) => void) {
+// `selected` is the item whose one card the test reads (spec item labels §3: no card without a selection).
+function renderMap(
+  thresholds: { midAt: number; nearAt: number },
+  onRegimeChange?: (regime: string) => void,
+  selected = "a",
+) {
   return render(
     <CorpusMap
       spec={spec}
-      renderCard={(n) => <div>{n.label}</div>}
+      defaultSelectedId={selected}
+      renderCard={(node) => <div>{node.label}</div>}
       width={400}
       height={300}
       thresholds={thresholds}
@@ -69,11 +73,11 @@ describe("CorpusMap interaction", () => {
     // A non-zero, incrementing id — not the sentinel-shaped `0`, which
     // reads the same as an unset ref and can mask a mock that was never
     // actually wired in.
-    let rafSeq = 0;
-    raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      cb(0);
-      rafSeq += 1;
-      return rafSeq;
+    let frameSequence = 0;
+    raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callback(0);
+      frameSequence += 1;
+      return frameSequence;
     });
   });
   afterEach(() => {
@@ -83,28 +87,28 @@ describe("CorpusMap interaction", () => {
   it("shows cards after zooming in far enough", () => {
     // Thresholds are ratios of the fitted scale (25.2): 100 / 25.2 keeps the
     // absolute target this test was written against (scale 100).
-    const { container } = renderMap({ midAt: 50 / FIT_SCALE, nearAt: 100 / FIT_SCALE });
+    // c, the wheel anchor, stays in the box all the way in.
+    const { container } = renderMap({ midAt: 50 / FIT_SCALE, nearAt: 100 / FIT_SCALE }, undefined, "c");
     expect(container.querySelectorAll("[data-card]")).toHaveLength(0);
     // One 120-unit notch multiplies the scale by exp(120 * 0.002) = exp(0.24)
     // ≈ 1.2712. From 25.2, six notches give 25.2 * exp(1.44) ≈ 106.4 ≥ 100
     // (five give ≈ 83.7, short of nearAt), well inside the 64x clamp.
-    for (let i = 0; i < 6; i += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
+    for (let index = 0; index < 6; index += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
     expect(container.querySelectorAll("[data-card]").length).toBeGreaterThan(0);
   });
 
   it("clamps wheel zoom-in at 64x the fitted scale (I3)", () => {
-    const { container } = renderMap({ midAt: 0, nearAt: 0 });
+    const { container } = renderMap({ midAt: 0, nearAt: 0 }, undefined, "c");
     // 100 notches is ~6x more than the ~17 needed to hit the clamp (see the
     // "shows cards" test above), so the scale is pinned at fit * 64 well
     // before the loop ends and every further notch is a no-op. Unclamped,
     // exp(0.24 * 100) ≈ 2.65e10, i.e. the scale would overflow to roughly
     // fit * 2.65e10 ≈ 6.7e11 — ten orders of magnitude past the 64x clamp,
     // so the assertions below still fail hard on revert.
-    for (let i = 0; i < 100; i += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
+    for (let index = 0; index < 100; index += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
     expect(container.querySelectorAll('[data-card="c"]')).toHaveLength(1);
-    // Node c is the anchor and stays put; node a is 5 * 25.2 * 64 px off
-    // screen at the clamp, so it is the only card left. +6 for the
-    // zero-size card's layout gap (see `NO_GROUPING`).
+    // Node c is the anchor and stays put, so its card stays the one card.
+    // +6 for the zero-size card's gap (see `NO_GROUPING`).
     expect(container.querySelectorAll("[data-card]")).toHaveLength(1);
     expect(cardLeft(container, "c")).toBeCloseTo(200 + 6, 6);
   });
@@ -118,7 +122,7 @@ describe("CorpusMap interaction", () => {
     // fails hard on revert; clamped at 25.2 / 8 = 3.15, node a stays 5 * 3.15
     // px left of it. +6 for the zero-size card's layout gap (see
     // `NO_GROUPING`).
-    for (let i = 0; i < 100; i += 1) fireEvent.wheel(surface(container), { deltaY: 120, ...CENTRE });
+    for (let index = 0; index < 100; index += 1) fireEvent.wheel(surface(container), { deltaY: 120, ...CENTRE });
     expect(cardLeft(container, "a")).toBeCloseTo(200 - 5 * (FIT_SCALE / 8) + 6, 6);
   });
 
@@ -184,14 +188,14 @@ describe("CorpusMap interaction", () => {
     const onRegimeChange = vi.fn();
     const { container } = renderMap({ midAt: 50 / FIT_SCALE, nearAt: 100 / FIT_SCALE }, onRegimeChange);
     expect(onRegimeChange.mock.calls).toEqual([["far"]]);
-    for (let i = 0; i < 6; i += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
+    for (let index = 0; index < 6; index += 1) fireEvent.wheel(surface(container), { deltaY: -120, ...CENTRE });
     expect(onRegimeChange.mock.calls).toEqual([["far"], ["mid"], ["near"]]);
   });
 
   it("keeps the hysteresis regime stable under a ±3% oscillation around nearAt (metric 12, component level)", () => {
     const onRegimeChange = vi.fn();
     const { container } = renderMap({ midAt: 2, nearAt: 6 }, onRegimeChange);
-    const el = surface(container);
+    const element = surface(container);
     // Mounting starts at ratio 1 (vp = the fitted viewport). Each call moves
     // the ratio to an absolute target — not by compounding the previous
     // factor, which would only ever climb — by computing, from the ratio
@@ -200,8 +204,8 @@ describe("CorpusMap interaction", () => {
     let ratio = 1;
     const wheelToRatio = (target: number) => {
       const factor = target / ratio;
-      const deltaY = -Math.log(factor) / DEFAULT_TUNING.wheelSensitivity;
-      fireEvent.wheel(el, { deltaY, ...CENTRE });
+      const wheelDelta = -Math.log(factor) / DEFAULT_TUNING.wheelSensitivity;
+      fireEvent.wheel(element, { deltaY: wheelDelta, ...CENTRE });
       ratio = target;
     };
     // Three notches of the cube root of nearAt (each under the default 2x
@@ -213,7 +217,7 @@ describe("CorpusMap interaction", () => {
     // real dip below the raw threshold on every downswing, but still above
     // the default 5% hysteresis exit band (nearAt * 0.95), so the regime
     // must not flip back to "mid".
-    for (let i = 0; i < 10; i += 1) wheelToRatio(i % 2 === 0 ? 6 * 0.97 : 6 * 1.03);
+    for (let index = 0; index < 10; index += 1) wheelToRatio(index % 2 === 0 ? 6 * 0.97 : 6 * 1.03);
     expect(onRegimeChange.mock.calls).toEqual([["far"], ["mid"], ["near"]]);
   });
 
@@ -224,30 +228,41 @@ describe("CorpusMap interaction", () => {
       this: HTMLElement,
     ) {
       const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
+      const [horizontal, vertical, boxWidth, boxHeight] =
         id === null
           ? [0, 0, 400, 300]
           : [Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 100, 40];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+      return {
+        x: horizontal,
+        y: vertical,
+        width: boxWidth,
+        height: boxHeight,
+        left: horizontal,
+        top: vertical,
+        right: horizontal + boxWidth,
+        bottom: vertical + boxHeight,
+        toJSON: () => ({}),
+      } as DOMRect;
     });
     try {
       const onSelect = vi.fn();
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={400}
           height={300}
           thresholds={{ midAt: 0, nearAt: 0 }}
           onSelect={onSelect}
           cardSize={NO_GROUPING}
+          defaultSelectedId="a"
         />,
       );
-      const el = surface(container);
+      const element = surface(container);
       // With NO_GROUPING, node a's card box is its anchor (74, 24) offset by
       // the 6 px layout gap: (80, 24)-(180, 64) (mocked to 100x40 above).
-      fireEvent.pointerDown(el, { clientX: 80, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 81, clientY: 31, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerDown(element, { clientX: 80, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 81, clientY: 31, pointerId: 1, button: 0, isPrimary: true });
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a", label: "A" }));
 
@@ -257,16 +272,16 @@ describe("CorpusMap interaction", () => {
       // right to (90,30) exceeds CLICK_SLOP (4) and pans the box to
       // (90,24)-(190,64), so the release point (90,30) is still inside it.
       // Without the guard this would wrongly select node a.
-      fireEvent.pointerDown(el, { clientX: 80, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerMove(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerDown(element, { clientX: 80, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerMove(element, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
       expect(onSelect).toHaveBeenCalledTimes(1);
 
-      // Empty ground selects nothing. After the 10 px pan above, the three
-      // boxes are a (90,24)-(190,64), b (342,276)-(442,316) and c
-      // (216,150)-(316,190); (390,90) is outside all three.
-      fireEvent.pointerDown(el, { clientX: 390, clientY: 90, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 390, clientY: 90, pointerId: 1, button: 0, isPrimary: true });
+      // Empty ground selects nothing. After the 10 px pan above, the one
+      // card is a's (90,24)-(190,64); (390,90) is outside it and far from
+      // every point and plate.
+      fireEvent.pointerDown(element, { clientX: 390, clientY: 90, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 390, clientY: 90, pointerId: 1, button: 0, isPrimary: true });
       expect(onSelect).toHaveBeenCalledTimes(1);
     } finally {
       rects.mockRestore();
@@ -278,37 +293,48 @@ describe("CorpusMap interaction", () => {
       this: HTMLElement,
     ) {
       const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
+      const [horizontal, vertical, boxWidth, boxHeight] =
         id === null
           ? [0, 0, 400, 300]
           : [Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 100, 40];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+      return {
+        x: horizontal,
+        y: vertical,
+        width: boxWidth,
+        height: boxHeight,
+        left: horizontal,
+        top: vertical,
+        right: horizontal + boxWidth,
+        bottom: vertical + boxHeight,
+        toJSON: () => ({}),
+      } as DOMRect;
     });
     try {
       const onSelect = vi.fn();
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={400}
           height={300}
           thresholds={{ midAt: 0, nearAt: 0 }}
           onSelect={onSelect}
           cardSize={NO_GROUPING}
+          defaultSelectedId="a"
         />,
       );
-      const el = surface(container);
+      const element = surface(container);
       // With NO_GROUPING, node a's card box is (80, 24)-(180, 64) (see the
       // test above); a right-click press and release squarely inside it
       // must not select.
-      fireEvent.pointerDown(el, { clientX: 80, clientY: 30, pointerId: 1, button: 2, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 80, clientY: 30, pointerId: 1, button: 2, isPrimary: true });
+      fireEvent.pointerDown(element, { clientX: 80, clientY: 30, pointerId: 1, button: 2, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 80, clientY: 30, pointerId: 1, button: 2, isPrimary: true });
       expect(onSelect).not.toHaveBeenCalled();
 
       // A non-primary pointer (e.g. a second simultaneous touch) is ignored
       // even when it reports the primary button.
-      fireEvent.pointerDown(el, { clientX: 80, clientY: 30, pointerId: 2, button: 0, isPrimary: false });
-      fireEvent.pointerUp(el, { clientX: 80, clientY: 30, pointerId: 2, button: 0, isPrimary: false });
+      fireEvent.pointerDown(element, { clientX: 80, clientY: 30, pointerId: 2, button: 0, isPrimary: false });
+      fireEvent.pointerUp(element, { clientX: 80, clientY: 30, pointerId: 2, button: 0, isPrimary: false });
       expect(onSelect).not.toHaveBeenCalled();
     } finally {
       rects.mockRestore();
@@ -318,10 +344,10 @@ describe("CorpusMap interaction", () => {
   it("drag moves the rendered cards", () => {
     const { container } = renderMap({ midAt: 0, nearAt: 0 });
     const before = (container.querySelector("[data-card]") as HTMLElement).style.left;
-    const el = surface(container);
-    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
-    fireEvent.pointerMove(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
-    fireEvent.pointerUp(el, { pointerId: 1, button: 0, isPrimary: true });
+    const element = surface(container);
+    fireEvent.pointerDown(element, { clientX: 100, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerMove(element, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerUp(element, { pointerId: 1, button: 0, isPrimary: true });
     expect((container.querySelector("[data-card]") as HTMLElement).style.left).not.toBe(before);
   });
 
@@ -336,13 +362,13 @@ describe("CorpusMap interaction", () => {
     // midAt 0 puts the mount ratio (1) at or past the mid threshold; a
     // nearAt far out of reach keeps it from also crossing into "near".
     const { container } = renderMap({ midAt: 0, nearAt: 64 });
-    const el = surface(container);
+    const element = surface(container);
     // Node a sits at screen (74, 24) (see the FIT_SCALE comment at the top
     // of this file); 6 px away, not exactly on it — `nearestWithin` ties an
     // exact d = 0 match to the radius even at radius 0 (its own documented
     // "ties go to the earlier point" rule), which would make this pass
     // vacuously at radius 0 and defeat the point of the test.
-    fireEvent.pointerMove(el, { clientX: 74 + 6, clientY: 24, pointerId: 1 });
+    fireEvent.pointerMove(element, { clientX: 74 + 6, clientY: 24, pointerId: 1 });
     const hover = container.querySelector('[data-hover="a"]');
     expect(hover).not.toBeNull();
     expect(hover?.textContent).toBe("A");
@@ -357,17 +383,17 @@ describe("CorpusMap interaction", () => {
     // non-null and never re-schedule a flush. Real, asynchronous
     // `requestAnimationFrame` does not have this ordering issue.
     const { container } = renderMap({ midAt: 0, nearAt: 64 });
-    const el = surface(container);
+    const element = surface(container);
     // Node a is still the nearest node overall at this point, just outside
     // the radius.
-    fireEvent.pointerMove(el, { clientX: 74 + 13, clientY: 24, pointerId: 1 });
+    fireEvent.pointerMove(element, { clientX: 74 + 13, clientY: 24, pointerId: 1 });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
   it("costs zero additional commits while the pointer holds within radius of the same node across separate frames, then exactly one on a switch (metric 10/13)", () => {
     const callbacks: FrameRequestCallback[] = [];
-    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     try {
@@ -379,7 +405,7 @@ describe("CorpusMap interaction", () => {
         <Profiler id="hover-commits" onRender={onRender}>
           <CorpusMap
             spec={spec}
-            renderCard={(n) => <div>{n.label}</div>}
+            renderCard={(node) => <div>{node.label}</div>}
             width={400}
             height={300}
             thresholds={{ midAt: 0, nearAt: 64 }}
@@ -387,13 +413,13 @@ describe("CorpusMap interaction", () => {
           />
         </Profiler>,
       );
-      const el = surface(container);
+      const element = surface(container);
 
       // Establish the hover on node a (screen (74, 24)) — this first
       // commit is not part of what this test measures.
-      fireEvent.pointerMove(el, { clientX: 74 + 6, clientY: 24, pointerId: 1 });
+      fireEvent.pointerMove(element, { clientX: 74 + 6, clientY: 24, pointerId: 1 });
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
 
@@ -402,17 +428,17 @@ describe("CorpusMap interaction", () => {
       // 12 px of node a: `nearestWithin` resolves the same node's own
       // screen position every time, so the resolved hover never actually
       // changes.
-      const nearA = [
+      const nearbyPoints = [
         { clientX: 74 + 5, clientY: 24 },
         { clientX: 74 + 4, clientY: 24 },
         { clientX: 74 + 6, clientY: 25 },
         { clientX: 74 + 5, clientY: 25 },
         { clientX: 74 + 6, clientY: 24 },
       ];
-      for (const p of nearA) {
-        fireEvent.pointerMove(el, { ...p, pointerId: 1 });
+      for (const point of nearbyPoints) {
+        fireEvent.pointerMove(element, { ...point, pointerId: 1 });
         act(() => {
-          for (const cb of callbacks.splice(0)) cb(0);
+          for (const callback of callbacks.splice(0)) callback(0);
         });
       }
       expect(commits).toBe(0);
@@ -421,9 +447,9 @@ describe("CorpusMap interaction", () => {
       // A move within 12 px of node b (screen (326, 276)) resolves to a
       // genuinely different hover: exactly one more commit, and the
       // tooltip switches.
-      fireEvent.pointerMove(el, { clientX: 326 - 6, clientY: 276, pointerId: 1 });
+      fireEvent.pointerMove(element, { clientX: 326 - 6, clientY: 276, pointerId: 1 });
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(commits).toBe(1);
       expect(container.querySelector('[data-hover="b"]')).not.toBeNull();
@@ -439,22 +465,22 @@ describe("CorpusMap interaction", () => {
     // needs exactly that (show, then clear), so it queues callbacks and
     // runs them explicitly instead, the way CorpusMap.frame.test.tsx does.
     const callbacks: FrameRequestCallback[] = [];
-    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     try {
       const { container } = renderMap({ midAt: 0, nearAt: 64 });
-      const el = surface(container);
-      fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+      const element = surface(container);
+      fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
 
-      fireEvent.pointerMove(el, { clientX: 74 + 13, clientY: 24, pointerId: 1 });
+      fireEvent.pointerMove(element, { clientX: 74 + 13, clientY: 24, pointerId: 1 });
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(container.querySelector("[data-hover]")).toBeNull();
     } finally {
@@ -467,14 +493,14 @@ describe("CorpusMap interaction", () => {
     // elsewhere in this file, where the ratio — never negative — cannot
     // leave "mid").
     const { container } = renderMap({ midAt: 0.5, nearAt: 64 });
-    const el = surface(container);
-    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    const element = surface(container);
+    fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
 
     // Same 100-notch zoom-out as the 1/8 clamp test above, well past the
     // hysteresis exit bound (midAt * 0.95 = 0.475): no further pointer move,
     // just the regime leaving "mid".
-    for (let i = 0; i < 100; i += 1) fireEvent.wheel(el, { deltaY: 120, ...CENTRE });
+    for (let index = 0; index < 100; index += 1) fireEvent.wheel(element, { deltaY: 120, ...CENTRE });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
@@ -488,26 +514,26 @@ describe("CorpusMap interaction", () => {
     // prove it clears anything — the assertion right after the press
     // already shows the hover gone before the flush ever runs.
     const callbacks: FrameRequestCallback[] = [];
-    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
+    const localRaf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
       return callbacks.length;
     });
     try {
       const { container } = renderMap({ midAt: 0, nearAt: 64 });
-      const el = surface(container);
-      fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+      const element = surface(container);
+      fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
 
-      fireEvent.pointerMove(el, { clientX: 74, clientY: 25, pointerId: 1 });
+      fireEvent.pointerMove(element, { clientX: 74, clientY: 25, pointerId: 1 });
       expect(callbacks).toHaveLength(1);
-      fireEvent.pointerDown(el, { clientX: 74, clientY: 25, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerDown(element, { clientX: 74, clientY: 25, pointerId: 1, button: 0, isPrimary: true });
       expect(container.querySelector("[data-hover]")).toBeNull();
 
       act(() => {
-        for (const cb of callbacks.splice(0)) cb(0);
+        for (const callback of callbacks.splice(0)) callback(0);
       });
       expect(container.querySelector("[data-hover]")).toBeNull();
     } finally {
@@ -517,76 +543,18 @@ describe("CorpusMap interaction", () => {
 
   it("shows nothing at the far regime, however close the pointer is to a node", () => {
     const { container } = renderMap({ midAt: 60, nearAt: 64 });
-    const el = surface(container);
-    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    const element = surface(container);
+    fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
   it("clears the hover name on pointerleave", () => {
     const { container } = renderMap({ midAt: 0, nearAt: 64 });
-    const el = surface(container);
-    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    const element = surface(container);
+    fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
-    fireEvent.pointerLeave(el);
+    fireEvent.pointerLeave(element);
     expect(container.querySelector("[data-hover]")).toBeNull();
-  });
-
-  it("selects a group card's first node on press/release, the same as any other card (I11)", () => {
-    // Three nodes at the same point, in a box too small for even one 50x50
-    // card frame to clear the layout gap: the first anchor is placed
-    // clamped to the box corner and the other two join it as group members
-    // (see CardOverlay.test.tsx's own group-badge test for the arithmetic).
-    const group: MapSpec = {
-      version: "1",
-      territories: [],
-      nodes: [
-        { id: "p0", label: "P0", x: 0, y: 0, territory: null },
-        { id: "p1", label: "P1", x: 0, y: 0, territory: null },
-        { id: "p2", label: "P2", x: 0, y: 0, territory: null },
-      ],
-    };
-    // Reads each card's real, laid-out box — unlike the fixed-size mock
-    // above, this test cares about the actual group-card geometry.
-    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
-        id === null
-          ? [0, 0, 60, 60]
-          : [
-              Number.parseFloat(this.style.left),
-              Number.parseFloat(this.style.top),
-              Number.parseFloat(this.style.width),
-              Number.parseFloat(this.style.height),
-            ];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
-    });
-    try {
-      const onSelect = vi.fn();
-      const { container } = render(
-        <CorpusMap
-          spec={group}
-          renderCard={(n) => <div>{n.label}</div>}
-          width={60}
-          height={60}
-          thresholds={{ midAt: 0, nearAt: 0 }}
-          onSelect={onSelect}
-          cardSize={{ width: 50, height: 50 }}
-        />,
-      );
-      expect(container.querySelectorAll("[data-card]")).toHaveLength(1);
-      expect(container.querySelector("[data-card]")?.getAttribute("data-card-count")).toBe("3");
-      const el = surface(container);
-      // All three nodes sit at the box centre (30, 30), comfortably inside
-      // the single group card's box.
-      fireEvent.pointerDown(el, { clientX: 30, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 30, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      expect(onSelect).toHaveBeenCalledTimes(1);
-      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "p0", label: "P0" }));
-    } finally {
-      rects.mockRestore();
-    }
   });
 
   it("selects a node using the shipped default cardSize (no cardSize prop) (I11)", () => {
@@ -597,7 +565,7 @@ describe("CorpusMap interaction", () => {
       this: HTMLElement,
     ) {
       const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
+      const [horizontal, vertical, boxWidth, boxHeight] =
         id === null
           ? [0, 0, 400, 300]
           : [
@@ -606,29 +574,40 @@ describe("CorpusMap interaction", () => {
               Number.parseFloat(this.style.width),
               Number.parseFloat(this.style.height),
             ];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
+      return {
+        x: horizontal,
+        y: vertical,
+        width: boxWidth,
+        height: boxHeight,
+        left: horizontal,
+        top: vertical,
+        right: horizontal + boxWidth,
+        bottom: vertical + boxHeight,
+        toJSON: () => ({}),
+      } as DOMRect;
     });
     try {
       const onSelect = vi.fn();
       const { container } = render(
         <CorpusMap
           spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
+          renderCard={(node) => <div>{node.label}</div>}
           width={400}
           height={300}
           thresholds={{ midAt: 0, nearAt: 0 }}
           onSelect={onSelect}
+          defaultSelectedId="a"
         />,
       );
-      const el = surface(container);
+      const element = surface(container);
       // No cardSize prop: the shipped default is 160x56. Node a's anchor
       // (74, 24) is close enough to the top-left corner that the first six
-      // of `layoutCards`'s eight candidates (right, left, above, below, and
-      // the two upper diagonals) all run off the top or left edge of the
+      // of `placeSelectedCard`'s near candidates (right, left, above, below,
+      // and the two upper diagonals) all run off the top or left edge of the
       // 400x300 box; the surviving below-right candidate lands its card at
-      // (80, 30)-(240, 86).
-      fireEvent.pointerDown(el, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
+      // (80, 30)-(240, 86). (100, 50) is on the card, 32 px from the point.
+      fireEvent.pointerDown(element, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { clientX: 100, clientY: 50, pointerId: 1, button: 0, isPrimary: true });
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a", label: "A" }));
     } finally {
@@ -641,23 +620,24 @@ describe("CorpusMap interaction", () => {
     const { container } = render(
       <CorpusMap
         spec={spec}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={400}
         height={300}
         thresholds={{ midAt: 0, nearAt: 0 }}
         onSelect={onSelect}
         cardSize={NO_GROUPING}
+        defaultSelectedId="a"
       />,
     );
-    const el = surface(container);
+    const element = surface(container);
     const before = (container.querySelector("[data-card]") as HTMLElement).style.left;
-    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
-    fireEvent.pointerCancel(el, { pointerId: 1 });
+    fireEvent.pointerDown(element, { clientX: 100, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerCancel(element, { pointerId: 1 });
     // A move after the cancel is not a continuation of the abandoned drag:
     // `drag.current` is already null (cleared by the cancel), so this move
     // is read as a hover point, not a pan.
-    fireEvent.pointerMove(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
-    fireEvent.pointerUp(el, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerMove(element, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerUp(element, { clientX: 160, clientY: 100, pointerId: 1, button: 0, isPrimary: true });
     expect(onSelect).not.toHaveBeenCalled();
     expect((container.querySelector("[data-card]") as HTMLElement).style.left).toBe(before);
   });
@@ -665,7 +645,7 @@ describe("CorpusMap interaction", () => {
   it("resolves hover for an on-screen node past the card cap, not just the first cardCap in spec order (C1)", () => {
     const width = 960;
     const height = 640;
-    const cols = 20;
+    const columns = 20;
     const rows = 20;
     // 400 nodes, all on screen at the fitted viewport: the default cardCap
     // (200) would silently drop every node from index 200 on if hover were
@@ -673,106 +653,80 @@ describe("CorpusMap interaction", () => {
     const grid: MapSpec = {
       version: "1",
       territories: [],
-      nodes: Array.from({ length: cols * rows }, (_, i) => ({
-        id: `n${i}`,
-        label: `N${i}`,
-        x: (i % cols) * 10,
-        y: Math.floor(i / cols) * 10,
+      nodes: Array.from({ length: columns * rows }, (_, index) => ({
+        id: `n${index}`,
+        label: `N${index}`,
+        x: (index % columns) * 10,
+        y: Math.floor(index / columns) * 10,
         territory: null,
       })),
     };
     const { container } = render(
       <CorpusMap
         spec={grid}
-        renderCard={(n) => <div>{n.label}</div>}
+        renderCard={(node) => <div>{node.label}</div>}
         width={width}
         height={height}
         thresholds={{ midAt: 0, nearAt: 64 }}
         cardSize={NO_GROUPING}
       />,
     );
-    const el = surface(container);
+    const element = surface(container);
     // Node n350 (row 17, col 10) is past the cap in spec order. Same fit
     // CorpusMap computes internally (FIT_PADDING 24, see the "spec swap"
     // test in CorpusMap.test.tsx for the same literal).
-    const vp = fitSpec(grid, width, height, 24);
-    const [x, y] = toScreen(vp, 10 * 10, 17 * 10);
-    fireEvent.pointerMove(el, { clientX: x + 2, clientY: y, pointerId: 1 });
+    const viewport = fitSpec(grid, width, height, 24);
+    const [horizontal, vertical] = toScreen(viewport, 10 * 10, 17 * 10);
+    fireEvent.pointerMove(element, { clientX: horizontal + 2, clientY: vertical, pointerId: 1 });
     const hover = container.querySelector('[data-hover="n350"]');
     expect(hover).not.toBeNull();
     expect(hover?.textContent).toBe("N350");
   });
 
-  it("does not select through a card faded below opacity 0.1, and does once faded in past it (C2)", () => {
-    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      const id = this.getAttribute("data-card");
-      const [x, y, w, h] =
-        id === null
-          ? [0, 0, 400, 300]
-          : [Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 100, 40];
-      return { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
-    });
-    try {
-      const onSelect = vi.fn();
-      // Mount ratio is always 1: nearAt 1 puts the mount exactly at the
-      // near threshold, where `fade` is defined to be exactly 0 — the
-      // hysteresis band's own invisible-but-mounted state (C2's ruling).
-      const { container } = render(
-        <CorpusMap
-          spec={spec}
-          renderCard={(n) => <div>{n.label}</div>}
-          width={400}
-          height={300}
-          thresholds={{ midAt: 0.5, nearAt: 1 }}
-          onSelect={onSelect}
-          cardSize={NO_GROUPING}
-        />,
-      );
-      const el = surface(container);
-      const cardAt = (id: string) => container.querySelector(`[data-card="${id}"]`) as HTMLElement;
-      // The opacity style lives on the overlay wrapper (CardOverlay.tsx),
-      // one level up from the card itself.
-      const overlayOpacity = () => (cardAt("a").parentElement as HTMLElement).style.opacity;
-      expect(overlayOpacity()).toBe("0");
+  it("does not select through an item label faded below 0.1, and does once past it (C2)", () => {
+    const onSelect = vi.fn();
+    // Mount ratio is always 1: nearAt 1 puts the mount exactly at the near
+    // threshold, where the labels' fade (`cardOpacity`) is exactly 0 — the
+    // hysteresis band's own painted-but-invisible state (C2's ruling).
+    const { container } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={400}
+        height={300}
+        thresholds={{ midAt: 0.5, nearAt: 1 }}
+        onSelect={onSelect}
+      />,
+    );
+    const element = surface(container);
+    const labels = placeItemLabels(
+      spec,
+      [],
+      { font: DEFAULT_ITEM_LABEL_FONT, width: DEFAULT_TUNING.itemLabelWidth, lines: DEFAULT_TUNING.itemLabelLines },
+      estimateText,
+    );
+    const label = labels.find((each) => each.id === "c");
+    if (!label) throw new Error("no label for c");
+    // The plate's top edge, more than the hover radius above c (200, 150), so
+    // only the plate could take the press; its offset is in pixels, so it sits
+    // at the same distance from c at every scale.
+    const pressOnPlate = (viewport: { scale: number; tx: number; ty: number }) => {
+      const plate = itemLabelRect(label, viewport);
+      expect(150 - (plate.top + 1)).toBeGreaterThan(DEFAULT_TUNING.hoverRadius);
+      const pressPoint = { clientX: plate.left + plate.width / 2, clientY: plate.top + 1 };
+      fireEvent.pointerDown(element, { ...pressPoint, pointerId: 1, button: 0, isPrimary: true });
+      fireEvent.pointerUp(element, { ...pressPoint, pointerId: 1, button: 0, isPrimary: true });
+    };
+    pressOnPlate({ scale: FIT_SCALE, tx: 74, ty: 24 });
+    expect(onSelect).not.toHaveBeenCalled();
 
-      // Node a's card box at mount is (80,24)-(180,64) (NO_GROUPING's +6
-      // gap on the anchor at (74,24), same arithmetic as the other
-      // press/release tests in this file). A card is still mounted there
-      // (aria-hidden, opacity 0) — without the C2 guard this would select.
-      fireEvent.pointerDown(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      fireEvent.pointerUp(el, { clientX: 90, clientY: 30, pointerId: 1, button: 0, isPrimary: true });
-      expect(onSelect).not.toHaveBeenCalled();
-
-      // One wheel notch (factor ~1.2712), anchored on node a's own screen
-      // position (74, 24) so it stays on screen and does not pan away
-      // (see the "zooms in proportion to the wheel delta" test above for
-      // why anchoring at the viewport centre would push it off-screen
-      // instead). Crosses nearAt * (1 + fadeBand) = 1.25, landing
-      // cardOpacity at 1.
-      fireEvent.wheel(el, { deltaY: -120, clientX: 74, clientY: 24 });
-      expect(overlayOpacity()).toBe("1");
-      const box = { left: Number.parseFloat(cardAt("a").style.left), top: Number.parseFloat(cardAt("a").style.top) };
-      fireEvent.pointerDown(el, {
-        clientX: box.left + 10,
-        clientY: box.top + 10,
-        pointerId: 1,
-        button: 0,
-        isPrimary: true,
-      });
-      fireEvent.pointerUp(el, {
-        clientX: box.left + 10,
-        clientY: box.top + 10,
-        pointerId: 1,
-        button: 0,
-        isPrimary: true,
-      });
-      expect(onSelect).toHaveBeenCalledTimes(1);
-      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
-    } finally {
-      rects.mockRestore();
-    }
+    // One wheel notch (factor exp(0.24)) anchored on c, which stays at
+    // (200, 150): crosses nearAt * (1 + fadeBand) = 1.25, so the fade is 1.
+    fireEvent.wheel(element, { deltaY: -120, ...CENTRE });
+    const scale = FIT_SCALE * Math.exp(0.24);
+    pressOnPlate({ scale, tx: 200 - 5 * scale, ty: 150 - 5 * scale });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
   });
 
   it("shows nothing while the point layer is faded below opacity 0.1, even squarely over a node (C2)", () => {
@@ -780,17 +734,17 @@ describe("CorpusMap interaction", () => {
     // `fade` is defined to be exactly 0 — inside the "mid" regime (ratio >=
     // midAt) but with the point layer not yet faded in.
     const { container } = renderMap({ midAt: 1, nearAt: 64 });
-    const el = surface(container);
-    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    const element = surface(container);
+    fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 
   it("clears the hover name on any wheel zoom inside mid/near, so it never lingers at a stale screen position (I2)", () => {
     const { container } = renderMap({ midAt: 0, nearAt: 64 });
-    const el = surface(container);
-    fireEvent.pointerMove(el, { clientX: 74, clientY: 24, pointerId: 1 });
+    const element = surface(container);
+    fireEvent.pointerMove(element, { clientX: 74, clientY: 24, pointerId: 1 });
     expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
-    fireEvent.wheel(el, { deltaY: -10, clientX: 200, clientY: 150 });
+    fireEvent.wheel(element, { deltaY: -10, clientX: 200, clientY: 150 });
     expect(container.querySelector("[data-hover]")).toBeNull();
   });
 });

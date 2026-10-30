@@ -122,15 +122,31 @@ describe("dimming territories", () => {
   });
 
   it("a dimmed territory's points get no card and no accessible button", () => {
-    mountWith({
-      hiddenTerritories: ["south"],
-      thresholds: { midAt: 0, nearAt: 0 },
-      renderCard: (node) => <div>{node.label}</div>,
-    });
-    expect(document.querySelector('[data-card="south0"]')).toBeNull();
-    expect(document.querySelector('[data-card="north0"]')).not.toBeNull();
+    // The one card is the selection's (spec item labels §3): a selected item
+    // in a dimmed territory is no selection, so it gets no card either.
+    const { unmount } = render(
+      <CorpusMap
+        {...base([])}
+        hiddenTerritories={["south"]}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        renderCard={(node) => <div>{node.label}</div>}
+        selectedId="south0"
+      />,
+    );
+    expect(document.querySelector("[data-card]")).toBeNull();
     expect(screen.queryByRole("button", { name: /south0/ })).toBeNull();
     expect(screen.getByRole("button", { name: "north0" })).toBeTruthy();
+    unmount();
+    render(
+      <CorpusMap
+        {...base([])}
+        hiddenTerritories={["south"]}
+        thresholds={{ midAt: 0, nearAt: 0 }}
+        renderCard={(node) => <div>{node.label}</div>}
+        selectedId="north0"
+      />,
+    );
+    expect(document.querySelector('[data-card="north0"]')).not.toBeNull();
   });
 
   it("every territory dimmed: visibleCount 0, no card, Show all restores everything", () => {

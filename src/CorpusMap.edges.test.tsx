@@ -105,14 +105,14 @@ describe("off-screen neighbour markers (spec slice E §6)", () => {
   });
 
   it("a press on a marker over a card goes to the marker; on the card outside it, to the card", () => {
-    // jsdom lays nothing out: the card for `near` gets a box under the right marker, every other card none.
-    // View and selection are controlled, so both presses meet the same markers and cards.
+    // jsdom lays nothing out: the selected item's one card (`s`) gets a box under the right marker.
+    // View and selection are controlled, so both presses meet the same markers and card.
     const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement,
     ) {
       const id = this.getAttribute("data-card");
       const [left, top, width, height] =
-        id === null ? [0, 0, 400, 300] : id === "near" ? [250, 120, 150, 60] : [0, 0, 0, 0];
+        id === null ? [0, 0, 400, 300] : id === "s" ? [250, 120, 150, 60] : [0, 0, 0, 0];
       return {
         x: left,
         y: top,
@@ -127,6 +127,7 @@ describe("off-screen neighbour markers (spec slice E §6)", () => {
     });
     try {
       const onSelectedChange = vi.fn();
+      const onSelect = vi.fn();
       const { container } = render(
         <CorpusMap
           renderCard={card}
@@ -137,13 +138,17 @@ describe("off-screen neighbour markers (spec slice E §6)", () => {
           viewport={{ centre: [0, 0], zoom: 20 }}
           selectedId="s"
           onSelectedChange={onSelectedChange}
+          onSelect={onSelect}
         />,
       );
-      expect(container.querySelector('[data-card="near"]')).not.toBeNull();
+      expect(container.querySelector('[data-card="s"]')).not.toBeNull();
       press(container, markerCentre(container, "right"));
       expect(onSelectedChange).toHaveBeenLastCalledWith("right");
+      // The card names its own item: a re-press of the selected card still reports it.
+      onSelect.mockClear();
       press(container, [260, 175]);
-      expect(onSelectedChange).toHaveBeenLastCalledWith("near");
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ id: "s" }));
     } finally {
       rects.mockRestore();
     }

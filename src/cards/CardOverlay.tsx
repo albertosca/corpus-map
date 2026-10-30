@@ -1,10 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
-import type { Regime } from "../lod/lod";
-import { visibleNodes } from "../lod/visible";
-import type { MapNode, MapSpec } from "../shared/spec";
+import type { MapNode } from "../shared/spec";
 import { DEFAULT_THEME, type Theme } from "../shared/theme";
-import { toScreen, type Viewport } from "../viewport/viewport";
-import { type CardAnchor, layoutCards } from "./layout";
+import type { SelectedCardPlacement } from "./placeSelectedCard";
 
 /** The library's own default card frame size, also `CorpusMap`'s default for `cardSize`. */
 export const DEFAULT_CARD_SIZE = { width: 160, height: 56 };
@@ -15,35 +12,20 @@ export const CARD_STRIPE_WIDTH = 4;
 /** The card frame's top, right and bottom border; `cardSizeFor` counts it with the stripe. */
 export const CARD_BORDER_WIDTH = 1;
 
-/**
- * What a card renderer knows about the card it fills, beyond its node.
- * `badgeCount` is the number the group badge in the card's top-right corner
- * shows ("+3" is 3), 0 when the card has no badge: a renderer keeps its first
- * line clear of that corner when it is above 0.
- */
-export interface CardContext {
-  badgeCount: number;
-}
-
 export interface CardOverlayProps {
-  spec: MapSpec;
-  viewport: Viewport;
-  regime: Regime;
-  cap: number;
-  width: number;
-  height: number;
-  /** Frame size passed to `layoutCards`. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
+  /** The selected item; the overlay renders its one card. */
+  node: MapNode;
+  placement: SelectedCardPlacement;
+  /** Frame size. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
   cardSize?: { width: number; height: number } | undefined;
-  /** Zoom-driven fade for the whole overlay; the LOD cross-fade at the near threshold (Task 7 wires it in). */
-  opacity?: number | undefined;
-  theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral"> | undefined;
+  theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral" | "edge" | "territoryLabel"> | undefined;
   /** Each territory's painted colour (`Scene.colours`); a card whose node has none gets `theme.pointNeutral`. */
   colours?: ReadonlyMap<string, string> | undefined;
-  renderCard: (node: MapNode, context: CardContext) => ReactNode;
+  renderCard: (node: MapNode) => ReactNode;
 }
 
-// Cards are decorative: `aria-hidden` removes them from the accessibility
-// tree, and `inert` removes anything focusable a consumer put inside them
+// The card is decorative: `aria-hidden` removes it from the accessibility
+// tree, and `inert` removes anything focusable a consumer put inside it
 // from the tab order (and from hit-testing — which is why clicks are
 // resolved by `CorpusMap` on the map surface, not here). Set through the
 // DOM rather than JSX so it also works on React 18, which does not know the
@@ -53,78 +35,53 @@ function markInert(element: HTMLDivElement | null): void {
 }
 
 export function CardOverlay({
-  spec,
-  viewport,
-  regime,
-  cap,
-  width,
-  height,
+  node,
+  placement,
   cardSize = DEFAULT_CARD_SIZE,
-  opacity = 1,
   theme = DEFAULT_THEME,
   colours,
   renderCard,
-}: CardOverlayProps): ReactElement | null {
-  if (regime !== "near") return null;
-
-  const shown = visibleNodes(spec, viewport, width, height, cap);
-  const byId = new Map(shown.map((node) => [node.id, node]));
-  const anchors: CardAnchor[] = shown.map((node) => {
-    const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
-    return { id: node.id, x: horizontal, y: vertical };
-  });
-  const placed = layoutCards(anchors, cardSize, { width, height });
-
+}: CardOverlayProps): ReactElement {
+  const stripe = (node.territory === null ? undefined : colours?.get(node.territory)) ?? theme.pointNeutral;
+  const { leader } = placement;
   return (
-    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity }}>
-      {placed.map((card) => {
-        // `layoutCards` never returns an empty `ids`, and every id in it is
-        // one of `shown`'s own ids — either the anchor's own id, or one it
-        // absorbed into an already-placed card — both of which `byId` was
-        // just built from.
-        const firstId = card.ids[0] as string;
-        const first = byId.get(firstId) as MapNode;
-        const stripe = (first.territory === null ? undefined : colours?.get(first.territory)) ?? theme.pointNeutral;
-        return (
-          <div
-            key={firstId}
-            data-card={firstId}
-            data-card-count={card.ids.length}
-            style={{
-              position: "absolute",
-              left: card.x,
-              top: card.y,
-              width: cardSize.width,
-              height: cardSize.height,
-              boxSizing: "border-box",
-              background: theme.cardBackground,
-              borderTop: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
-              borderRight: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
-              borderBottom: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
-              borderLeft: `${CARD_STRIPE_WIDTH}px solid ${stripe}`,
-              borderRadius: 6,
-              overflow: "hidden",
-            }}
-          >
-            {renderCard(first, { badgeCount: card.ids.length - 1 })}
-            {/* Out of the flow, in the corner: a frame sized exactly to its content (as
-                `cardSizeFor` sizes it) clips anything placed below the renderer's block. */}
-            {card.ids.length > 1 ? (
-              <span
-                data-group-badge=""
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: 0,
-                  padding: "0 4px",
-                  background: theme.cardBackground,
-                  borderBottomLeftRadius: 4,
-                }}
-              >{`+${card.ids.length - 1}`}</span>
-            ) : null}
-          </div>
-        );
-      })}
+    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {leader ? (
+        <svg
+          data-card-leader=""
+          aria-hidden="true"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}
+        >
+          <line
+            x1={leader.from[0]}
+            y1={leader.from[1]}
+            x2={leader.to[0]}
+            y2={leader.to[1]}
+            stroke={theme.edge ?? theme.territoryLabel}
+            strokeWidth={1}
+          />
+        </svg>
+      ) : null}
+      <div
+        data-card={node.id}
+        style={{
+          position: "absolute",
+          left: placement.left,
+          top: placement.top,
+          width: cardSize.width,
+          height: cardSize.height,
+          boxSizing: "border-box",
+          background: theme.cardBackground,
+          borderTop: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
+          borderRight: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
+          borderBottom: `${CARD_BORDER_WIDTH}px solid ${theme.cardBorder}`,
+          borderLeft: `${CARD_STRIPE_WIDTH}px solid ${stripe}`,
+          borderRadius: 6,
+          overflow: "hidden",
+        }}
+      >
+        {renderCard(node)}
+      </div>
     </div>
   );
 }
