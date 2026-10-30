@@ -16,6 +16,8 @@ export interface CardOverlayProps {
   /** The selected item; the overlay renders its one card. */
   node: MapNode;
   placement: SelectedCardPlacement;
+  /** The overlay's opacity, card and leader together; the map fades it with the points. Defaults to 1. */
+  opacity?: number | undefined;
   /** Frame size. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
   cardSize?: { width: number; height: number } | undefined;
   theme?: Pick<Theme, "cardBackground" | "cardBorder" | "pointNeutral" | "edge" | "territoryLabel"> | undefined;
@@ -37,6 +39,7 @@ function markInert(element: HTMLDivElement | null): void {
 export function CardOverlay({
   node,
   placement,
+  opacity = 1,
   cardSize = DEFAULT_CARD_SIZE,
   theme = DEFAULT_THEME,
   colours,
@@ -45,7 +48,7 @@ export function CardOverlay({
   const stripe = (node.territory === null ? undefined : colours?.get(node.territory)) ?? theme.pointNeutral;
   const { leader } = placement;
   return (
-    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+    <div ref={markInert} aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity }}>
       {leader ? (
         <svg
           data-card-leader=""

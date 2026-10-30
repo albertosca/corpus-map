@@ -22,6 +22,10 @@ describe("wrapLabel", () => {
     expect(line?.endsWith("…")).toBe(true);
     expect(estimateText(line as string, FONT).width).toBeLessThanOrEqual(60);
   });
+  it("keeps the ellipsis alone when the width is narrower than it, the plate then wider than the width", () => {
+    // The ellipsis is 6 px at 10px; a 3 px width cannot hold even that, and the loop still ends.
+    expect(wrap("abc def", 3, 2)).toEqual(["…", "…"]);
+  });
   it("gives no lines for an empty or blank label", () => {
     expect(wrap("", 60)).toEqual([]);
     expect(wrap("   ", 60)).toEqual([]);
@@ -32,6 +36,13 @@ describe("fontPixels", () => {
   it("reads the px size, 12 without one", () => {
     expect(fontPixels(DEFAULT_ITEM_LABEL_FONT)).toBe(11);
     expect(fontPixels("bold serif")).toBe(12);
+  });
+
+  it("converts pt, em and rem sizes, so the line height follows the font the canvas draws (review M5)", () => {
+    expect(fontPixels("500 15pt system-ui")).toBe(20);
+    expect(fontPixels("italic 0.5em serif")).toBe(8);
+    expect(fontPixels("1rem sans-serif")).toBe(16);
+    expect(fontPixels("bold 11px/1.4 sans-serif")).toBe(11);
   });
 });
 

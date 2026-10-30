@@ -22,7 +22,7 @@ import { drawnEdges } from "./edges/paintEdges";
 import type { RelatedItem } from "./edges/related";
 import { itemLabelAt } from "./labels/itemLabelAt";
 import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "./labels/itemLabels";
-import { drawnItemLabels } from "./labels/paintItemLabels";
+import { drawnItemLabels, itemLabelRect } from "./labels/paintItemLabels";
 import { sameLabels } from "./labels/sameLabels";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries, legendMaximumHeight } from "./legend/entries";
@@ -436,18 +436,22 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // Seeds compared by value: a palette change rebuilds the scene but not its names (spec item labels §3).
   // State, not a ref: React's "information from previous renders" pattern, which the compiler accepts.
+  // The memo reads this pass's seeds, never the stale state: placing with the old names would be thrown
+  // away by the re-render the `setSeeds` call queues, at the cost of a second full placement.
   const [seeds, setSeeds] = useState(scene.labels);
-  if (!sameLabels(seeds, scene.labels)) setSeeds(scene.labels);
+  const seedsChanged = !sameLabels(seeds, scene.labels);
+  if (seedsChanged) setSeeds(scene.labels);
+  const placementSeeds = seedsChanged ? scene.labels : seeds;
   const itemLabelFont = theme.itemLabelFont ?? DEFAULT_ITEM_LABEL_FONT;
   const itemLabels = useMemo(
     () =>
       placeItemLabels(
         spec,
-        seeds,
+        placementSeeds,
         { font: itemLabelFont, width: tuning.itemLabelWidth, lines: tuning.itemLabelLines },
         measure,
       ),
-    [spec, seeds, itemLabelFont, tuning.itemLabelWidth, tuning.itemLabelLines, measure],
+    [spec, placementSeeds, itemLabelFont, tuning.itemLabelWidth, tuning.itemLabelLines, measure],
   );
 
   const groupsById = useMemo(() => new Map(scene.groups.map((group) => [group.id, group] as const)), [scene.groups]);
@@ -736,6 +740,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     hysteresis: tuning.hysteresis,
   });
   const cardOpacity = fade(ratio, thresholds.nearAt, tuning.fadeBand);
+  // The item labels' painted opacity: the label fade inside the point layer's (`paint.ts`).
+  const itemLabelOpacity = pointAlpha * cardOpacity;
 
   // The dimmed set enters memoisation as one key (JSON, so no id can collide
   // with a separator), filtered to this spec's territories: a fresh array
@@ -1240,7 +1246,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // an item there.
   const itemLabelBox = { width, height, dimmed };
   const labelNear = (position: { x: number; y: number }): string | null =>
-    next === "near" && cardOpacity >= 0.1
+    next === "near" && itemLabelOpacity >= 0.1 && !insideSelectedCard(position.x, position.y)
       ? itemLabelAt(itemLabels, viewport, itemLabelBox, position.x, position.y)
       : null;
 
@@ -1470,26 +1476,23 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // The hovered point's territory, named beside its label (spec categories §7).
   const pointNode = hover?.kind === "point" ? nodesById.get(hover.id) : undefined;
-  // A drawn plate already shows the item's name, so its point gets no tooltip (spec item labels §5).
-  const hoveredPointId = hover?.kind === "point" ? hover.id : null;
-  const pointTooltip = useMemo(
-    () =>
-      hoveredPointId !== null &&
-      !(
-        next === "near" &&
-        cardOpacity >= 0.1 &&
-        drawnItemLabels(itemLabels, viewport, { width, height, dimmed }).some((label) => label.id === hoveredPointId)
-      ),
-    [hoveredPointId, next, cardOpacity, itemLabels, viewport, width, height, dimmed],
-  );
 
   // The selected item's one card (spec item labels §4): at mid and near, while its point is in the box.
   // Memoized so the plain calls below run outside render, where the compiler
   // cannot read them as mutating the memoized scene and insets.
   const selectedCard = useMemo((): { node: MapNode; placement: SelectedCardPlacement } | null => {
-    if (selected === null || !selectedNode || next === "far") return null;
+    // Shown with the points: below 0.1 they are not there to point at (as `nearestPoint`).
+    if (selected === null || !selectedNode || next === "far" || pointAlpha < 0.1) return null;
     const anchor = toScreen(viewport, selectedNode.x, selectedNode.y);
-    if (anchor[0] < 0 || anchor[0] > width || anchor[1] < 0 || anchor[1] > height) return null;
+    // A point under an inset is hidden by the consumer's overlay: no card beside nothing.
+    const area = usableArea(width, height, insets);
+    if (
+      anchor[0] < area.left ||
+      anchor[0] > area.left + area.width ||
+      anchor[1] < area.top ||
+      anchor[1] > area.top + area.height
+    )
+      return null;
     const edges = drawnEdges(scene, selectedNode.id, tuning.edgesPerNode, dimmed).flatMap((edge) => {
       const neighbour = scene.byId.get(edge.neighbour);
       return neighbour ? [[anchor, toScreen(viewport, neighbour.x, neighbour.y)] as const] : [];
@@ -1502,7 +1505,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       placement: placeSelectedCard({
         anchor,
         size: { width: cardWidth, height: cardHeight },
-        area: usableArea(width, height, insets),
+        area,
         edges,
         points,
       }),
@@ -1511,6 +1514,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     selected,
     selectedNode,
     next,
+    pointAlpha,
     viewport,
     width,
     height,
@@ -1522,6 +1526,44 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     cardHeight,
     insets,
   ]);
+  // The selected card's frame, in surface pixels; the card is opaque, so what lies wholly under it is hidden.
+  const cardRect = useMemo(
+    () =>
+      selectedCard
+        ? { left: selectedCard.placement.left, top: selectedCard.placement.top, width: cardWidth, height: cardHeight }
+        : null,
+    [selectedCard, cardWidth, cardHeight],
+  );
+  function insideSelectedCard(horizontal: number, vertical: number): boolean {
+    return (
+      cardRect !== null &&
+      horizontal >= cardRect.left &&
+      horizontal <= cardRect.left + cardRect.width &&
+      vertical >= cardRect.top &&
+      vertical <= cardRect.top + cardRect.height
+    );
+  }
+  // A plate the user can see already shows the item's name, so its point gets no tooltip (spec item
+  // labels §5); one off the canvas or wholly under the card shows nothing, so the tooltip stays.
+  const hoveredPointId = hover?.kind === "point" ? hover.id : null;
+  const pointTooltip = useMemo(() => {
+    if (hoveredPointId === null) return false;
+    if (next !== "near" || itemLabelOpacity < 0.1) return true;
+    const label = drawnItemLabels(itemLabels, viewport, { width, height, dimmed }).find(
+      (each) => each.id === hoveredPointId,
+    );
+    if (!label) return true;
+    const plate = itemLabelRect(label, viewport);
+    const offCanvas =
+      plate.left + plate.width <= 0 || plate.left >= width || plate.top + plate.height <= 0 || plate.top >= height;
+    const underCard =
+      cardRect !== null &&
+      plate.left >= cardRect.left &&
+      plate.top >= cardRect.top &&
+      plate.left + plate.width <= cardRect.left + cardRect.width &&
+      plate.top + plate.height <= cardRect.top + cardRect.height;
+    return offCanvas || underCard;
+  }, [hoveredPointId, next, itemLabelOpacity, itemLabels, viewport, width, height, dimmed, cardRect]);
   const pointTerritory = pointNode?.territory ? territoriesById.get(pointNode.territory) : undefined;
 
   return (
@@ -1574,6 +1616,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             <CardOverlay
               node={selectedCard.node}
               placement={selectedCard.placement}
+              opacity={pointAlpha}
               cardSize={cardSize}
               theme={theme}
               colours={scene.colours}

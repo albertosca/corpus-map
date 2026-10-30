@@ -12,9 +12,15 @@ export const ITEM_LABEL_RADIUS = 3;
 export const DEFAULT_ITEM_LABEL_FONT = "500 11px system-ui, sans-serif";
 const ELLIPSIS = "…";
 
-/** The font's px size; 12 when it states none, as `estimateText` assumes. */
+/** CSS pixels per unit of a font size; em and rem count against the browser's default 16px. */
+const PIXELS_PER_UNIT: Readonly<Record<string, number>> = { px: 1, pt: 4 / 3, em: 16, rem: 16 };
+
+/** The font's size in px, from a px, pt, em or rem size; 12 when it states none, as `estimateText` assumes. */
 export function fontPixels(font: string): number {
-  return Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "12");
+  const size = /(?:^|\s)(\d*\.?\d+)(px|pt|rem|em)(?=[\s/]|$)/i.exec(font);
+  if (!size) return 12;
+  const [, amount, unit] = size as unknown as [string, string, string];
+  return Number.parseFloat(amount) * (PIXELS_PER_UNIT[unit.toLowerCase()] as number);
 }
 
 /**

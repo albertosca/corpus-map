@@ -257,6 +257,8 @@ export interface CardOverlayProps {
     /** The selected item; the overlay renders its one card. */
     node: MapNode;
     placement: SelectedCardPlacement;
+    /** The overlay's opacity, card and leader together; the map fades it with the points. Defaults to 1. */
+    opacity?: number | undefined;
     /** Frame size. Defaults to `DEFAULT_CARD_SIZE` (160x56). */
     cardSize?: {
         width: number;
@@ -267,7 +269,7 @@ export interface CardOverlayProps {
     colours?: ReadonlyMap<string, string> | undefined;
     renderCard: (node: MapNode) => ReactNode;
 }
-export declare function CardOverlay({ node, placement, cardSize, theme, colours, renderCard, }: CardOverlayProps): ReactElement;
+export declare function CardOverlay({ node, placement, opacity, cardSize, theme, colours, renderCard, }: CardOverlayProps): ReactElement;
 
 // cards/cardSizeFor.d.ts
 import type { MapSpec } from "../shared/spec";
@@ -514,7 +516,7 @@ export declare const ITEM_LABEL_PADDING: {
 export declare const ITEM_LABEL_LINE_HEIGHT = 1.25;
 export declare const ITEM_LABEL_RADIUS = 3;
 export declare const DEFAULT_ITEM_LABEL_FONT = "500 11px system-ui, sans-serif";
-/** The font's px size; 12 when it states none, as `estimateText` assumes. */
+/** The font's size in px, from a px, pt, em or rem size; 12 when it states none, as `estimateText` assumes. */
 export declare function fontPixels(font: string): number;
 /**
  * Greedy word wrap into at most `maximumLines` lines of at most
@@ -1440,7 +1442,7 @@ export interface Tuning {
     groupNamesUntil: number;
     /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
     edgesPerNode: number;
-    /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2). */
+    /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2); narrower than an ellipsis, each line is the ellipsis alone. */
     itemLabelWidth: number;
     /** Most lines an item label wraps to; text past the last ends in an ellipsis. */
     itemLabelLines: number;

@@ -202,4 +202,114 @@ describe("CorpusMap item labels and the one card", () => {
     rerender(map([...DEFAULT_THEME.palette].reverse()));
     expect(placer.mock.calls.length).toBe(placements);
   });
+
+  it("places the item labels once when a new spec renames a territory (review I1)", () => {
+    const placer = vi.mocked(placeItemLabels);
+    const named = (name: string): MapSpec => ({
+      version: "1",
+      territories: [{ id: "t", name, members: ["a", "b"], centroid: [5, 5] }],
+      nodes: [
+        { id: "a", label: "A", x: 0, y: 0, territory: "t" },
+        { id: "b", label: "B", x: 10, y: 10, territory: "t" },
+      ],
+    });
+    const map = (name: string) => (
+      <CorpusMap spec={named(name)} renderCard={(node) => node.label} width={400} height={300} thresholds={NEAR} />
+    );
+    const { rerender } = render(map("Short"));
+    const placements = placer.mock.calls.length;
+    rerender(map("A much longer territory name"));
+    expect(placer.mock.calls.length - placements).toBe(1);
+  });
+
+  it("hides the card while the points are faded out at mid, and fades it with them (review I2)", () => {
+    const view = (midAt: number) => (
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => node.label}
+        width={400}
+        height={300}
+        thresholds={{ midAt, nearAt: 5 }}
+        defaultSelectedId="a"
+      />
+    );
+    // At the fit the ratio is 1: with midAt 1 the points are at alpha 0, so no card.
+    const hidden = render(view(1));
+    expect(hidden.container.querySelectorAll("[data-card]")).toHaveLength(0);
+    hidden.unmount();
+    // With midAt 0.9 the points are at (1 - 0.9) / (0.9 x 0.25) = 0.444..., and so is the card.
+    const fading = render(view(0.9));
+    const card = fading.container.querySelector("[data-card]") as HTMLElement;
+    expect(Number((card.parentElement as HTMLElement).style.opacity)).toBeCloseTo(0.1 / 0.225, 5);
+  });
+
+  it("shows the tooltip for a labelled point whose plate is off the canvas (review M1)", () => {
+    const { container } = render(
+      <CorpusMap spec={spec} renderCard={(node) => node.label} width={400} height={300} thresholds={NEAR} />,
+    );
+    const element = surface(container);
+    // Drag 21 px up: a moves from (74, 24) to (74, 3), and its plate's bottom to -3, above the canvas.
+    fireEvent.pointerDown(element, { clientX: 300, clientY: 200, pointerId: 1, button: 0, isPrimary: true });
+    fireEvent.pointerMove(element, { clientX: 300, clientY: 179, pointerId: 1, button: 0, isPrimary: true });
+    flush();
+    fireEvent.pointerUp(element, { clientX: 300, clientY: 179, pointerId: 1, button: 0, isPrimary: true });
+    move(element, 74 + 6, 3);
+    expect(container.querySelector('[data-hover="a"]')).not.toBeNull();
+  });
+
+  it("shows no card for a selected point under an inset (review M3)", () => {
+    const view = (selected: string) => (
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => node.label}
+        width={400}
+        height={300}
+        thresholds={NEAR}
+        insets={{ right: 200 }}
+        defaultSelectedId={selected}
+      />
+    );
+    // b sits at (326, 276), under the 200 px drawer on the right; a at (74, 24) is in the usable area.
+    const covered = render(view("b"));
+    expect(covered.container.querySelectorAll("[data-card]")).toHaveLength(0);
+    covered.unmount();
+    const open = render(view("a"));
+    expect(open.container.querySelectorAll("[data-card]")).toHaveLength(1);
+  });
+
+  it("shows the tooltip for a labelled point whose plate is under the selected card (review M1)", () => {
+    // A card as large as the box fits nowhere, so it is clamped over the whole box and every plate.
+    const { container } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => node.label}
+        width={400}
+        height={300}
+        thresholds={NEAR}
+        cardSize={{ width: 400, height: 300 }}
+        defaultSelectedId="b"
+      />,
+    );
+    move(surface(container), 200 + 6, 150);
+    expect(container.querySelector('[data-hover="c"]')).not.toBeNull();
+  });
+
+  it("a press on a plate painted below opacity 0.1 selects nothing (review M6)", () => {
+    const onSelectedChange = vi.fn();
+    // At the fit's ratio 1, midAt = nearAt = 0.95 put the points and the labels each at
+    // 0.05 / 0.2375 = 0.21, so the plates are painted at their product, 0.044.
+    const { container } = render(
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => node.label}
+        width={400}
+        height={300}
+        thresholds={{ midAt: 0.95, nearAt: 0.95 }}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+    const plate = plateOf("c");
+    press(surface(container), plate.left + plate.width / 2, plate.top + 1);
+    expect(onSelectedChange).not.toHaveBeenCalledWith("c");
+  });
 });

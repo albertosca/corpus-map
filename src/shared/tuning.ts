@@ -30,7 +30,7 @@ export interface Tuning {
   groupNamesUntil: number;
   /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
   edgesPerNode: number;
-  /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2). */
+  /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2); narrower than an ellipsis, each line is the ellipsis alone. */
   itemLabelWidth: number;
   /** Most lines an item label wraps to; text past the last ends in an ellipsis. */
   itemLabelLines: number;

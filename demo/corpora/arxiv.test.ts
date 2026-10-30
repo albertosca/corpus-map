@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../../src/labels/itemLabels";
-import { drawnItemLabels, itemLabelRect } from "../../src/labels/paintItemLabels";
+import { drawnItemLabels, itemLabelRect, paintItemLabels } from "../../src/labels/paintItemLabels";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
@@ -571,18 +571,31 @@ describe("item labels on the arXiv corpus (painted model)", () => {
     [1440, 900],
     [375, 812],
   ] as const)
-    it(`at ${width}x${height}: the drawn label set never changes over a pan at near`, () => {
+    it(`at ${width}x${height}: over a pan at near, the painted plates are the drawn set clipped only by the canvas`, () => {
       const fit = fitScene(spec, scene, width, height, 24);
       const base = aboutCentre(fit, width, height, 8);
       const box = { width, height, dimmed: new Set<string>() };
       const reference = drawnItemLabels(labels, base, box)
         .map((label) => label.id)
         .join("|");
-      for (let offset = 2; offset <= width; offset += 2)
-        expect(
-          drawnItemLabels(labels, { ...base, tx: base.tx + offset }, box)
-            .map((label) => label.id)
-            .join("|"),
-        ).toBe(reference);
+      // A label pops when its plate is on the canvas in one frame and not painted there: so every
+      // frame must paint exactly the plates of the position-blind drawn set that touch the canvas.
+      for (let offset = 0; offset <= width; offset += 8) {
+        const viewport = { ...base, tx: base.tx + offset };
+        const drawn = drawnItemLabels(labels, viewport, box);
+        expect(drawn.map((label) => label.id).join("|")).toBe(reference);
+        const visible = drawn
+          .map((label) => itemLabelRect(label, viewport))
+          .filter(
+            (rect) =>
+              rect.left <= width && rect.top <= height && rect.left + rect.width >= 0 && rect.top + rect.height >= 0,
+          )
+          .map((rect) => `${rect.left},${rect.top}`)
+          .sort();
+        const surface = new RecordingSurface();
+        paintItemLabels(surface, labels, viewport, DEFAULT_THEME, box);
+        expect(surface.plates.map((plate) => `${plate.left},${plate.top}`).sort()).toEqual(visible);
+      }
+      expect(reference.length).toBeGreaterThan(0);
     });
 });
