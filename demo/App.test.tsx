@@ -1567,18 +1567,19 @@ describe("App (showcase Task 5)", () => {
         Object.assign(navigator, { clipboard: { writeText } });
         await renderApp();
         await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
-        await openOn("elements");
+        // Constellations: its nearAt differs from the library default, so the copy has a value to carry.
+        await openOn("constellations");
         fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
 
         fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
         await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: entryDisplay("elements") });
+        expect(JSON.parse(writeText.mock.calls[0]?.[0] as string)).toEqual({ display: entryDisplay("constellations") });
 
         fireEvent.change(screen.getByLabelText(/Fade band/), { target: { value: "0.4" } });
         fireEvent.click(screen.getByRole("button", { name: "Copy settings" }));
         await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
         expect(JSON.parse(writeText.mock.calls[1]?.[0] as string)).toEqual({
-          display: { ...entryDisplay("elements"), tuning: { fadeBand: 0.4 } },
+          display: { ...entryDisplay("constellations"), tuning: { fadeBand: 0.4 } },
         });
       });
 

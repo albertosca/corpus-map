@@ -71,22 +71,23 @@ export function syntheticLabel(size: number): string {
  * and the gallery test both read this one list.
  */
 export const gallery: GalleryEntry[] = [
-  // Each `nearAt` is metric 18's answer for that corpus at its computed card
-  // size (demo/corpora/nearAt.test.ts); the test turns red when one goes stale.
+  // Each `nearAt` is metric 18's answer for that corpus: the earliest zoom at
+  // which its item labels name nearly as many items as at 6
+  // (demo/corpora/nearAt.test.ts); the test turns red when one goes stale.
   // 2.5 is the lowest candidate the metric tries, not a measured boundary:
-  // arXiv and elements might pass lower still.
+  // arXiv might pass lower still.
   {
     id: "arxiv",
     label: "Computer-science papers (arXiv metadata)",
     load: loadArxiv,
     display: { thresholds: { nearAt: 2.5 } },
   },
-  { id: "elements", label: "Chemical elements", spec: elementsSpec, display: { thresholds: { nearAt: 2.5 } } },
-  { id: "constellations", label: "Constellations", spec: constellationsSpec, display: { thresholds: { nearAt: 4.5 } } },
+  { id: "elements", label: "Chemical elements", spec: elementsSpec, display: { thresholds: { nearAt: 5 } } },
+  { id: "constellations", label: "Constellations", spec: constellationsSpec, display: { thresholds: { nearAt: 3.5 } } },
   {
     id: "synthetic",
     label: syntheticLabel(syntheticSpec.nodes.length),
     spec: syntheticSpec,
-    display: { thresholds: { nearAt: 3 } },
+    display: { thresholds: { nearAt: 4.5 } },
   },
 ];

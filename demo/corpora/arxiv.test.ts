@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../../src/labels/itemLabels";
+import { drawnItemLabels, itemLabelRect } from "../../src/labels/paintItemLabels";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
@@ -285,6 +287,16 @@ function crossesEdge(box: DrawnBox, width: number, height: number): boolean {
   );
 }
 
+/** `fit` zoomed by `ratio` about the box centre. */
+function aboutCentre(fit: Viewport, width: number, height: number, ratio: number): Viewport {
+  const scale = fit.scale * ratio;
+  return {
+    scale,
+    tx: width / 2 - ((width / 2 - fit.tx) / fit.scale) * scale,
+    ty: height / 2 - ((height / 2 - fit.ty) / fit.scale) * scale,
+  };
+}
+
 /** The family names the pipeline wrote, as the fitted view draws them. */
 describe("the arXiv family names", () => {
   // The smallest box the fit tests (demo/corpora/fit.test.ts) minus the fit's
@@ -369,14 +381,6 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
   const spec = shippedSpec;
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
-  const aboutCentre = (fit: Viewport, width: number, height: number, ratio: number): Viewport => {
-    const scale = fit.scale * ratio;
-    return {
-      scale,
-      tx: width / 2 - ((width / 2 - fit.tx) / fit.scale) * scale,
-      ty: height / 2 - ((height / 2 - fit.ty) / fit.scale) * scale,
-    };
-  };
   const anchorsOnScreen = (
     names: readonly PlacedLabel[],
     viewport: Viewport,
@@ -508,4 +512,77 @@ describe("metric 18: no pop at the family swap (arXiv, painted)", () => {
       ).toBeLessThan(1);
     });
   }
+});
+
+interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function rectsOverlap(first: Rect, second: Rect): boolean {
+  return (
+    first.left < second.left + second.width &&
+    second.left < first.left + first.width &&
+    first.top < second.top + second.height &&
+    second.top < first.top + first.height
+  );
+}
+
+describe("item labels on the arXiv corpus (painted model)", () => {
+  const spec = shippedSpec;
+  const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const labels = placeItemLabels(
+    spec,
+    scene.labels,
+    { font: DEFAULT_ITEM_LABEL_FONT, width: DEFAULT_TUNING.itemLabelWidth, lines: DEFAULT_TUNING.itemLabelLines },
+    estimateText,
+  );
+
+  for (const [width, height] of [
+    [1440, 900],
+    [375, 812],
+  ] as const)
+    for (const ratio of [4, 8, 16])
+      it(`at ${width}x${height}, ratio ${ratio}: no two drawn labels overlap, none overlaps a drawn name`, () => {
+        const fit = fitScene(spec, scene, width, height, 24);
+        const viewport = aboutCentre(fit, width, height, ratio);
+        const box = { width, height, dimmed: new Set<string>() };
+        const plates = drawnItemLabels(labels, viewport, box)
+          .map((label) => itemLabelRect(label, viewport))
+          .filter(
+            (rect) =>
+              rect.left < width && rect.top < height && rect.left + rect.width > 0 && rect.top + rect.height > 0,
+          );
+        expect(plates.length).toBeGreaterThan(0);
+        for (const [index, plate] of plates.entries())
+          for (const other of plates.slice(index + 1)) expect(rectsOverlap(plate, other)).toBe(false);
+        const names = drawnBoxes(spec, scene, viewport, width, height, ratio).map((name) => ({
+          left: name.x - name.width / 2,
+          top: name.y - name.height / 2,
+          width: name.width,
+          height: name.height,
+        }));
+        for (const plate of plates) for (const name of names) expect(rectsOverlap(plate, name)).toBe(false);
+      });
+
+  for (const [width, height] of [
+    [1440, 900],
+    [375, 812],
+  ] as const)
+    it(`at ${width}x${height}: the drawn label set never changes over a pan at near`, () => {
+      const fit = fitScene(spec, scene, width, height, 24);
+      const base = aboutCentre(fit, width, height, 8);
+      const box = { width, height, dimmed: new Set<string>() };
+      const reference = drawnItemLabels(labels, base, box)
+        .map((label) => label.id)
+        .join("|");
+      for (let offset = 2; offset <= width; offset += 2)
+        expect(
+          drawnItemLabels(labels, { ...base, tx: base.tx + offset }, box)
+            .map((label) => label.id)
+            .join("|"),
+        ).toBe(reference);
+    });
 });

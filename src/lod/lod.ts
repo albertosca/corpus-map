@@ -5,8 +5,12 @@ export interface LodThresholds {
   nearAt: number;
 }
 
-/** Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime. */
-export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 3.5 };
+/**
+ * Multiples of the fitted scale (the zoom at which the whole corpus fits): every corpus opens in the far regime.
+ * `nearAt` is metric 18's answer over the demo corpora: the earliest zoom at which item labels name nearly as
+ * many on-screen items as they do at 6 (demo/corpora/labelledShare.ts, demo/corpora/nearAt.test.ts).
+ */
+export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 5 };
 
 /** The wheel zoom clamp (`CorpusMap`'s `MAXIMUM_ZOOM_IN`): a threshold above it can never be reached by zooming. */
 const MAXIMUM_RATIO = 64;
