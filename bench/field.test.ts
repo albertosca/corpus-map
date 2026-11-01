@@ -3,10 +3,11 @@ import { generateCorpus, TERRITORY_COUNT } from "../fixtures/synthetic/generate"
 import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../src/labels/itemLabels";
 import { estimateText } from "../src/labels/placement";
 import { paint } from "../src/shared/paint";
-import { buildScene } from "../src/shared/scene";
+import { buildScene, groupLabelsFor } from "../src/shared/scene";
 import { RecordingSurface } from "../src/shared/surface";
 import { DEFAULT_THEME } from "../src/shared/theme";
 import { DEFAULT_TUNING } from "../src/shared/tuning";
+import { fitScene } from "../src/viewport/fitScene";
 
 // One frame at 60fps. This is the stated target, not a measured figure — see
 // the note in docs/superpowers/specs/2026-09-13-corpus-map-design.md. It is
@@ -85,6 +86,41 @@ describe("point field", () => {
     const medianMs = median(samples);
     console.log(
       `near paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms), ${drawnTexts} texts`,
+    );
+    expect(medianMs).toBeLessThan(BUDGET_MS);
+  });
+
+  it(`paints the 10,000-item corpus at a phone's box within ${BUDGET_MS}ms (median of ${SAMPLES}, spec mobile §7)`, () => {
+    const spec = generateCorpus({ seed: 1, size: 10_000 });
+    const width = 375;
+    const height = 812;
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    // Three times the fitted scale about the box centre, with the compact family names: a phone in the mid regime.
+    const fit = fitScene(spec, { ...scene, groupLabels: groupLabelsFor(scene, width) }, width, height, 24);
+    const zoom = 3;
+    const viewport = {
+      scale: fit.scale * zoom,
+      tx: width / 2 - (width / 2 - fit.tx) * zoom,
+      ty: height / 2 - (height / 2 - fit.ty) * zoom,
+    };
+    const frame = { regime: "mid" as const, pointAlpha: 1, width, height, groupAlpha: 1, compactGroupNames: true };
+
+    for (let index = 0; index < WARM_UPS; index += 1)
+      paint(new RecordingSurface(), scene, spec, viewport, frame, DEFAULT_THEME);
+    const samples: number[] = [];
+    let surface = new RecordingSurface();
+    for (let index = 0; index < SAMPLES; index += 1) {
+      surface = new RecordingSurface();
+      const start = performance.now();
+      paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
+      samples.push(performance.now() - start);
+    }
+    // The frame is the one a phone draws: compact family names, when the corpus has families.
+    if (scene.groups.length > 0)
+      expect(surface.texts.some((drawn) => drawn.font === scene.compactGroupFont)).toBe(true);
+    const medianMs = median(samples);
+    console.log(
+      `phone paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples (min ${Math.min(...samples).toFixed(2)}ms), ${scene.groups.length} families`,
     );
     expect(medianMs).toBeLessThan(BUDGET_MS);
   });
