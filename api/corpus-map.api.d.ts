@@ -239,6 +239,20 @@ export declare function paintFocusedTerritory(surface: Surface, scene: Scene, vi
 /** A ring around the focused item's point, one outline width clear of the point itself. */
 export declare function paintFocusedNode(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "focusOutline" | "focusOutlineWidth" | "pointRadius">, id: string): void;
 
+// a11y/spatialNeighbour.d.ts
+import type { MapNode } from "../shared/spec";
+/** An arrow key's direction on the map; world coordinates share the screen's orientation (`y` grows downward). */
+export type Direction = "left" | "right" | "up" | "down";
+/**
+ * The item an arrow key moves the selection to (spec spatial keys §3): the
+ * next or previous item of a stack at `from`'s exact point first, by id;
+ * then the best score `along + 2 × across` inside the 45° cone, else in the
+ * half-plane ahead; ties by id; null when nothing lies ahead.
+ */
+export declare function neighbourInDirection(from: MapNode, nodes: readonly MapNode[], direction: Direction): MapNode | null;
+/** The item nearest a world point, ties by id; where Enter starts the walk (spec spatial keys §4). */
+export declare function nearestTo(nodes: readonly MapNode[], horizontal: number, vertical: number): MapNode | null;
+
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";
 import type { MapNode } from "../shared/spec";
@@ -1714,7 +1728,25 @@ export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "l
     groupNames: boolean;
 }): Viewport;
 
+// viewport/follow.d.ts
+import { type Viewport } from "./viewport";
+/** The share of the usable area kept as a margin on each side before the view follows a keyboard selection. */
+export declare const FOLLOW_MARGIN = 0.1;
+/**
+ * The view after a keyboard selection moved to a world point (spec spatial
+ * keys §4): unchanged (the same object) while the point lies inside the
+ * usable area shrunk by `FOLLOW_MARGIN` per side, else centred on it in that
+ * area at the same scale.
+ */
+export declare function followInto(viewport: Viewport, horizontal: number, vertical: number, area: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}): Viewport;
+
 // viewport/keyboard.d.ts
+import type { Direction } from "../a11y/spatialNeighbour";
 import type { LodThresholds, Regime } from "../lod/lod";
 export interface KeyInput {
     key: string;
@@ -1734,15 +1766,23 @@ export type KeyboardCommand = {
     kind: "fit";
 } | {
     kind: "regimeOut";
+} | {
+    kind: "neighbour";
+    direction: Direction;
+} | {
+    kind: "start";
 };
 /**
  * The surface's key map (spec slice B §4). Pan fractions are of the view's
  * width/height, signed in the direction the view travels: ArrowRight shows
  * what lies to the right. Ctrl/Cmd are taken only with the zoom keys — the
  * map captures the browser's page zoom while it has focus — and Ctrl+0
- * stays the browser's zoom reset. Alt is never taken.
+ * stays the browser's zoom reset. Alt is never taken. With `selecting` (a
+ * live selection), a plain arrow moves to the neighbour and Shift pans by
+ * the small step; Enter and Space start the walk only without a selection
+ * (spec spatial keys §2).
  */
-export declare function keyboardCommand(input: KeyInput): KeyboardCommand | null;
+export declare function keyboardCommand(input: KeyInput, selecting?: boolean): KeyboardCommand | null;
 /**
  * Where `Esc` zooms to, as a ratio of the fitted scale: from near, the
  * geometric middle of the mid band (its lower edge floored at the fitted

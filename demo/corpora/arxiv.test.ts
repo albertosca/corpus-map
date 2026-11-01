@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nearestTo, neighbourInDirection } from "../../src/a11y/spatialNeighbour";
 import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../../src/labels/itemLabels";
 import { drawnItemLabels, itemLabelRect, paintItemLabels } from "../../src/labels/paintItemLabels";
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
@@ -598,4 +599,35 @@ describe("item labels on the arXiv corpus (painted model)", () => {
       }
       expect(reference.length).toBeGreaterThan(0);
     });
+});
+
+function boundsOfNodes(nodes: readonly MapNode[]): { minX: number; maxX: number; minY: number; maxY: number } {
+  return {
+    minX: Math.min(...nodes.map((node) => node.x)),
+    maxX: Math.max(...nodes.map((node) => node.x)),
+    minY: Math.min(...nodes.map((node) => node.y)),
+    maxY: Math.max(...nodes.map((node) => node.y)),
+  };
+}
+
+describe("walking the arXiv corpus with the arrows (spec spatial keys acceptance 3)", () => {
+  it("never throws, never leaves the corpus, and reaches many distinct items", () => {
+    const nodes = shippedSpec.nodes;
+    const ids = new Set(nodes.map((node) => node.id));
+    const bounds = boundsOfNodes(nodes);
+    let current = nearestTo(nodes, (bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
+    if (current === null) throw new Error("expected a node");
+    const reached = new Set([current.id]);
+    for (const direction of ["right", "down", "left", "up"] as const) {
+      for (let press = 0; press < 200; press += 1) {
+        const next = neighbourInDirection(current, nodes, direction);
+        if (next === null) break;
+        expect(ids.has(next.id)).toBe(true);
+        expect(next.id).not.toBe(current.id);
+        current = next;
+        reached.add(current.id);
+      }
+    }
+    expect(reached.size).toBeGreaterThan(100);
+  });
 });
