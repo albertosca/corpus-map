@@ -63,10 +63,11 @@ const style: CSSProperties = {
  * read straight from `CorpusMap`'s own `onViewChange` payload — nothing
  * computed here.
  */
-/** One line that never wraps, beside the credit in the strip; the strip carries the text size and the surface. */
+/** Never broken, first in the strip's run of text, the credit following it; the strip carries the text size and the surface. */
 const inlineStyle: CSSProperties = {
-  flex: "0 0 auto",
+  display: "inline",
   whiteSpace: "nowrap",
+  marginRight: 10,
 };
 
 export function Indicator({ store, inline = false }: IndicatorProps): ReactElement | null {

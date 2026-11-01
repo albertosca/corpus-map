@@ -384,10 +384,11 @@ describe("Drawer sheet layout (spec mobile §6)", () => {
     expect(handle.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("gives every button in the sheet a 44 px minimum height", () => {
+  it("gives every button and link in the sheet a 44 px minimum height", () => {
     const { panel } = sheet();
-    const buttons = [...panel.querySelectorAll<HTMLElement>("button")];
+    const buttons = [...panel.querySelectorAll<HTMLElement>("button, a[href]")];
     expect(buttons.length).toBeGreaterThanOrEqual(3);
+    expect(panel.querySelector("a[href]"), "the arXiv link is in the sheet").not.toBeNull();
     for (const button of buttons) expect(Number.parseFloat(button.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 

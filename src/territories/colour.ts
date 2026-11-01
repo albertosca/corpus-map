@@ -65,21 +65,32 @@ export function visibleBorders(
   const rows = Math.ceil((bottom - top) / cell) + 1;
   const owner = new Int32Array(columns * rows).fill(-1);
   for (const [index, id] of order.entries()) {
-    const rings = drawable(shapes.get(id));
-    for (let row = 0; row < rows; row += 1) {
-      const vertical = top + (row + 0.5) * cell;
-      const crossings: number[] = [];
-      for (const ring of rings) {
-        for (let edge = 0; edge < ring.length; edge += 1) {
-          const current = ring[edge] as readonly [number, number];
-          const previous = ring[(edge + ring.length - 1) % ring.length] as readonly [number, number];
+    // Each edge files its crossing under only the rows whose centre line it
+    // crosses, not every row (spec mobile §7: scanning every edge per row
+    // took 100 ms on arXiv at load). The test per row is the exact one, so
+    // the rows found are the same; the widened range only bounds the search.
+    const crossingsByRow = new Map<number, number[]>();
+    for (const ring of drawable(shapes.get(id))) {
+      for (let edge = 0; edge < ring.length; edge += 1) {
+        const current = ring[edge] as readonly [number, number];
+        const previous = ring[(edge + ring.length - 1) % ring.length] as readonly [number, number];
+        const lowest = Math.min(current[1], previous[1]);
+        const highest = Math.max(current[1], previous[1]);
+        const firstRow = Math.max(0, Math.floor((lowest - top) / cell - 0.5) - 1);
+        const lastRow = Math.min(rows - 1, Math.ceil((highest - top) / cell - 0.5) + 1);
+        for (let row = firstRow; row <= lastRow; row += 1) {
+          const vertical = top + (row + 0.5) * cell;
           if (current[1] > vertical !== previous[1] > vertical) {
-            crossings.push(
-              previous[0] + ((vertical - previous[1]) * (current[0] - previous[0])) / (current[1] - previous[1]),
-            );
+            const crossing =
+              previous[0] + ((vertical - previous[1]) * (current[0] - previous[0])) / (current[1] - previous[1]);
+            const list = crossingsByRow.get(row);
+            if (list) list.push(crossing);
+            else crossingsByRow.set(row, [crossing]);
           }
         }
       }
+    }
+    for (const [row, crossings] of crossingsByRow) {
       crossings.sort((first, second) => first - second);
       for (let pair = 0; pair + 1 < crossings.length; pair += 2) {
         const firstColumn = Math.max(0, Math.ceil(((crossings[pair] as number) - left) / cell - 0.5));

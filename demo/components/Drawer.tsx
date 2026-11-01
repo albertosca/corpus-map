@@ -3,7 +3,7 @@ import type { CSSProperties, ReactElement, ReactNode, PointerEvent as ReactPoint
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { ARXIV_ABS_URL_PREFIX, type ArxivCategory } from "../corpora/compact";
 import { token } from "../tokens";
-import { sheetCollapsedHeight, useViewportHeight } from "./narrow";
+import { sheetCollapsedHeight, TOUCH_TARGET_SIZE, useViewportHeight } from "./narrow";
 
 export interface DrawerProps {
   /** The selected node, or `null` when nothing is selected — renders nothing in that case. */
@@ -102,7 +102,7 @@ const handleStyle: CSSProperties = {
   justifyContent: "center",
   width: "100%",
   maxWidth: "100%",
-  minHeight: 44,
+  minHeight: TOUCH_TARGET_SIZE,
   padding: 0,
   border: "none",
   background: token("surfaceSolid"),
@@ -248,7 +248,16 @@ interface ArxivMeta {
 /** The only prefix an arXiv abstract-page URL is ever allowed to carry — everything else renders no link. */
 
 /** "Published <year>", the territory's full name, and the "Open on arXiv" link — the arXiv-specific layout. */
-function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: string | null }): ReactElement {
+function ArxivMetaView({
+  node,
+  territoryName,
+  touchTarget,
+}: {
+  node: MapNode;
+  territoryName: string | null;
+  /** In the sheet: the link takes a finger's 44 px height (spec mobile §6). */
+  touchTarget: boolean;
+}): ReactElement {
   const meta = node.meta as ArxivMeta | undefined;
   const year = typeof meta?.year === "number" ? meta.year : undefined;
   // `meta` is never validated upstream (see the url guard below), so the
@@ -275,7 +284,16 @@ function ArxivMetaView({ node, territoryName }: { node: MapNode; territoryName: 
       {territoryName ? <p style={metaLineStyle}>{territoryName}</p> : null}
       {url ? (
         <p style={metaLineStyle}>
-          <a href={url} target="_blank" rel="noopener noreferrer" style={linkStyle}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={
+              touchTarget
+                ? { ...linkStyle, display: "inline-flex", alignItems: "center", minHeight: TOUCH_TARGET_SIZE }
+                : linkStyle
+            }
+          >
             Open on arXiv
           </a>
         </p>
@@ -437,9 +455,12 @@ export function Drawer({
     requestExpanded(!expanded);
   };
 
+  const sheet = layout === "sheet";
+  const touchTarget = (style: CSSProperties): CSSProperties =>
+    sheet ? { ...style, minHeight: TOUCH_TARGET_SIZE } : style;
   let body: ReactNode;
   if (isArxiv) {
-    body = <ArxivMetaView node={node} territoryName={territoryName} />;
+    body = <ArxivMetaView node={node} territoryName={territoryName} touchTarget={sheet} />;
   } else {
     body = (
       <>
@@ -449,8 +470,6 @@ export function Drawer({
     );
   }
 
-  const sheet = layout === "sheet";
-  const touchTarget = (style: CSSProperties): CSSProperties => (sheet ? { ...style, minHeight: 44 } : style);
   return (
     <>
       {sheet ? null : <style>{ANIMATION_STYLE}</style>}

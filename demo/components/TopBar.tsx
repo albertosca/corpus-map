@@ -2,6 +2,7 @@ import type { ChangeEvent, CSSProperties, KeyboardEvent, ReactElement, Ref } fro
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
 import type { GalleryEntry } from "../corpora";
 import { token } from "../tokens";
+import { TOUCH_TARGET_SIZE } from "./narrow";
 
 interface TopBarProps {
   corpora: GalleryEntry[];
@@ -105,10 +106,15 @@ const narrowSelectStyle: CSSProperties = {
   flex: "1 1 auto",
   minWidth: 0,
   maxWidth: "100%",
-  minHeight: 44,
+  minHeight: TOUCH_TARGET_SIZE,
 };
 
-const menuButtonStyle: CSSProperties = { ...gearButtonStyle, flexShrink: 0, minWidth: 44, minHeight: 44 };
+const menuButtonStyle: CSSProperties = {
+  ...gearButtonStyle,
+  flexShrink: 0,
+  minWidth: TOUCH_TARGET_SIZE,
+  minHeight: TOUCH_TARGET_SIZE,
+};
 
 /** Below the bar on the right, under the Menu button that opens it. */
 const popoverStyle: CSSProperties = {
@@ -127,7 +133,7 @@ const popoverStyle: CSSProperties = {
   boxShadow: `0 2px 10px ${token("shadow")}`,
 };
 
-const menuItemStyle: CSSProperties = { ...gearButtonStyle, minHeight: 44, textAlign: "left" };
+const menuItemStyle: CSSProperties = { ...gearButtonStyle, minHeight: TOUCH_TARGET_SIZE, textAlign: "left" };
 
 /**
  * The narrow bar has no room for the status in its row, so it shows under the
@@ -246,7 +252,12 @@ export function TopBar({
         <span role="status" style={narrowStatusStyle(statusText !== "")}>
           {statusText}
         </span>
-        <div id={MENU_ID} ref={popoverReference} hidden={!menuOpen} style={popoverStyle}>
+        <div
+          id={MENU_ID}
+          ref={popoverReference}
+          hidden={!menuOpen}
+          style={menuOpen ? popoverStyle : { ...popoverStyle, display: "none" }}
+        >
           <button
             type="button"
             aria-pressed={tuningOpen}

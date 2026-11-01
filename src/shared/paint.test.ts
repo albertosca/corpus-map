@@ -93,6 +93,14 @@ describe("paint", () => {
     expect(pointMarks(surface)).toBe(4);
   });
 
+  it("skips the points outside the frame's canvas (spec mobile §7)", () => {
+    // Under `viewport` the loose node sits at screen (90, 90); a 40 px canvas holds the other three.
+    const surface = new RecordingSurface();
+    paintSpec(spec, surface, "mid", { width: 40, height: 40 });
+    expect(pointMarks(surface)).toBe(3);
+    expect([...surface.circles, ...surface.hollowCircles].some((mark) => mark.id === "loose")).toBe(false);
+  });
+
   it("draws an un-territoried node without stretching any boundary toward it", () => {
     const surface = new RecordingSurface();
     paintSpec(spec, surface, "mid");

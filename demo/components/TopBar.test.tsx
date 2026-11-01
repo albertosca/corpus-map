@@ -216,9 +216,12 @@ describe("TopBar on a narrow window (spec mobile §6)", () => {
     expect(menu.getAttribute("aria-controls")).toBe("top-bar-menu");
     expect(menu.getAttribute("aria-expanded")).toBe("false");
     expect(popover.hidden).toBe(true);
+    // An inline `display` would beat the `hidden` attribute's UA rule, so the closed menu would still show.
+    expect(getComputedStyle(popover).display).toBe("none");
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(popover.hidden).toBe(false);
+    expect(getComputedStyle(popover).display).toBe("flex");
     for (const name of ["Tuning", "Copy link"]) {
       expect(screen.getByRole("button", { name }).style.minHeight).toBe("44px");
     }

@@ -1,3 +1,4 @@
+import { finish, type Steps } from "../shared/steps";
 import { LABEL_PADDING } from "./placement";
 
 /** A label box to place: its world anchor, its screen size, and its centre's screen offset from the anchor. */
@@ -50,6 +51,11 @@ export function offsetSeparation(
  * the scan, so the result is exactly the all-pairs loop's.
  */
 export function placeBoxes(ordered: readonly BoxInput[], fixed: readonly FixedBox[] = []): number[] {
+  return finish(placingBoxes(ordered, fixed));
+}
+
+/** `placeBoxes` one step per box placed. */
+export function* placingBoxes(ordered: readonly BoxInput[], fixed: readonly FixedBox[] = []): Steps<number[]> {
   if (ordered.length === 0) return [];
   const everything = [...fixed, ...ordered];
   let minimumHorizontal = Number.POSITIVE_INFINITY;
@@ -126,6 +132,7 @@ export function placeBoxes(ordered: readonly BoxInput[], fixed: readonly FixedBo
     }
     result.push(active);
     add({ ...box, activeFromScale: active });
+    yield;
   }
   return result;
 }

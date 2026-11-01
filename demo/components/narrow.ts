@@ -19,6 +19,9 @@ export function useViewportWidth(): number {
 /** Below this window width the demo switches to its phone layout (spec mobile §6). */
 export const NARROW_WINDOW_WIDTH = 600;
 
+/** A finger's target on a narrow window: every control is at least this tall, in CSS pixels (spec mobile §6). */
+export const TOUCH_TARGET_SIZE = 44;
+
 /** Whether the window is narrower than `NARROW_WINDOW_WIDTH`, kept live across a resize. */
 export function useNarrowWindow(): boolean {
   return useViewportWidth() < NARROW_WINDOW_WIDTH;

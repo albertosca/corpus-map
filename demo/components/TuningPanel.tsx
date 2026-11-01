@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { type CardSize, displayDifferences } from "../corpora/display";
 import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
+import { TOUCH_TARGET_SIZE } from "./narrow";
 import { WheelCapture } from "./WheelCapture";
 
 export interface TuningPanelProps {
@@ -116,7 +117,7 @@ const sheetPanelStyle: CSSProperties = {
 };
 
 /** A finger's target on a narrow window: 44 px tall (spec mobile §6). */
-const sheetButtonStyle: CSSProperties = { ...iconButtonStyle, minHeight: 44 };
+const sheetButtonStyle: CSSProperties = { ...iconButtonStyle, minHeight: TOUCH_TARGET_SIZE };
 
 const actionsRowStyle: CSSProperties = {
   display: "flex",

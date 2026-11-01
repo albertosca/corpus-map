@@ -1,6 +1,7 @@
 import { compareIds } from "../shared/compareIds";
 import type { MapSpec } from "../shared/spec";
-import { type FixedBox, placeBoxes } from "./placeBoxes";
+import { finish, type Steps } from "../shared/steps";
+import { type FixedBox, placingBoxes } from "./placeBoxes";
 import type { Measure, PlacedLabel } from "./placement";
 
 /** Screen pixels between the point's centre and the bottom of its label's plate. */
@@ -24,6 +25,44 @@ export function fontPixels(font: string): number {
 }
 
 /**
+ * A line's width as the sum of its words' widths and of the single spaces
+ * between them, the last word measured with any ellipsis it carries. The
+ * measure then sees each word, not every candidate line the wrap tries:
+ * fewer calls, and fewer distinct strings for a browser to shape and keep
+ * (spec mobile §7: the arXiv corpus measured 77,000 distinct lines on load).
+ * Across a space this drops only the kerning, which a browser's text does not
+ * apply there; under `estimateText` the sum is exact.
+ */
+function lineWidth(line: string, font: string, measure: Measure): number {
+  const [first = "", ...rest] = line.split(" ");
+  let width = measure(first, font).width;
+  for (const word of rest) width = extended(width, word, font, measure);
+  return width;
+}
+
+/** A line's width with one more word after a space; summed in `lineWidth`'s order, so both agree to the bit. */
+function extended(width: number, word: string, font: string, measure: Measure): number {
+  return width + measure(" ", font).width + measure(word, font).width;
+}
+
+/** `measure` answering each (text, font) pair from the first call, for one placement run. */
+function remembering(measure: Measure): Measure {
+  const answersByFont = new Map<string, Map<string, ReturnType<Measure>>>();
+  return (text, font) => {
+    let answers = answersByFont.get(font);
+    if (!answers) {
+      answers = new Map();
+      answersByFont.set(font, answers);
+    }
+    const known = answers.get(text);
+    if (known) return known;
+    const answer = measure(text, font);
+    answers.set(text, answer);
+    return answer;
+  };
+}
+
+/**
  * Greedy word wrap into at most `maximumLines` lines of at most
  * `maximumWidth` pixels; text left over ends the last line in an ellipsis,
  * and a single word wider than the width is cut with one.
@@ -36,7 +75,7 @@ export function wrapLabel(
   measure: Measure,
 ): string[] {
   const words = text.split(/\s+/).filter((word) => word.length > 0);
-  const fits = (line: string) => measure(line, font).width <= maximumWidth;
+  const fits = (line: string) => lineWidth(line, font, measure) <= maximumWidth;
   const withEllipsis = (line: string): string => {
     let kept = line;
     while (kept.length > 0 && !fits(`${kept}${ELLIPSIS}`)) kept = kept.slice(0, -1).trimEnd();
@@ -47,12 +86,17 @@ export function wrapLabel(
   while (index < words.length && lines.length < maximumLines) {
     let line = words[index] as string;
     index += 1;
-    if (!fits(line)) {
+    let width = measure(line, font).width;
+    if (width > maximumWidth) {
       lines.push(withEllipsis(line));
       continue;
     }
-    while (index < words.length && fits(`${line} ${words[index]}`)) {
-      line = `${line} ${words[index]}`;
+    while (index < words.length) {
+      const next = words[index] as string;
+      const nextWidth = extended(width, next, font, measure);
+      if (nextWidth > maximumWidth) break;
+      line = `${line} ${next}`;
+      width = nextWidth;
       index += 1;
     }
     lines.push(line);
@@ -95,6 +139,19 @@ export function placeItemLabels(
   options: ItemLabelOptions,
   measure: Measure,
 ): PlacedItemLabel[] {
+  return finish(placingItemLabels(spec, seeds, options, measure));
+}
+
+/**
+ * `placeItemLabels` one step per label wrapped and one per plate placed, so
+ * a large corpus is placed in slices between frames (spec mobile §7).
+ */
+export function* placingItemLabels(
+  spec: MapSpec,
+  seeds: readonly PlacedLabel[],
+  options: ItemLabelOptions,
+  measure: Measure,
+): Steps<PlacedItemLabel[]> {
   const degree = new Map<string, number>();
   for (const edge of spec.edges ?? []) {
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
@@ -107,11 +164,13 @@ export function placeItemLabels(
       compareIds(first.id, second.id),
   );
   const lineHeight = fontPixels(options.font) * ITEM_LABEL_LINE_HEIGHT;
+  const wordMeasure = remembering(measure);
   const labels: PlacedItemLabel[] = [];
   for (const node of ordered) {
-    const lines = wrapLabel(node.label, options.font, options.width, options.lines, measure);
+    const lines = wrapLabel(node.label, options.font, options.width, options.lines, wordMeasure);
+    yield;
     if (lines.length === 0) continue;
-    const textWidth = Math.max(...lines.map((line) => measure(line, options.font).width));
+    const textWidth = Math.max(...lines.map((line) => lineWidth(line, options.font, wordMeasure)));
     const width = textWidth + 2 * ITEM_LABEL_PADDING.horizontal;
     const height = lines.length * lineHeight + 2 * ITEM_LABEL_PADDING.vertical;
     labels.push({
@@ -133,6 +192,6 @@ export function placeItemLabels(
     offset: [0, 0],
     activeFromScale: seed.activeFromScale,
   }));
-  const scales = placeBoxes(labels, fixed);
+  const scales = yield* placingBoxes(labels, fixed);
   return labels.map((label, index) => ({ ...label, activeFromScale: scales[index] as number }));
 }

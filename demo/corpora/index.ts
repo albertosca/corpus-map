@@ -35,10 +35,22 @@ export function arxivSpec(body: unknown): MapSpec {
   return validateSpec(withExpandedArxiv(body));
 }
 
+/** Resolves in a later task, so the work before and after it runs as two tasks instead of one long one. */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * `arxivSpec` split in two tasks: expanding and validating the 8,000-item
+ * body in one task held the main thread 120 ms at the 4× CPU slowdown spec
+ * mobile §7 measures with.
+ */
 async function fetchArxiv(): Promise<MapSpec> {
   const response = await fetch(arxivUrl);
   if (!response.ok) throw new Error(`arXiv corpus request failed: HTTP ${response.status}`);
-  return arxivSpec(await response.json());
+  const expanded = withExpandedArxiv(await response.json());
+  await nextTask();
+  return validateSpec(expanded);
 }
 
 /**

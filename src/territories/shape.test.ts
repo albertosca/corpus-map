@@ -213,6 +213,43 @@ describe("shape helpers", () => {
     const groups3 = components(points3, 2); // link = 2
     expect(groups3).toHaveLength(3);
   });
+
+  it("components finds the all-pairs groups, in the same order, on seeded random inputs (spec mobile §7)", () => {
+    // The linear-congruential source placeBoxes.test.ts uses: same seed, same points, every run.
+    let state = 0;
+    const random = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 2 ** 32;
+    };
+    const allPairs = (points: readonly Point[], link: number): Point[][] => {
+      const parent = points.map((_, index) => index);
+      const find = (index: number): number => (parent[index] === index ? index : find(parent[index] as number));
+      for (let first = 0; first < points.length; first += 1)
+        for (let second = first + 1; second < points.length; second += 1) {
+          const [firstPoint, secondPoint] = [points[first] as Point, points[second] as Point];
+          if (Math.hypot(firstPoint[0] - secondPoint[0], firstPoint[1] - secondPoint[1]) <= link)
+            parent[find(second)] = find(first);
+        }
+      const groups = new Map<number, Point[]>();
+      for (const [index, point] of points.entries())
+        groups.set(find(index), [...(groups.get(find(index)) ?? []), point]);
+      return [...groups.values()];
+    };
+    for (let seed = 1; seed <= 40; seed += 1) {
+      state = seed;
+      const count = 2 + Math.floor(random() * 300);
+      const spread = 1 + random() * 200;
+      // Integer points half the time, so many pairs sit exactly `link` apart.
+      const integers = seed % 2 === 0;
+      const points: Point[] = Array.from({ length: count }, () => {
+        const horizontal = random() * spread - spread / 3;
+        const vertical = random() * spread - spread / 3;
+        return integers ? [Math.round(horizontal), Math.round(vertical)] : [horizontal, vertical];
+      });
+      const link = integers ? 1 + Math.floor(random() * 5) : random() * 20;
+      expect(components(points, link)).toEqual(allPairs(points, link));
+    }
+  });
 });
 
 // Inputs found by a search over random point sets (fewer than 1 in 1,000 reach a

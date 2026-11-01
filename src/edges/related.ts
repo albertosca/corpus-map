@@ -15,8 +15,18 @@ function heavierFirst(first: RelatedEdge, second: RelatedEdge): number {
   return compareIds(first.neighbour, second.neighbour);
 }
 
-/** Every item's related items, both directions of each undirected edge, heaviest first, absent weights last, ties by id. */
-export function buildRelated(spec: Pick<MapSpec, "edges">): Map<string, RelatedEdge[]> {
+/** One edge index per spec object; a spec is never mutated, so a new spec is a new key. */
+const relatedBySpec = new WeakMap<Pick<MapSpec, "edges">, ReadonlyMap<string, readonly RelatedEdge[]>>();
+
+/**
+ * Every item's related items, both directions of each undirected edge,
+ * heaviest first, absent weights last, ties by id. Built once per spec
+ * object: the scene builds it while the map loads, and `relatedItems` reads
+ * the same index, so not even the first selection walks every edge again.
+ */
+export function buildRelated(spec: Pick<MapSpec, "edges">): ReadonlyMap<string, readonly RelatedEdge[]> {
+  const known = relatedBySpec.get(spec);
+  if (known) return known;
   const related = new Map<string, RelatedEdge[]>();
   const add = (owner: string, neighbour: string, weight: number | undefined, reason: string | undefined) => {
     const list = related.get(owner) ?? [];
@@ -28,6 +38,7 @@ export function buildRelated(spec: Pick<MapSpec, "edges">): Map<string, RelatedE
     add(edge.target, edge.source, edge.weight, edge.reason);
   }
   for (const list of related.values()) list.sort(heavierFirst);
+  relatedBySpec.set(spec, related);
   return related;
 }
 
@@ -38,13 +49,25 @@ export interface RelatedItem {
   reason: string | undefined;
 }
 
+/** One id index per spec object, like `buildRelated`'s edge index. */
+const nodesBySpec = new WeakMap<MapSpec, ReadonlyMap<string, MapNode>>();
+
+function nodesOf(spec: MapSpec): ReadonlyMap<string, MapNode> {
+  const known = nodesBySpec.get(spec);
+  if (known) return known;
+  const byId = new Map(spec.nodes.map((node) => [node.id, node]));
+  nodesBySpec.set(spec, byId);
+  return byId;
+}
+
 /**
  * `id`'s related items, heaviest first, absent weights last, then by id (spec
- * slice E §6). Each call indexes the whole edge list afresh, so a caller
- * asking for many ids of one spec should memoize per spec.
+ * slice E §6). The indexes are built once per spec object and kept while
+ * the spec lives: rebuilding them for every selection took about 100 ms of a
+ * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with.
  */
 export function relatedItems(spec: MapSpec, id: string): RelatedItem[] {
-  const byId = new Map(spec.nodes.map((node) => [node.id, node]));
+  const byId = nodesOf(spec);
   return (buildRelated(spec).get(id) ?? []).map((edge) => ({
     node: byId.get(edge.neighbour) as MapNode,
     weight: edge.weight,

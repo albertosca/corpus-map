@@ -6,7 +6,7 @@ import { CorpusMap, type CorpusMapView } from "./CorpusMap";
 import type { MapNode, MapSpec } from "./shared/spec";
 import { DEFAULT_TUNING } from "./shared/tuning";
 
-// Spies for the compact-names test: `buildScene` passes through and is
+// Spies for the compact-names test: `buildingScene` passes through and is
 // counted; `paint` records which family names each frame asked for. Under
 // the jsdom `getContext` stub (`test/setup.ts`) no other test here paints.
 const recorded = vi.hoisted(() => ({ scenes: 0, compactFlags: [] as Array<boolean | undefined> }));
@@ -14,9 +14,9 @@ vi.mock("./shared/scene", async (importOriginal) => {
   const original = await importOriginal<typeof import("./shared/scene")>();
   return {
     ...original,
-    buildScene: (...parameters: Parameters<typeof original.buildScene>) => {
+    buildingScene: (...parameters: Parameters<typeof original.buildingScene>) => {
       recorded.scenes += 1;
-      return original.buildScene(...parameters);
+      return original.buildingScene(...parameters);
     },
   };
 });

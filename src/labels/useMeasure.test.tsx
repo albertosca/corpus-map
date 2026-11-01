@@ -27,4 +27,30 @@ describe("useMeasure", () => {
     expect(result.current("Logic", "700 20px system-ui, sans-serif")).toEqual({ width: 50, height: 20 });
     expect(result.current("Logic", "600 15.5px system-ui, sans-serif").height).toBe(15.5);
   });
+
+  it("sets the context's font only when it changes, since a browser parses every assignment (spec mobile §7)", () => {
+    const assigned: string[] = [];
+    let current = "";
+    const context = {
+      get font() {
+        return current;
+      },
+      set font(value: string) {
+        assigned.push(value);
+        current = value;
+      },
+      measureText: (text: string) => ({ width: text.length * 10 }),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+    const { result } = renderHook(() => useMeasure());
+    result.current("graph", "500 11px system-ui, sans-serif");
+    result.current("neural", "500 11px system-ui, sans-serif");
+    expect(result.current("nets", "700 20px system-ui, sans-serif")).toEqual({ width: 40, height: 20 });
+    result.current("graph", "500 11px system-ui, sans-serif");
+    expect(assigned).toEqual([
+      "500 11px system-ui, sans-serif",
+      "700 20px system-ui, sans-serif",
+      "500 11px system-ui, sans-serif",
+    ]);
+  });
 });

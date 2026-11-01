@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "./CorpusMap";
-import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "./labels/itemLabels";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels, placingItemLabels } from "./labels/itemLabels";
 import { itemLabelRect } from "./labels/paintItemLabels";
 import { estimateText } from "./labels/placement";
 import type { MapSpec } from "./shared/spec";
@@ -11,7 +11,7 @@ import { DEFAULT_TUNING } from "./shared/tuning";
 // The real placer, wrapped so a test can count how often the map runs it.
 vi.mock("./labels/itemLabels", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./labels/itemLabels")>();
-  return { ...actual, placeItemLabels: vi.fn(actual.placeItemLabels) };
+  return { ...actual, placingItemLabels: vi.fn(actual.placingItemLabels) };
 });
 
 // Same corpus as CorpusMap.interaction.test.tsx, plus "d", whose blank label
@@ -185,7 +185,7 @@ describe("CorpusMap item labels and the one card", () => {
   });
 
   it("does not place the item labels again when only the palette changes (spec item labels §3)", () => {
-    const placer = vi.mocked(placeItemLabels);
+    const placer = vi.mocked(placingItemLabels);
     const map = (palette: string[]) => (
       <CorpusMap
         spec={spec}
@@ -204,7 +204,7 @@ describe("CorpusMap item labels and the one card", () => {
   });
 
   it("places the item labels once when a new spec renames a territory (review I1)", () => {
-    const placer = vi.mocked(placeItemLabels);
+    const placer = vi.mocked(placingItemLabels);
     const named = (name: string): MapSpec => ({
       version: "1",
       territories: [{ id: "t", name, members: ["a", "b"], centroid: [5, 5] }],

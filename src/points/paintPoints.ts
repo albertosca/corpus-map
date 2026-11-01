@@ -1,7 +1,7 @@
 import { DIMMED_ALPHA, NO_DIMMED } from "../shared/dimmed";
 import type { Scene } from "../shared/scene";
 import type { MapNode, MapSpec } from "../shared/spec";
-import type { Surface } from "../shared/surface";
+import type { PointMark, Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { toScreen, type Viewport } from "../viewport/viewport";
 
@@ -15,7 +15,11 @@ export const UNVISITED_RING_WIDTH = 1.5;
  * the same `pointRadius`, so both marks have the same footprint. A dimmed
  * territory's points are drawn first, underneath, at `alpha` times
  * `DIMMED_ALPHA`; the surface is left at `alpha`. A point with no territory
- * is never dimmed.
+ * is never dimmed. Each pass draws its points of one kind and colour as one
+ * batch (one path, one fill or stroke). Given the canvas `box`, a point
+ * whose mark lies wholly outside it is skipped (spec mobile §7: at near a
+ * phone frame would otherwise stroke every point of the corpus to show a
+ * fifth of them).
  */
 export function paintPoints(
   surface: Surface,
@@ -25,26 +29,47 @@ export function paintPoints(
   theme: Pick<Theme, "pointNeutral" | "pointRadius">,
   dimmed: ReadonlySet<string> = NO_DIMMED,
   alpha = 1,
+  box?: { width: number; height: number },
 ): void {
-  const draw = (node: MapNode) => {
-    const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
-    const colour = (node.territory === null ? undefined : scene.colours.get(node.territory)) ?? theme.pointNeutral;
-    if (node.state === "visited") surface.circle(node.id, horizontal, vertical, theme.pointRadius, colour);
-    else
-      surface.hollowCircle(
-        node.id,
-        horizontal,
-        vertical,
-        theme.pointRadius - UNVISITED_RING_WIDTH / 2,
-        colour,
-        UNVISITED_RING_WIDTH,
-      );
+  const reach = theme.pointRadius;
+  // One batch per kind and colour, in first-seen order, so a pass costs one
+  // path per colour instead of one per point.
+  const drawPass = (include: (node: MapNode) => boolean) => {
+    const batches = new Map<string, { visited: boolean; colour: string; marks: PointMark[] }>();
+    for (const node of spec.nodes) {
+      if (!include(node)) continue;
+      const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
+      if (
+        box !== undefined &&
+        (horizontal < -reach || vertical < -reach || horizontal > box.width + reach || vertical > box.height + reach)
+      )
+        continue;
+      const colour = (node.territory === null ? undefined : scene.colours.get(node.territory)) ?? theme.pointNeutral;
+      const visited = node.state === "visited";
+      const key = `${visited ? "fill" : "stroke"} ${colour}`;
+      let batch = batches.get(key);
+      if (batch === undefined) {
+        batch = { visited, colour, marks: [] };
+        batches.set(key, batch);
+      }
+      batch.marks.push({ id: node.id, horizontal, vertical });
+    }
+    for (const batch of batches.values()) {
+      if (batch.visited) surface.fillCircles(batch.marks, theme.pointRadius, batch.colour);
+      else
+        surface.strokeCircles(
+          batch.marks,
+          theme.pointRadius - UNVISITED_RING_WIDTH / 2,
+          batch.colour,
+          UNVISITED_RING_WIDTH,
+        );
+    }
   };
   const isDimmed = (node: MapNode) => node.territory !== null && dimmed.has(node.territory);
   if (dimmed.size > 0) {
     surface.globalAlpha(alpha * DIMMED_ALPHA);
-    for (const node of spec.nodes) if (isDimmed(node)) draw(node);
+    drawPass(isDimmed);
     surface.globalAlpha(alpha);
   }
-  for (const node of spec.nodes) if (!isDimmed(node)) draw(node);
+  drawPass((node) => !isDimmed(node));
 }

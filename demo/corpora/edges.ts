@@ -48,8 +48,11 @@ function terms(title: string): string[] {
 
 /** Up to three words both titles use, stop words and words under three letters left out, in `first`'s order. */
 export function sharedTitleTerms(first: string, second: string): string[] {
-  const other = new Set(terms(second));
-  return [...new Set(terms(first).filter((word) => other.has(word)))].slice(0, 3);
+  return sharedTerms(terms(first), new Set(terms(second)));
+}
+
+function sharedTerms(first: readonly string[], second: ReadonlySet<string>): string[] {
+  return [...new Set(first.filter((word) => second.has(word)))].slice(0, 3);
 }
 
 type CompactEdge = readonly [number, number, number];
@@ -60,10 +63,30 @@ type CompactEdge = readonly [number, number, number];
  * the shared title words here rather than doubling the file with it.
  */
 export function expandEdges(nodes: readonly MapNode[], compact: readonly CompactEdge[]): MapEdge[] {
+  // Each title is split once, not once per edge (spec mobile §7: splitting per
+  // edge was about 100 ms of the arXiv load at 4× CPU).
+  const termLists = new Map<number, string[]>();
+  const termSets = new Map<number, Set<string>>();
+  const termsAt = (index: number) => {
+    let list = termLists.get(index);
+    if (!list) {
+      list = terms((nodes[index] as MapNode).label);
+      termLists.set(index, list);
+    }
+    return list;
+  };
+  const termSetAt = (index: number) => {
+    let set = termSets.get(index);
+    if (!set) {
+      set = new Set(termsAt(index));
+      termSets.set(index, set);
+    }
+    return set;
+  };
   return compact.map(([sourceIndex, targetIndex, weightPercent]) => {
     const source = nodes[sourceIndex] as MapNode;
     const target = nodes[targetIndex] as MapNode;
-    const shared = sharedTitleTerms(source.label, target.label);
+    const shared = sharedTerms(termsAt(sourceIndex), termSetAt(targetIndex));
     return {
       source: source.id,
       target: target.id,

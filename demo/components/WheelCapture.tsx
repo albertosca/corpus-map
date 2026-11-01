@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { token } from "../tokens";
+import { TOUCH_TARGET_SIZE } from "./narrow";
 
 export interface WheelEventSample {
   /** A per-capture counter, unique across the session — never the array index, so React's list keys survive the newest-first reorder. */
@@ -154,7 +155,7 @@ export function WheelCapture({
       <button
         type="button"
         onClick={handleCopy}
-        style={touchTargets ? { ...copyButtonStyle, minHeight: 44 } : copyButtonStyle}
+        style={touchTargets ? { ...copyButtonStyle, minHeight: TOUCH_TARGET_SIZE } : copyButtonStyle}
       >
         Copy
       </button>

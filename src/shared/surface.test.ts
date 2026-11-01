@@ -62,20 +62,73 @@ describe("canvasSurface", () => {
     expect(context.fill).not.toHaveBeenCalled();
   });
 
-  it("draws a circle with arc and fill", () => {
+  it("fills every disc of a batch as one path: one beginPath, one arc per mark, one fill", () => {
     const context = {
       beginPath: vi.fn(),
+      moveTo: vi.fn(),
       arc: vi.fn(),
       fill: vi.fn(),
       fillStyle: "",
     } as unknown as CanvasRenderingContext2D;
     const surface = canvasSurface(context);
-    surface.circle("node1", 100, 150, 5, "orange");
+    surface.fillCircles(
+      [
+        { id: "node1", horizontal: 100, vertical: 150 },
+        { id: "node2", horizontal: 120, vertical: 160 },
+      ],
+      5,
+      "orange",
+    );
 
     expect(context.beginPath).toHaveBeenCalledOnce();
-    expect(context.arc).toHaveBeenCalledWith(100, 150, 5, 0, Math.PI * 2);
+    expect(context.arc).toHaveBeenNthCalledWith(1, 100, 150, 5, 0, Math.PI * 2);
+    expect(context.arc).toHaveBeenNthCalledWith(2, 120, 160, 5, 0, Math.PI * 2);
+    // Each sub-path starts on its own circle, so no line joins two marks.
+    expect(context.moveTo).toHaveBeenNthCalledWith(2, 125, 160);
     expect(context.fill).toHaveBeenCalledOnce();
     expect(context.fillStyle).toBe("orange");
+  });
+
+  it("strokes every ring of a batch as one path at the batch's width, leaving later calls untouched", () => {
+    const context = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      arc: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 1,
+    } as unknown as CanvasRenderingContext2D;
+    const surface = canvasSurface(context);
+    surface.strokeCircles(
+      [
+        { id: "node1", horizontal: 10, vertical: 20 },
+        { id: "node2", horizontal: 30, vertical: 40 },
+        { id: "node3", horizontal: 50, vertical: 60 },
+      ],
+      3,
+      "teal",
+      1.5,
+    );
+
+    expect(context.beginPath).toHaveBeenCalledOnce();
+    expect(context.arc).toHaveBeenCalledTimes(3);
+    expect(context.moveTo).toHaveBeenNthCalledWith(3, 53, 60);
+    expect(context.stroke).toHaveBeenCalledOnce();
+    expect(context.strokeStyle).toBe("teal");
+    expect(context.lineWidth).toBe(1.5);
+    expect(context.save).toHaveBeenCalledOnce();
+    expect(context.restore).toHaveBeenCalledOnce();
+  });
+
+  it("draws nothing for an empty batch", () => {
+    const context = { beginPath: vi.fn(), save: vi.fn() } as unknown as CanvasRenderingContext2D;
+    const surface = canvasSurface(context);
+    surface.fillCircles([], 5, "orange");
+    surface.strokeCircles([], 5, "orange", 1);
+    expect(context.beginPath).not.toHaveBeenCalled();
+    expect(context.save).not.toHaveBeenCalled();
   });
 
   it("renders text with fillStyle, font, and fillText, centred on (x, y)", () => {

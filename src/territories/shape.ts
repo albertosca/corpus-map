@@ -3,6 +3,9 @@ export type Ring = Point[];
 
 const MAXIMUM_CELLS = 256;
 
+/** The farthest, in cells, any grid lookup here reaches past the points' own cells: `spacing`'s widest ring. */
+const MAXIMUM_REACH = 64;
+
 /**
  * The `quantile` of the distances from each point to its nearest neighbour; 0
  * for fewer than two points. The boundary radius is set from the 90th
@@ -13,23 +16,22 @@ const MAXIMUM_CELLS = 256;
 export function spacing(points: readonly Point[], quantile = 0.9): number {
   if (points.length < 2) return 0;
   const cell = Math.max(1e-9, extent(points) / Math.sqrt(points.length));
-  const grid = new Map<string, Point[]>();
-  const keyOf = (horizontal: number, vertical: number) =>
-    `${Math.floor(horizontal / cell)},${Math.floor(vertical / cell)}`;
+  const keyOf = numericCellKey(points, cell);
+  const grid = new Map<number, Point[]>();
   for (const point of points) {
-    const key = keyOf(point[0], point[1]);
+    const key = keyOf(Math.floor(point[0] / cell), Math.floor(point[1] / cell));
     const bucket = grid.get(key);
     if (bucket) bucket.push(point);
     else grid.set(key, [point]);
   }
   const nearest = points.map((point) => {
     let best = Number.POSITIVE_INFINITY;
-    for (let reach = 1; reach < 64 && !Number.isFinite(best); reach *= 2) {
+    for (let reach = 1; reach < MAXIMUM_REACH && !Number.isFinite(best); reach *= 2) {
       const column = Math.floor(point[0] / cell);
       const row = Math.floor(point[1] / cell);
       for (let columnStep = -reach; columnStep <= reach; columnStep += 1) {
         for (let rowStep = -reach; rowStep <= reach; rowStep += 1) {
-          for (const other of grid.get(`${column + columnStep},${row + rowStep}`) ?? []) {
+          for (const other of grid.get(keyOf(column + columnStep, row + rowStep)) ?? []) {
             if (other === point) continue;
             const distance = Math.hypot(point[0] - other[0], point[1] - other[1]);
             if (distance < best) best = distance;
@@ -41,6 +43,26 @@ export function spacing(points: readonly Point[], quantile = 0.9): number {
   });
   nearest.sort((first, second) => first - second);
   return nearest[Math.floor(quantile * (nearest.length - 1))] ?? 0;
+}
+
+/**
+ * A grid cell's map key as one number, for cells of side `cell` holding
+ * `points`: the cell `(floor(x / cell), floor(y / cell))` and its neighbours
+ * up to `MAXIMUM_REACH` cells away get distinct keys, the same buckets a
+ * `"column,row"` string named, without building a string per lookup (the
+ * scene's grids run hundreds of thousands of lookups on the arXiv corpus).
+ */
+function numericCellKey(points: readonly Point[], cell: number): (column: number, row: number) => number {
+  let firstColumn = Number.POSITIVE_INFINITY;
+  let firstRow = Number.POSITIVE_INFINITY;
+  let lastRow = Number.NEGATIVE_INFINITY;
+  for (const [horizontal, vertical] of points) {
+    firstColumn = Math.min(firstColumn, Math.floor(horizontal / cell));
+    firstRow = Math.min(firstRow, Math.floor(vertical / cell));
+    lastRow = Math.max(lastRow, Math.floor(vertical / cell));
+  }
+  const height = lastRow - firstRow + 1 + 2 * MAXIMUM_REACH;
+  return (column, row) => (column - firstColumn + MAXIMUM_REACH) * height + (row - firstRow + MAXIMUM_REACH);
 }
 
 export function extent(points: readonly Point[]): number {
@@ -69,7 +91,7 @@ export function disksOutline(points: readonly Point[], radius: number): Ring[] {
 
 /**
  * Groups of points whose disks of radius `link / 2` touch, by union-find over
- * a grid of cell `link`. Outlining each group on its own grid keeps one far
+ * a grid of cell `link / √2`. Outlining each group on its own grid keeps one far
  * outlier from stretching a shared grid until a dense cluster falls between
  * its vertices and disappears.
  */
@@ -86,26 +108,46 @@ export function components(points: readonly Point[], link: number): Point[][] {
     }
     return root;
   };
-  const grid = new Map<string, number[]>();
-  points.forEach(([horizontal, vertical], index) => {
-    const key = `${Math.floor(horizontal / link)},${Math.floor(vertical / link)}`;
-    const bucket = grid.get(key);
-    if (bucket) bucket.push(index);
-    else grid.set(key, [index]);
-  });
-  points.forEach(([horizontal, vertical], index) => {
-    const column = Math.floor(horizontal / link);
-    const row = Math.floor(vertical / link);
-    for (let columnStep = -1; columnStep <= 1; columnStep += 1) {
-      for (let rowStep = -1; rowStep <= 1; rowStep += 1) {
-        for (const otherIndex of grid.get(`${column + columnStep},${row + rowStep}`) ?? []) {
-          if (otherIndex <= index) continue;
-          const other = points[otherIndex] as Point;
-          if (Math.hypot(other[0] - horizontal, other[1] - vertical) <= link) parent[find(otherIndex)] = find(index);
+  const joinCells = (first: readonly number[], second: readonly number[]) => {
+    if (find(first[0] as number) === find(second[0] as number)) return;
+    for (const firstIndex of first) {
+      const [horizontal, vertical] = points[firstIndex] as Point;
+      for (const secondIndex of second) {
+        const other = points[secondIndex] as Point;
+        if (Math.hypot(other[0] - horizontal, other[1] - vertical) <= link) {
+          parent[find(secondIndex)] = find(firstIndex);
+          return;
         }
       }
     }
+  };
+  // Cells of side `link / √2`: any two points sharing one are within `link`,
+  // so a cell is joined whole, and two cells (at most two apart) compare
+  // their points only until they are joined. A dense corpus then costs about
+  // one comparison per neighbouring cell pair, not one per neighbouring point
+  // pair; the groups are the same, since the graph is.
+  const cell = link / Math.SQRT2;
+  const keyOf = numericCellKey(points, cell);
+  const cells = new Map<number, { column: number; row: number; members: number[] }>();
+  points.forEach(([horizontal, vertical], index) => {
+    const column = Math.floor(horizontal / cell);
+    const row = Math.floor(vertical / cell);
+    const key = keyOf(column, row);
+    const found = cells.get(key);
+    if (found) {
+      found.members.push(index);
+      parent[find(index)] = find(found.members[0] as number);
+    } else cells.set(key, { column, row, members: [index] });
   });
+  for (const { column, row, members } of cells.values()) {
+    for (let columnStep = 0; columnStep <= 2; columnStep += 1) {
+      for (let rowStep = columnStep === 0 ? 1 : -2; rowStep <= 2; rowStep += 1) {
+        const neighbour = cells.get(keyOf(column + columnStep, row + rowStep));
+        if (!neighbour) continue;
+        joinCells(members, neighbour.members);
+      }
+    }
+  }
   const groups = new Map<number, Point[]>();
   points.forEach((point, index) => {
     const root = find(index);
@@ -141,19 +183,25 @@ function outlineGrid(points: readonly Point[], requestedRadius: number): Ring[] 
   const rows = Math.ceil((bottom - top) / cell) + 1;
   const field = new Float64Array(columns * rows).fill(Number.POSITIVE_INFINITY);
   const reach = radius + 2 * cell;
+  // The nearest centre's squared distance first, one square root per vertex
+  // after: the stamp loop is the scene's hottest (spec mobile §7).
   for (const [pointHorizontal, pointVertical] of points) {
     const firstColumn = Math.max(0, Math.floor((pointHorizontal - reach - left) / cell));
     const lastColumn = Math.min(columns - 1, Math.ceil((pointHorizontal + reach - left) / cell));
     const firstRow = Math.max(0, Math.floor((pointVertical - reach - top) / cell));
     const lastRow = Math.min(rows - 1, Math.ceil((pointVertical + reach - top) / cell));
     for (let row = firstRow; row <= lastRow; row += 1) {
+      const verticalDelta = top + row * cell - pointVertical;
+      const verticalSquared = verticalDelta * verticalDelta;
+      const rowStart = row * columns;
       for (let column = firstColumn; column <= lastColumn; column += 1) {
-        const distance = Math.hypot(left + column * cell - pointHorizontal, top + row * cell - pointVertical) - radius;
-        const slot = row * columns + column;
-        if (distance < (field[slot] ?? Number.POSITIVE_INFINITY)) field[slot] = distance;
+        const horizontalDelta = left + column * cell - pointHorizontal;
+        const squared = horizontalDelta * horizontalDelta + verticalSquared;
+        if (squared < (field[rowStart + column] as number)) field[rowStart + column] = squared;
       }
     }
   }
+  for (let slot = 0; slot < field.length; slot += 1) field[slot] = Math.sqrt(field[slot] as number) - radius;
   const sample = (column: number, row: number): number => field[row * columns + column] ?? Number.POSITIVE_INFINITY;
   const crossing = (
     fromColumn: number,

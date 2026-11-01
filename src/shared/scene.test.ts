@@ -8,13 +8,82 @@ import { contains } from "../territories/shape";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { fitSpec } from "../viewport/fit";
 import { paint } from "./paint";
-import { buildScene, GROUP_LETTER_SPACING, groupLabelsFor, NARROW_BOX_WIDTH } from "./scene";
+import {
+  buildingScene,
+  buildScene,
+  GROUP_LETTER_SPACING,
+  groupLabelsFor,
+  NARROW_BOX_WIDTH,
+  SCENE_POINTS_PER_STEP,
+} from "./scene";
 import { type MapSpec, validateSpec } from "./spec";
+import { advance } from "./steps";
 import { RecordingSurface } from "./surface";
 import { DARK_THEME, DEFAULT_COMPACT_GROUP_FONT, DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
 describe("buildScene", () => {
+  it("builds in steps, one per region outlined, one for the colours and one per name set, to the same scene (spec mobile §7)", () => {
+    const spec = nestedSpec();
+    const steps = buildingScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    // Leaves a and b (six points each) and family p (twelve): two steps each; then the colours and three name sets.
+    expect(advance(steps, 10)).toEqual({ done: false });
+    expect(advance(steps, 1)).toEqual({
+      done: true,
+      value: buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText),
+    });
+  });
+
+  it("weighs an outline's steps by its points, so a slice holds about the same work on any corpus (spec mobile §7)", () => {
+    const count = 2 * SCENE_POINTS_PER_STEP + 1;
+    const nodes = Array.from({ length: count }, (_, index) => ({
+      id: `n${index}`,
+      label: `N ${index}`,
+      x: index % 10,
+      y: Math.floor(index / 10),
+      territory: "t",
+    }));
+    const spec = validateSpec({
+      version: "1",
+      territories: [{ id: "t", name: "T", members: nodes.map((node) => node.id), centroid: [5, 5] }],
+      nodes,
+    });
+    const steps = buildingScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    // One region of 2 × SCENE_POINTS_PER_STEP + 1 points: one step plus three; then the colours and three name sets.
+    expect(advance(steps, 8)).toEqual({ done: false });
+    expect(advance(steps, 1).done).toBe(true);
+  });
+
+  it("yields a region's steps before outlining it, so a slice smaller than the region outlines nothing (spec mobile §7)", () => {
+    const count = 2 * SCENE_POINTS_PER_STEP + 1;
+    const nodes = Array.from({ length: count }, (_, index) => ({
+      id: `n${index}`,
+      label: `N ${index}`,
+      x: index % 10,
+      y: Math.floor(index / 10),
+      territory: "t",
+    }));
+    let outlined = 0;
+    const territory = {
+      id: "t",
+      name: "T",
+      members: nodes.map((node) => node.id),
+      centroid: [5, 5] as [number, number],
+      get boundary() {
+        outlined += 1;
+        return undefined;
+      },
+    };
+    const spec = validateSpec({ version: "1", territories: [territory], nodes });
+    outlined = 0;
+    const steps = buildingScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    // The region's four steps (one plus one per SCENE_POINTS_PER_STEP) come first.
+    expect(advance(steps, 4)).toEqual({ done: false });
+    expect(outlined).toBe(0);
+    advance(steps, 1);
+    expect(outlined).toBe(1);
+  });
+
   it("carries a colour per territory and a largest-first paint order", () => {
     const spec = generateCorpus({ seed: 1, size: 500 });
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);

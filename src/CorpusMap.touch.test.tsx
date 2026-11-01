@@ -214,6 +214,18 @@ describe("CorpusMap on a touch screen (spec mobile §2)", () => {
     expect(selections).toEqual(["d2"]);
   });
 
+  it("opens no hover balloon for an item a tap selects, its card already names it, and closes a balloon left open", () => {
+    const { tap, container } = renderMap({ defaultViewport: { centre: [300, 200], zoom: 4 } });
+    // A tap between points names the territory under it first.
+    tap(WIDTH / 2 - 50 * 4 * fitScale, HEIGHT / 2);
+    flush();
+    expect(container.querySelector("[data-hover-territories]")).not.toBeNull();
+    tap(WIDTH / 2, HEIGHT / 2);
+    flush();
+    expect(container.querySelector("[data-hover]")).toBeNull();
+    expect(container.querySelector("[data-hover-territories]")).toBeNull();
+  });
+
   it("zooms one step out on a two-finger tap, about the fingers' midpoint", () => {
     const { finger, changes, interactions } = renderMap();
     const before = latest(changes);

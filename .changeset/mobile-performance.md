@@ -1,0 +1,5 @@
+---
+"corpus-map": patch
+---
+
+Faster on a phone. A tap tolerates a 10 px drift before it counts as a pan, and a tap that selects an item opens no hover balloon (the selected card already names it). Points outside the box are not drawn and the rest are drawn in one path per colour. The scene and the item labels are now built in time slices of a few tens of milliseconds instead of one long task: a new `spec` draws nothing (and `onViewChange` does not fire) until its scene is ready, which on a large corpus is a few hundred milliseconds after mount; a tuning or palette change on the same `spec` keeps the current scene on screen until the new one is ready, and item labels appear once placed. Scene building itself is about three times faster (territory outlines and family colours), with the same output. `relatedItems` indexes a spec once and reuses the scene's index, so selecting an item no longer walks every edge. The time slicing and the batched point drawing add weight: the gzip size ceiling rises to 34,689 bytes (the main entry measures 34,589).

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MapSpec } from "../shared/spec";
-import { DEFAULT_ITEM_LABEL_FONT, fontPixels, placeItemLabels, wrapLabel } from "./itemLabels";
-import { estimateText, type PlacedLabel } from "./placement";
+import { advance } from "../shared/steps";
+import { DEFAULT_ITEM_LABEL_FONT, fontPixels, placeItemLabels, placingItemLabels, wrapLabel } from "./itemLabels";
+import { estimateText, type Measure, type PlacedLabel } from "./placement";
 
 // estimateText at 10px: 6 px per character.
 const FONT = "10px sans-serif";
@@ -92,8 +93,43 @@ describe("placeItemLabels", () => {
     expect(label?.activeFromScale).toBeGreaterThan(0);
   });
 
+  it("places in steps, one per label wrapped and one per plate, to the same labels (spec mobile §7)", () => {
+    const spec = {
+      version: "1",
+      territories: [],
+      nodes: [node("a", 0), node("b", 100), { ...node("c", 200), label: " " }],
+    } as MapSpec;
+    const steps = placingItemLabels(spec, [], OPTIONS, estimateText);
+    // Three labels wrapped, two plates placed: five steps, finished on the sixth call.
+    expect(advance(steps, 5)).toEqual({ done: false });
+    expect(advance(steps, 1)).toEqual({ done: true, value: placeItemLabels(spec, [], OPTIONS, estimateText) });
+  });
+
   it("skips a node whose label is blank", () => {
     const spec = { version: "1", territories: [], nodes: [{ ...node("a", 0), label: " " }] } as MapSpec;
     expect(placeItemLabels(spec, [], OPTIONS, estimateText)).toEqual([]);
+  });
+
+  it("measures each word once across all labels and never a whole line, so the measuring scales with the vocabulary, not with every candidate line (spec mobile §7)", () => {
+    const measured: string[] = [];
+    const counting: Measure = (text, font) => {
+      measured.push(text);
+      return estimateText(text, font);
+    };
+    const titled = (id: string, label: string, horizontal: number) => ({ ...node(id, horizontal), label });
+    const spec = {
+      version: "1",
+      territories: [],
+      nodes: [
+        titled("a", "graph neural networks for molecules and proteins at scale", 0),
+        titled("b", "graph neural networks for proteins", 500),
+      ],
+    } as MapSpec;
+    const counted = placeItemLabels(spec, [], OPTIONS, counting);
+    expect(counted.map((label) => label.lines)).toEqual(
+      placeItemLabels(spec, [], OPTIONS, estimateText).map((label) => label.lines),
+    );
+    expect(new Set(measured).size).toBe(measured.length);
+    expect(measured.filter((text) => text !== " " && text.includes(" "))).toEqual([]);
   });
 });

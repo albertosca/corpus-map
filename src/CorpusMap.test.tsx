@@ -455,8 +455,8 @@ describe("CorpusMap", () => {
     }
   });
 
-  it("keys the scene memo on the primitive values buildScene reads, not on the tuning/theme object identity", () => {
-    const spy = vi.spyOn(sceneModule, "buildScene");
+  it("keys the scene memo on the primitive values buildingScene reads, not on the tuning/theme object identity", () => {
+    const spy = vi.spyOn(sceneModule, "buildingScene");
     try {
       // A fresh object literal every call, exactly how spec 4's tuning panel
       // (and any consumer passing `tuning`/`theme` inline) would pass props.
@@ -494,7 +494,7 @@ describe("CorpusMap", () => {
   });
 
   it("does not rebuild the scene on a resize (activeFromScale is absolute, so fitScale is out of the memo key)", () => {
-    const spy = vi.spyOn(sceneModule, "buildScene");
+    const spy = vi.spyOn(sceneModule, "buildingScene");
     try {
       // A tall box (height 2000 fixed) makes width the binding dimension of
       // `fitSpec` throughout 400-700, so `fitScale` genuinely changes on

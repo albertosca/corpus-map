@@ -7,6 +7,14 @@
 
 /** How far, in box pixels, a press may end from where it went down and still be a tap. */
 export const CLICK_SLOP = 4;
+/**
+ * How far, in box pixels, a finger may stray from where it went down and
+ * still tap when it comes back within `CLICK_SLOP`: past it the press is a
+ * pan for good, the way a touch browser cancels the tap once a scroll
+ * starts. Wider than the slop so a finger's jitter still taps; a mouse
+ * keeps the click's rule (only the distance at the up decides).
+ */
+export const TOUCH_STRAY_DISTANCE = 10;
 /** Two taps within this many milliseconds, up to up, make a double tap (touch only). */
 export const DOUBLE_TAP_INTERVAL = 300;
 /** ...and within this many pixels of each other. */
@@ -45,8 +53,9 @@ interface Finger {
 
 /**
  * Opaque to callers. `phase` "one" is a single press that can still tap;
- * "pinch" is two fingers; "pan" is the finger left after a pinch, which never
- * taps (it can only finish a two-finger tap).
+ * "pinch" is two fingers; "pan" is a finger that strayed past
+ * `TOUCH_STRAY_DISTANCE`, or the finger left after a pinch, and never taps
+ * (the latter can only finish a two-finger tap).
  */
 export interface GestureState {
   readonly phase: "idle" | "one" | "pinch" | "pan";
@@ -153,7 +162,12 @@ function move(state: GestureState, event: GesturePointer): { state: GestureState
   const { first, second } = state;
   if (first === null || !owns(state, event.pointerId)) return { state, intents: NONE };
   if (state.phase !== "pinch" || second === null) {
-    const next = { ...state, first: moved(first, event) };
+    const nextFirst = moved(first, event);
+    const strayed =
+      state.phase === "one" &&
+      state.pointerType === "touch" &&
+      Math.hypot(nextFirst.x - nextFirst.startX, nextFirst.y - nextFirst.startY) > TOUCH_STRAY_DISTANCE;
+    const next = { ...state, first: nextFirst, ...(strayed ? { phase: "pan" as const } : {}) };
     const horizontal = event.x - first.x;
     const vertical = event.y - first.y;
     if (horizontal === 0 && vertical === 0) return { state: next, intents: NONE };

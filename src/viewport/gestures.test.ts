@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type GestureIntent, type GesturePointer, initialGestureState, isPressed, step } from "./gestures";
+import {
+  type GestureIntent,
+  type GesturePointer,
+  initialGestureState,
+  isPressed,
+  step,
+  TOUCH_STRAY_DISTANCE,
+} from "./gestures";
 
 const touch = (
   kind: GesturePointer["kind"],
@@ -66,6 +73,40 @@ describe("the gesture recogniser (spec mobile §2)", () => {
       ]);
     });
 
+    it("is no tap once a finger has strayed past TOUCH_STRAY_DISTANCE, even when it comes back to where it went down", () => {
+      // The browser pass: a pan that swung out and back selected the item under the finger.
+      const { intents } = run([
+        touch("down", 1, 10, 10, 0),
+        touch("move", 1, 10 + TOUCH_STRAY_DISTANCE + 1, 10, 10),
+        touch("move", 1, 11, 10, 20),
+        touch("up", 1, 11, 10, 30),
+      ]);
+      expect(intents.filter((intent) => intent.kind !== "pan")).toEqual([]);
+    });
+
+    it("still taps a finger that jittered up to TOUCH_STRAY_DISTANCE and came back within the slop", () => {
+      const { intents } = run([
+        touch("down", 1, 10, 10, 0),
+        touch("move", 1, 10 + TOUCH_STRAY_DISTANCE, 10, 10),
+        touch("move", 1, 11, 10, 20),
+        touch("up", 1, 11, 10, 30),
+      ]);
+      expect(intents[intents.length - 1]).toEqual({ kind: "tap", x: 11, y: 10, pointerType: "touch" });
+    });
+
+    it("never lets a strayed finger be the first half of a double tap", () => {
+      const { intents } = run([
+        touch("down", 1, 10, 10, 0),
+        touch("move", 1, 40, 10, 10),
+        touch("move", 1, 10, 10, 20),
+        touch("up", 1, 10, 10, 30),
+        ...tapAt(10, 10, 100),
+      ]);
+      expect(intents.filter((intent) => intent.kind !== "pan")).toEqual([
+        { kind: "tap", x: 10, y: 10, pointerType: "touch" },
+      ]);
+    });
+
     it("never turns two quick mouse clicks into a double tap", () => {
       const { intents } = run([
         mouse("down", 50, 50, 0),
@@ -102,7 +143,7 @@ describe("the gesture recogniser (spec mobile §2)", () => {
       expect(intents).toEqual([{ kind: "tap", x: 52, y: 51, pointerType: "touch" }]);
     });
 
-    it("still taps a press that wandered 10 px and came back (the distance at the up decides)", () => {
+    it("still taps a mouse press that wandered 10 px and came back (the distance at the up decides, like a click)", () => {
       const { intents } = run([
         mouse("down", 50, 50, 0),
         mouse("move", 60, 50, 10),

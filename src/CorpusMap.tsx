@@ -22,9 +22,10 @@ import { type EdgeMarker, edgeMarkers, markerAt } from "./edges/markers";
 import { drawnEdges } from "./edges/paintEdges";
 import type { RelatedItem } from "./edges/related";
 import { itemLabelAt } from "./labels/itemLabelAt";
-import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "./labels/itemLabels";
+import { DEFAULT_ITEM_LABEL_FONT } from "./labels/itemLabels";
 import { drawnItemLabels, itemLabelRect } from "./labels/paintItemLabels";
 import { sameLabels } from "./labels/sameLabels";
+import { useItemLabels } from "./labels/useItemLabels";
 import { useMeasure } from "./labels/useMeasure";
 import { legendCorner, legendEntries, legendMaximumHeight } from "./legend/entries";
 import { Legend } from "./legend/Legend";
@@ -37,11 +38,12 @@ import { NO_DIMMED } from "./shared/dimmed";
 import { type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
-import { buildScene, groupLabelsFor, NARROW_BOX_WIDTH } from "./shared/scene";
+import { buildingScene, EMPTY_SCENE, groupLabelsFor, NARROW_BOX_WIDTH, SCENE_STEPS_PER_SLICE } from "./shared/scene";
 import { leafTerritories, type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
+import { startSlices, useSliced } from "./shared/useSliced";
 import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
@@ -402,8 +404,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // keeps the view, that degenerate scale would stick. A `ResizeObserver`
   // does report such boxes (a parent animating open from height 0, or one
   // sized by content that loads later), so they must not become the fit
-  // basis; the map renders nothing until both sides are positive.
-  const ready = box !== null && box.width > 0 && box.height > 0;
+  // basis; the map renders nothing until both sides are positive, nor
+  // (`ready`, below) until the corpus's scene is built.
+  const boxReady = box !== null && box.width > 0 && box.height > 0;
   const width = box?.width ?? 0;
   const height = box?.height ?? 0;
 
@@ -424,26 +427,31 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const measure = useMeasure();
   // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
   const paletteKey = theme.palette.join("|");
-  const scene = useMemo(
-    () =>
-      buildScene(
-        spec,
-        {
-          hullPadding: tuning.hullPadding,
-          labelClasses: { large: tuning.labelClasses.large, medium: tuning.labelClasses.medium },
-        },
-        {
-          territoryFonts: {
-            large: theme.territoryFonts.large,
-            medium: theme.territoryFonts.medium,
-            small: theme.territoryFonts.small,
-            compact: theme.territoryFonts.compact,
+  const sceneBuild = useMemo(
+    () => ({
+      spec,
+      ...startSlices(
+        buildingScene(
+          spec,
+          {
+            hullPadding: tuning.hullPadding,
+            labelClasses: { large: tuning.labelClasses.large, medium: tuning.labelClasses.medium },
           },
-          palette: paletteKey === "" ? [] : paletteKey.split("|"),
-          territoryLabel: theme.territoryLabel,
-        },
-        measure,
+          {
+            territoryFonts: {
+              large: theme.territoryFonts.large,
+              medium: theme.territoryFonts.medium,
+              small: theme.territoryFonts.small,
+              compact: theme.territoryFonts.compact,
+            },
+            palette: paletteKey === "" ? [] : paletteKey.split("|"),
+            territoryLabel: theme.territoryLabel,
+          },
+          measure,
+        ),
+        SCENE_STEPS_PER_SLICE,
       ),
+    }),
     [
       spec,
       measure,
@@ -459,6 +467,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     ],
   );
 
+  // Built in slices (spec mobile §7): a large corpus's scene takes several
+  // tasks. While a tuning or theme change rebuilds it, the corpus's last
+  // scene stands in; a new corpus's map waits (`ready` below) for its own.
+  const builtScene = useSliced(sceneBuild);
+  const built = builtScene?.sliced.spec === spec ? builtScene.value : null;
+  const scene = built ?? EMPTY_SCENE;
+  const ready = boxReady && built !== null;
+
   // Seeds compared by value: a palette change rebuilds the scene but not its names (spec item labels §3).
   // State, not a ref: React's "information from previous renders" pattern, which the compiler accepts.
   // The memo reads this pass's seeds, never the stale state: placing with the old names would be thrown
@@ -468,15 +484,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   if (seedsChanged) setSeeds(scene.labels);
   const placementSeeds = seedsChanged ? scene.labels : seeds;
   const itemLabelFont = theme.itemLabelFont ?? DEFAULT_ITEM_LABEL_FONT;
-  const itemLabels = useMemo(
-    () =>
-      placeItemLabels(
-        spec,
-        placementSeeds,
-        { font: itemLabelFont, width: tuning.itemLabelWidth, lines: tuning.itemLabelLines },
-        measure,
-      ),
-    [spec, placementSeeds, itemLabelFont, tuning.itemLabelWidth, tuning.itemLabelLines, measure],
+  // Not before the scene: its names seed the placement, so placing without them is thrown away.
+  const itemLabels = useItemLabels(
+    built === null ? null : spec,
+    placementSeeds,
+    { font: itemLabelFont, width: tuning.itemLabelWidth, lines: tuning.itemLabelLines },
+    measure,
   );
 
   const groupsById = useMemo(() => new Map(scene.groups.map((group) => [group.id, group] as const)), [scene.groups]);
@@ -1670,9 +1683,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       const node = id === null ? undefined : nodesById.get(id);
       if (node && onSelect) onSelect(node);
     }
-    // A touch has no hover: a tap off a card names what is under it, the
-    // way a mouse resting there would (spec categories §7).
-    if (pointerType === "touch" && cardId === null) resolveHover(position);
+    // A touch has no hover: a tap off a card names the territory under it, the
+    // way a mouse resting there would (spec categories §7). A tapped item is
+    // selected and its card names it, so it gets no balloon besides.
+    if (pointerType === "touch" && cardId === null) {
+      if (id === null) resolveHover(position);
+      else if (hoverReference.current !== null) setHover(null);
+    }
   };
 
   const dispatch = (intent: GestureIntent, event: PointerEvent) => {

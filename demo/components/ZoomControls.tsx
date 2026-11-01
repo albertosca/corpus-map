@@ -3,7 +3,7 @@ import type { CSSProperties, ReactElement, RefObject } from "react";
 import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER, STRIP_HEIGHT_ESTIMATE } from "./floatingLayout";
-import { useViewportWidth } from "./narrow";
+import { TOUCH_TARGET_SIZE, useViewportWidth } from "./narrow";
 
 interface ZoomControlsProps {
   mapRef: RefObject<CorpusMapHandle | null>;
@@ -19,7 +19,7 @@ interface ZoomControlsProps {
 }
 
 /** Fit's side on a narrow window: the 44 px touch target (spec mobile §6). */
-const NARROW_BUTTON_SIZE = 44;
+const NARROW_BUTTON_SIZE = TOUCH_TARGET_SIZE;
 
 /** The buttons' own width — shared with `buttonStyle` below and with the breakpoint calculation; exported so the test can compute the same breakpoint rather than duplicating the number. */
 export const BUTTON_WIDTH = 84;

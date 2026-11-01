@@ -2,13 +2,14 @@
 // The suite's setup (cleanup, the jsdom `getContext` stub) is imported here,
 // not in the bench config, because `field.test.ts` runs in node.
 import "../test/setup";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../demo/App";
 import arxiv from "../demo/corpora/arxiv.json";
 import { withExpandedArxiv } from "../demo/corpora/compact";
 import { CorpusMap } from "../src/CorpusMap";
+import type { MapSpec } from "../src/shared/spec";
 import { validateSpec } from "../src/shared/spec";
 
 function medianOf(values: number[]): number {
@@ -44,6 +45,30 @@ class FixedResizeObserver {
   unobserve(): void {}
 
   disconnect(): void {}
+}
+
+/**
+ * Mounts the map at 1280 x 800 and waits until its scene is built and fitted
+ * (the first `onViewChange`): arXiv's scene is built across tasks (spec mobile
+ * §7), and a wheel or drag before then has nothing to move.
+ */
+async function renderReadyMap(spec: MapSpec, onRender: ProfilerOnRenderCallback) {
+  let ready = false;
+  const rendered = render(
+    <Profiler id="map" onRender={onRender}>
+      <CorpusMap
+        spec={spec}
+        renderCard={() => null}
+        width={1280}
+        height={800}
+        onViewChange={() => {
+          ready = true;
+        }}
+      />
+    </Profiler>,
+  );
+  await waitFor(() => expect(ready).toBe(true), { timeout: 10_000 });
+  return rendered;
 }
 
 /** Sums each animation frame's commit durations, so a frame that commits twice counts once, whole. */
@@ -82,17 +107,15 @@ function dragZoomedIn(container: HTMLElement, zoomSteps: number, recorder: Retur
 }
 
 describe("commit cost", () => {
-  it("prints the map's median commit for a wheel step on arXiv", () => {
+  it("prints the map's median commit for a wheel step on arXiv", async () => {
     const durations: number[] = [];
     const record: ProfilerOnRenderCallback = (_id, phase, actualDuration) => {
       if (phase !== "mount") durations.push(actualDuration);
     };
     const spec = validateSpec(withExpandedArxiv(arxiv));
-    const { container } = render(
-      <Profiler id="map" onRender={record}>
-        <CorpusMap spec={spec} renderCard={() => null} width={1280} height={800} />
-      </Profiler>,
-    );
+    const { container } = await renderReadyMap(spec, record);
+    // Only the wheel's commits: the ones that built the scene are not the cost measured here.
+    durations.length = 0;
     const surface = container.querySelector("[data-map-surface]") as HTMLElement;
     for (let step = 0; step < 20; step += 1) fireEvent.wheel(surface, { deltaY: -40, clientX: 640, clientY: 400 });
     const median = medianOf(durations);
@@ -129,11 +152,7 @@ describe("commit cost", () => {
     appRender.unmount();
 
     const map = frameRecorder();
-    const mapRender = render(
-      <Profiler id="map" onRender={map.record}>
-        <CorpusMap spec={spec} renderCard={() => null} width={1280} height={800} />
-      </Profiler>,
-    );
+    const mapRender = await renderReadyMap(spec, map.record);
     dragZoomedIn(mapRender.container, zoomSteps, map);
 
     const appFrame = medianOf(app.frameTotals());

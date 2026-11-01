@@ -58,4 +58,51 @@ describe("relatedItems (spec slice E §6)", () => {
     expect(relatedItems(base, "ghost")).toEqual([]);
     expect(relatedItems({ ...base, edges: [{ source: "a", target: "b" }] }, "c")).toEqual([]);
   });
+
+  it("indexes a spec once, so selecting item after item does not walk every edge again (spec mobile §7, INP)", () => {
+    let edgeReads = 0;
+    let nodeReads = 0;
+    const edges = [
+      { source: "a", target: "b", weight: 0.5 },
+      { source: "c", target: "d" },
+    ];
+    const spec: MapSpec = {
+      ...base,
+      get nodes() {
+        nodeReads += 1;
+        return base.nodes;
+      },
+      get edges() {
+        edgeReads += 1;
+        return edges;
+      },
+    };
+
+    const first = relatedItems(spec, "a");
+    const second = relatedItems(spec, "c");
+
+    expect(first.map((item) => item.node.id)).toEqual(["b"]);
+    expect(second.map((item) => item.node.id)).toEqual(["d"]);
+    expect(edgeReads).toBe(1);
+    expect(nodeReads).toBe(1);
+  });
+
+  it("reuses the index the scene already built, so the first selection does not walk every edge either (spec mobile §7, INP)", () => {
+    let edgeReads = 0;
+    const edges = [{ source: "a", target: "b", weight: 0.5 }];
+    const spec: MapSpec = {
+      ...base,
+      get edges() {
+        edgeReads += 1;
+        return edges;
+      },
+    };
+
+    const sceneRelated = buildRelated(spec);
+    const first = relatedItems(spec, "a");
+
+    expect(first.map((item) => item.node.id)).toEqual(["b"]);
+    expect(buildRelated(spec)).toBe(sceneRelated);
+    expect(edgeReads).toBe(1);
+  });
 });

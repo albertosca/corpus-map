@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CorpusMap } from "../src/CorpusMap";
@@ -115,6 +115,32 @@ describe("arXiv loader", () => {
     expect(spec.territories.length).toBeGreaterThan(1);
   });
 
+  it("validates the expanded body in a later task, so one load is two shorter tasks (spec mobile §7)", async () => {
+    vi.stubGlobal("fetch", vi.fn(fetchArxivAsset));
+    const load = (await arxivEntry()).load;
+    // Polled on the real clock: vi.waitFor advances fake timers on every check,
+    // so it would fire the very timer this test waits to see scheduled.
+    const realSetTimeout = globalThis.setTimeout;
+    const pause = () => new Promise((resolve) => realSetTimeout(resolve, 20));
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      let settled = false;
+      const loading = load().then(() => {
+        settled = true;
+      });
+
+      for (let poll = 0; poll < 500 && vi.getTimerCount() === 0 && !settled; poll += 1) await pause();
+      expect(vi.getTimerCount()).toBe(1);
+      expect(settled).toBe(false);
+      vi.runAllTimers();
+      await loading;
+
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects on an HTTP error status instead of parsing the error page", async () => {
     vi.stubGlobal(
       "fetch",
@@ -177,7 +203,8 @@ describe("gallery corpora", () => {
           onRegimeChange,
         }),
       );
-      expect(onRegimeChange.mock.calls[0]).toEqual(["far"]);
+      // A large corpus's scene is built across tasks (spec mobile §7), so the first call can come later.
+      await waitFor(() => expect(onRegimeChange.mock.calls[0]).toEqual(["far"]));
       unmount();
     }
   });

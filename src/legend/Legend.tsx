@@ -167,7 +167,7 @@ export function LegendView(properties: LegendProps): ReactElement {
               ...text,
               width: "100%",
               boxSizing: "border-box",
-              minHeight: touchTargets ? 44 : 24,
+              minHeight: touchTargets ? FINGER.minHeight : 24,
               margin: "4px 0",
             }}
           />

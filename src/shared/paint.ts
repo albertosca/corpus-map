@@ -76,7 +76,10 @@ export function paint(
   paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
-    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha);
+    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha, {
+      width: frame.width,
+      height: frame.height,
+    });
     const itemLabelAlpha = frame.itemLabelAlpha ?? 0;
     if (frame.regime === "near" && itemLabelAlpha > 0 && frame.itemLabels) {
       surface.globalAlpha(frame.pointAlpha * itemLabelAlpha);

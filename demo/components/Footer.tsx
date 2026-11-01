@@ -73,10 +73,9 @@ const style: CSSProperties = {
   fontSize: 12,
 };
 
-/** Takes the strip's room left of the indicator and wraps there; the strip carries the text size and the surface. */
+/** Follows the indicator in the strip's run of text and wraps under it; the strip carries the text size and the surface. */
 const inlineStyle: CSSProperties = {
-  flex: "1 1 0",
-  minWidth: 0,
+  display: "inline",
   whiteSpace: "normal",
 };
 

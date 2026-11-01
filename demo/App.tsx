@@ -41,9 +41,10 @@ const bottomStripStyle: CSSProperties = {
   bottom: 0,
   maxWidth: "100vw",
   zIndex: 10,
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
+  // One run of text, not a flex row: beside the indicator the credit got
+  // the leftover width and took three lines at 320 px; in flow it wraps
+  // under the indicator and keeps the strip to two (spec mobile §6).
+  display: "block",
   padding: "4px 12px",
   lineHeight: 1.25,
   fontSize: 12,
@@ -585,8 +586,7 @@ export function App({ loadArxiv }: AppProps = {}) {
       />
       {narrow ? (
         <div data-bottom-strip data-floating-control style={bottomStripStyle}>
-          <Indicator store={viewStore} inline />
-          <Footer corpusId={corpusId} inline />
+          <Indicator store={viewStore} inline /> <Footer corpusId={corpusId} inline />
         </div>
       ) : (
         <>

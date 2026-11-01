@@ -1302,7 +1302,7 @@ describe("App (showcase Task 5)", () => {
       /** Every button and select inside a floating control declares an inline `minHeight` of at least 44 px. */
       function checkTouchTargets(container: HTMLElement): void {
         for (const control of Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"))) {
-          for (const child of Array.from(control.querySelectorAll<HTMLElement>("button, select"))) {
+          for (const child of Array.from(control.querySelectorAll<HTMLElement>("button, select, a[href]"))) {
             const name = `${labelFor(control)} > ${child.getAttribute("aria-label") ?? child.textContent}`;
             expect(
               Number.parseFloat(child.style.minHeight),
@@ -1353,6 +1353,21 @@ describe("App (showcase Task 5)", () => {
         }
       });
 
+      it("flows the indicator and the credit as one run of text, so the credit wraps under the indicator and not beside it (two lines at 320 px, spec mobile §6)", async () => {
+        const container = await renderNarrow();
+        const strip = container.querySelector<HTMLElement>("[data-bottom-strip]");
+        // Side by side (a flex row), the credit got the width left of the
+        // indicator and took three lines at 320 px in the browser pass.
+        expect(strip?.style.display).toBe("block");
+        const indicator = strip?.querySelector<HTMLElement>("[data-indicator]");
+        const footer = strip?.querySelector<HTMLElement>("[data-footer]");
+        expect(indicator?.style.display).toBe("inline");
+        expect(indicator?.style.whiteSpace).toBe("nowrap");
+        expect(footer?.style.display).toBe("inline");
+        // A margin alone reads as "itemsThank": a real space keeps two words apart for a screen reader.
+        expect(strip?.textContent).toMatch(/items Thank you to arXiv/);
+      });
+
       it("opens a selected item in a collapsed bottom sheet and keeps a revealed item above it (insets.bottom)", async () => {
         const relatedSpec = {
           ...SELECT_SPEC,
@@ -1397,7 +1412,7 @@ describe("App (showcase Task 5)", () => {
         checkAllFloatingControls(container);
       });
 
-      it("gives every button and select inside a floating control a 44 px minimum height", async () => {
+      it("gives every button, select and link inside a floating control a 44 px minimum height", async () => {
         const container = await renderNarrow();
         checkTouchTargets(container);
 

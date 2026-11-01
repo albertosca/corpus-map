@@ -1,7 +1,15 @@
+/** One point's mark at screen (`horizontal`, `vertical`), for a batch of marks of one colour. */
+export interface PointMark {
+  id: string;
+  horizontal: number;
+  vertical: number;
+}
+
 export interface Surface {
   clear(): void;
   polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-  circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
+  /** Fills a disc of `radius` around every mark, all in `fill`, as one path (one fill for the batch). */
+  fillCircles(marks: readonly PointMark[], radius: number, fill: string): void;
   /** Draws `text` centred on (horizontal, vertical); `letterSpacing` (a CSS length) applies to this call only. */
   text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
   /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
@@ -13,8 +21,8 @@ export interface Surface {
   outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
   /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
   ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
-  /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
-  hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
+  /** Strokes a circle of `radius` (no fill) around every mark at `width` as one path (one stroke for the batch), leaving later calls untouched. */
+  strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
   /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
   line(start: [number, number], end: [number, number], colour: string, width: number): void;
   /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
@@ -40,6 +48,8 @@ export class RecordingSurface implements Surface {
   hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
   lines: Array<{ from: [number, number]; to: [number, number]; colour: string; width: number }> = [];
   plates: Array<{ left: number; top: number; width: number; height: number; radius: number; fill: string }> = [];
+  /** Every `fillCircles`/`strokeCircles` call, in order; each mark is also logged in `circles`/`hollowCircles` and `calls`. */
+  pointBatches: Array<{ kind: "fill" | "stroke"; colour: string; ids: string[] }> = [];
   calls: Array<
     | "clear"
     | "polygon"
@@ -63,13 +73,19 @@ export class RecordingSurface implements Surface {
     this.calls.push("polygon");
     this.polygons.push({ points, fill, stroke });
   }
-  circle(id: string, horizontal: number, vertical: number, radius: number, fill: string) {
-    this.calls.push("circle");
-    this.circles.push({ id, x: horizontal, y: vertical, r: radius, fill });
+  fillCircles(marks: readonly PointMark[], radius: number, fill: string) {
+    this.pointBatches.push({ kind: "fill", colour: fill, ids: marks.map((mark) => mark.id) });
+    for (const mark of marks) {
+      this.calls.push("circle");
+      this.circles.push({ id: mark.id, x: mark.horizontal, y: mark.vertical, r: radius, fill });
+    }
   }
-  hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number) {
-    this.calls.push("hollowCircle");
-    this.hollowCircles.push({ id, x: horizontal, y: vertical, r: radius, colour, width });
+  strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number) {
+    this.pointBatches.push({ kind: "stroke", colour, ids: marks.map((mark) => mark.id) });
+    for (const mark of marks) {
+      this.calls.push("hollowCircle");
+      this.hollowCircles.push({ id: mark.id, x: mark.horizontal, y: mark.vertical, r: radius, colour, width });
+    }
   }
   text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string) {
     this.calls.push("text");
@@ -137,9 +153,14 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.strokeStyle = stroke;
       context.stroke();
     },
-    circle(_id, horizontal, vertical, radius, fill) {
+    fillCircles(marks, radius, fill) {
+      if (marks.length === 0) return;
       context.beginPath();
-      context.arc(horizontal, vertical, radius, 0, Math.PI * 2);
+      for (const mark of marks) {
+        // A sub-path per mark, so no line joins one circle to the next.
+        context.moveTo(mark.horizontal + radius, mark.vertical);
+        context.arc(mark.horizontal, mark.vertical, radius, 0, Math.PI * 2);
+      }
       context.fillStyle = fill;
       context.fill();
     },
@@ -165,10 +186,14 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.fillStyle = fill;
       context.fill();
     },
-    hollowCircle(_id, horizontal, vertical, radius, colour, width) {
+    strokeCircles(marks, radius, colour, width) {
+      if (marks.length === 0) return;
       context.save();
       context.beginPath();
-      context.arc(horizontal, vertical, radius, 0, Math.PI * 2);
+      for (const mark of marks) {
+        context.moveTo(mark.horizontal + radius, mark.vertical);
+        context.arc(mark.horizontal, mark.vertical, radius, 0, Math.PI * 2);
+      }
       context.strokeStyle = colour;
       context.lineWidth = width;
       context.stroke();

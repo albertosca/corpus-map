@@ -456,8 +456,13 @@ export interface RelatedEdge {
     weight: number | undefined;
     reason: string | undefined;
 }
-/** Every item's related items, both directions of each undirected edge, heaviest first, absent weights last, ties by id. */
-export declare function buildRelated(spec: Pick<MapSpec, "edges">): Map<string, RelatedEdge[]>;
+/**
+ * Every item's related items, both directions of each undirected edge,
+ * heaviest first, absent weights last, ties by id. Built once per spec
+ * object: the scene builds it while the map loads, and `relatedItems` reads
+ * the same index, so not even the first selection walks every edge again.
+ */
+export declare function buildRelated(spec: Pick<MapSpec, "edges">): ReadonlyMap<string, readonly RelatedEdge[]>;
 /** A related item with the edge's weight and reason, as the related list and `relatedItems` give it. */
 export interface RelatedItem {
     node: MapNode;
@@ -466,8 +471,9 @@ export interface RelatedItem {
 }
 /**
  * `id`'s related items, heaviest first, absent weights last, then by id (spec
- * slice E §6). Each call indexes the whole edge list afresh, so a caller
- * asking for many ids of one spec should memoize per spec.
+ * slice E §6). The indexes are built once per spec object and kept while
+ * the spec lives: rebuilding them for every selection took about 100 ms of a
+ * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with.
  */
 export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 
@@ -519,6 +525,7 @@ export declare function itemLabelAt(labels: readonly PlacedItemLabel[], viewport
 
 // labels/itemLabels.d.ts
 import type { MapSpec } from "../shared/spec";
+import { type Steps } from "../shared/steps";
 import type { Measure, PlacedLabel } from "./placement";
 /** Screen pixels between the point's centre and the bottom of its label's plate. */
 export declare const ITEM_LABEL_GAP = 6;
@@ -564,6 +571,11 @@ export interface ItemLabelOptions {
  * re-places the labels.
  */
 export declare function placeItemLabels(spec: MapSpec, seeds: readonly PlacedLabel[], options: ItemLabelOptions, measure: Measure): PlacedItemLabel[];
+/**
+ * `placeItemLabels` one step per label wrapped and one per plate placed, so
+ * a large corpus is placed in slices between frames (spec mobile §7).
+ */
+export declare function placingItemLabels(spec: MapSpec, seeds: readonly PlacedLabel[], options: ItemLabelOptions, measure: Measure): Steps<PlacedItemLabel[]>;
 
 // labels/paintItemLabels.d.ts
 import type { Surface } from "../shared/surface";
@@ -629,6 +641,7 @@ export interface LabelBox {
 export declare function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void;
 
 // labels/placeBoxes.d.ts
+import { type Steps } from "../shared/steps";
 /** A label box to place: its world anchor, its screen size, and its centre's screen offset from the anchor. */
 export interface BoxInput {
     id: string;
@@ -659,6 +672,8 @@ export declare function offsetSeparation(horizontalDelta: number, verticalDelta:
  * the scan, so the result is exactly the all-pairs loop's.
  */
 export declare function placeBoxes(ordered: readonly BoxInput[], fixed?: readonly FixedBox[]): number[];
+/** `placeBoxes` one step per box placed. */
+export declare function placingBoxes(ordered: readonly BoxInput[], fixed?: readonly FixedBox[]): Steps<number[]>;
 
 // labels/placement.d.ts
 import type { Point } from "../territories/shape";
@@ -728,6 +743,30 @@ export declare function poleOfInaccessibility(ring: Ring, precision: number): Po
 import type { PlacedLabel } from "./placement";
 /** Whether two placements would seed item labels identically (a palette change rebuilds the scene, not its names). */
 export declare function sameLabels(first: readonly PlacedLabel[], second: readonly PlacedLabel[]): boolean;
+
+// labels/useItemLabels.d.ts
+import type { MapSpec } from "../shared/spec";
+import { type ItemLabelOptions, type PlacedItemLabel } from "./itemLabels";
+import type { Measure, PlacedLabel } from "./placement";
+/**
+ * Steps of item-label placement run in one slice: the first slice runs during
+ * the render, where measuring is cold (400 steps took about 110 ms there for
+ * the 8,000-item arXiv corpus at the 4× CPU slowdown spec mobile §7 measures
+ * with), and later ones also stop at `SLICE_BUDGET_MILLISECONDS`. Counted in
+ * steps, not time, so a corpus small enough for one slice is placed during
+ * the render on every machine.
+ */
+export declare const ITEM_LABEL_STEPS_PER_SLICE = 100;
+/**
+ * The item labels of `spec`, placed by `placingItemLabels` through
+ * `useSliced`: the first slice runs in the render, the rest in later tasks,
+ * so a large corpus never holds the main thread in one long task (spec
+ * mobile §7). Labels show at near only, so the wait is seldom seen. While a
+ * placement is unfinished the corpus's last labels stand in, so a tuning
+ * change does not blank them; a new corpus, or `spec` null (its scene still
+ * building), shows none until its own are placed.
+ */
+export declare function useItemLabels(spec: MapSpec | null, seeds: readonly PlacedLabel[], options: ItemLabelOptions, measure: Measure): readonly PlacedItemLabel[];
 
 // labels/useMeasure.d.ts
 import { type Measure } from "./placement";
@@ -1010,9 +1049,16 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  * the same `pointRadius`, so both marks have the same footprint. A dimmed
  * territory's points are drawn first, underneath, at `alpha` times
  * `DIMMED_ALPHA`; the surface is left at `alpha`. A point with no territory
- * is never dimmed.
+ * is never dimmed. Each pass draws its points of one kind and colour as one
+ * batch (one path, one fill or stroke). Given the canvas `box`, a point
+ * whose mark lies wholly outside it is skipped (spec mobile §7: at near a
+ * phone frame would otherwise stroke every point of the corpus to show a
+ * fifth of them).
  */
-export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number): void;
+export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number, box?: {
+    width: number;
+    height: number;
+}): void;
 
 // points/paintSelection.d.ts
 import type { Scene } from "../shared/scene";
@@ -1168,6 +1214,7 @@ import { type TerritoryGroup } from "../territories/groups";
 import { type Ring } from "../territories/shape";
 import { type Bounds } from "../viewport/fit";
 import { type MapNode, type MapSpec } from "./spec";
+import { type Steps } from "./steps";
 import { type Theme } from "./theme";
 import type { Tuning } from "./tuning";
 /** Everything about a corpus that does not change with the viewport: computed once per spec. */
@@ -1218,6 +1265,26 @@ export declare const GROUP_LETTER_SPACING = 1;
  * whole-object identity for fields it never uses.
  */
 export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">, measure: Measure): Scene;
+/** The scene of no corpus: what a map reads while its corpus's own scene is still being built. */
+export declare const EMPTY_SCENE: Scene;
+/**
+ * Scene steps run in one slice: the first one runs during the render, so the
+ * gallery's small corpora (17-27 steps) still build there, while a corpus
+ * whose first region alone outweighs it (arXiv) builds nothing there; later
+ * slices also stop at `SLICE_BUDGET_MILLISECONDS`, because steps differ in
+ * cost. Counted in steps, not time, so that holds on every machine.
+ */
+export declare const SCENE_STEPS_PER_SLICE = 32;
+/** Members whose outlining one scene step stands for, so a slice of steps holds about the same work on any corpus. */
+export declare const SCENE_POINTS_PER_STEP = 50;
+/**
+ * `buildScene` in steps (spec mobile §7): before each region (a leaf's shape
+ * and name anchor, a family's shape), weighted by its points, and after the
+ * colours and each name set, so a large corpus can be built across tasks.
+ * A region's steps come before its work, so a first slice too small for the
+ * first region (the one run during the render) does none of it.
+ */
+export declare function buildingScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">, measure: Measure): Steps<Scene>;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
@@ -1286,11 +1353,38 @@ export declare class SpecError extends Error {
  */
 export declare function validateSpec(input: unknown): MapSpec;
 
+// shared/steps.d.ts
+/** Work that can stop between steps: each `yield` ends one step, the return value is the result. */
+export type Steps<Result> = Generator<void, Result, void>;
+/** Where work stands after `advance`: finished with its result, or with steps left. */
+export type Progress<Result> = {
+    done: true;
+    value: Result;
+} | {
+    done: false;
+};
+/**
+ * Runs up to `count` steps of `steps`, so a caller can hand the main thread
+ * back between slices (spec mobile §7), stopping sooner after a step that
+ * leaves `overBudget` true. Work whose last step is the last one run reports
+ * itself finished on the next call.
+ */
+export declare function advance<Result>(steps: Steps<Result>, count: number, overBudget?: () => boolean): Progress<Result>;
+/** Runs `steps` to the end. */
+export declare function finish<Result>(steps: Steps<Result>): Result;
+
 // shared/surface.d.ts
+/** One point's mark at screen (`horizontal`, `vertical`), for a batch of marks of one colour. */
+export interface PointMark {
+    id: string;
+    horizontal: number;
+    vertical: number;
+}
 export interface Surface {
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-    circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
+    /** Fills a disc of `radius` around every mark, all in `fill`, as one path (one fill for the batch). */
+    fillCircles(marks: readonly PointMark[], radius: number, fill: string): void;
     /** Draws `text` centred on (horizontal, vertical); `letterSpacing` (a CSS length) applies to this call only. */
     text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     /** Sets the alpha applied to every draw call until the next `globalAlpha` call. */
@@ -1302,8 +1396,8 @@ export interface Surface {
     outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
     /** Strokes a circle of radius `radius` centred on (horizontal, vertical) (no fill) at `width`, leaving later calls untouched. */
     ring(horizontal: number, vertical: number, radius: number, color: string, width: number): void;
-    /** Strokes a circle (no fill) for point `id`, at `width`, leaving later calls untouched. */
-    hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
+    /** Strokes a circle of `radius` (no fill) around every mark at `width` as one path (one stroke for the batch), leaving later calls untouched. */
+    strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
     /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
     line(start: [number, number], end: [number, number], colour: string, width: number): void;
     /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
@@ -1374,11 +1468,17 @@ export declare class RecordingSurface implements Surface {
         radius: number;
         fill: string;
     }>;
+    /** Every `fillCircles`/`strokeCircles` call, in order; each mark is also logged in `circles`/`hollowCircles` and `calls`. */
+    pointBatches: Array<{
+        kind: "fill" | "stroke";
+        colour: string;
+        ids: string[];
+    }>;
     calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "plate" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
-    circle(id: string, horizontal: number, vertical: number, radius: number, fill: string): void;
-    hollowCircle(id: string, horizontal: number, vertical: number, radius: number, colour: string, width: number): void;
+    fillCircles(marks: readonly PointMark[], radius: number, fill: string): void;
+    strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
     text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
     globalAlpha(alpha: number): void;
     outline(rings: Array<Array<[number, number]>>, color: string, width: number): void;
@@ -1486,6 +1586,44 @@ export interface Tuning {
 }
 export declare const DEFAULT_TUNING: Tuning;
 export declare function resolveTuning(partial: Partial<Tuning> | undefined): Tuning;
+
+// shared/useSliced.d.ts
+import { type Progress, type Steps } from "./steps";
+/** Work started by `startSlices`: its steps, the slice size, and how its first slice ended. */
+export interface Sliced<Result> {
+    steps: Steps<Result>;
+    stepsPerSlice: number;
+    first: Progress<Result>;
+}
+/** What `Work` returns when it finishes. */
+export type ResultOf<Work> = Work extends Sliced<infer Result> ? Result : never;
+/** Work that finished, with the `Sliced` it came from (so a caller can tell whose result it is). */
+export interface Finished<Work> {
+    sliced: Work;
+    value: ResultOf<Work>;
+}
+/**
+ * Runs the first `stepsPerSlice` steps of `steps` now. Call it inside a
+ * `useMemo`, so the first slice runs during the render that needs it.
+ */
+export declare function startSlices<Result>(steps: Steps<Result>, stepsPerSlice: number): Sliced<Result>;
+/**
+ * Milliseconds a slice after the first may run before it hands the main
+ * thread back, whatever its step count: steps differ in cost (one scene step
+ * colours every territory), and a task over 50 ms counts against total
+ * blocking time (spec mobile §7).
+ */
+export declare const SLICE_BUDGET_MILLISECONDS = 16;
+/**
+ * The latest finished work (spec mobile §7): `sliced` itself when its first
+ * slice finished it, otherwise the work that finished last, while the rest
+ * of `sliced` runs one slice per task (at most `stepsPerSlice` steps and
+ * `SLICE_BUDGET_MILLISECONDS` by `now`), so no slice holds the main thread
+ * long. Null until some work has finished. Work replaced before it finished
+ * is dropped. The first slice has no time budget, so whether work finishes
+ * during the render never depends on the machine.
+ */
+export declare function useSliced<Work extends Sliced<unknown>>(sliced: Work, now?: () => number): Finished<Work> | null;
 
 // territories/colour.d.ts
 import type { Territory } from "../shared/spec";
@@ -1643,7 +1781,7 @@ export declare function extent(points: readonly Point[]): number;
 export declare function disksOutline(points: readonly Point[], radius: number): Ring[];
 /**
  * Groups of points whose disks of radius `link / 2` touch, by union-find over
- * a grid of cell `link`. Outlining each group on its own grid keeps one far
+ * a grid of cell `link / √2`. Outlining each group on its own grid keeps one far
  * outlier from stretching a shared grid until a dense cluster falls between
  * its vertices and disappears.
  */
@@ -1777,6 +1915,14 @@ export declare function followInto(viewport: Viewport, horizontal: number, verti
  */
 /** How far, in box pixels, a press may end from where it went down and still be a tap. */
 export declare const CLICK_SLOP = 4;
+/**
+ * How far, in box pixels, a finger may stray from where it went down and
+ * still tap when it comes back within `CLICK_SLOP`: past it the press is a
+ * pan for good, the way a touch browser cancels the tap once a scroll
+ * starts. Wider than the slop so a finger's jitter still taps; a mouse
+ * keeps the click's rule (only the distance at the up decides).
+ */
+export declare const TOUCH_STRAY_DISTANCE = 10;
 /** Two taps within this many milliseconds, up to up, make a double tap (touch only). */
 export declare const DOUBLE_TAP_INTERVAL = 300;
 /** ...and within this many pixels of each other. */
@@ -1828,8 +1974,9 @@ interface Finger {
 }
 /**
  * Opaque to callers. `phase` "one" is a single press that can still tap;
- * "pinch" is two fingers; "pan" is the finger left after a pinch, which never
- * taps (it can only finish a two-finger tap).
+ * "pinch" is two fingers; "pan" is a finger that strayed past
+ * `TOUCH_STRAY_DISTANCE`, or the finger left after a pinch, and never taps
+ * (the latter can only finish a two-finger tap).
  */
 export interface GestureState {
     readonly phase: "idle" | "one" | "pinch" | "pan";

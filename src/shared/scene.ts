@@ -7,6 +7,7 @@ import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/group
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import { type Bounds, ringBounds } from "../viewport/fit";
 import { leafTerritories, type MapNode, type MapSpec, parentIds, type Territory } from "./spec";
+import { finish, type Steps } from "./steps";
 import { DEFAULT_COMPACT_GROUP_FONT, type Theme } from "./theme";
 import type { Tuning } from "./tuning";
 
@@ -109,6 +110,59 @@ export function buildScene(
   theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">,
   measure: Measure,
 ): Scene {
+  return finish(buildingScene(spec, tuning, theme, measure));
+}
+
+/** The scene of no corpus: what a map reads while its corpus's own scene is still being built. */
+export const EMPTY_SCENE: Scene = {
+  byId: new Map(),
+  shapes: new Map(),
+  labels: [],
+  colours: new Map(),
+  paintOrder: [],
+  groups: [],
+  groupLabels: [],
+  compactGroupLabels: [],
+  compactGroupFont: DEFAULT_COMPACT_GROUP_FONT,
+  bounds: new Map(),
+  groupShapes: new Map(),
+  groupBounds: new Map(),
+  groupColours: new Map(),
+  related: new Map(),
+  maximumEdgeWeight: 0,
+};
+
+/**
+ * Scene steps run in one slice: the first one runs during the render, so the
+ * gallery's small corpora (17-27 steps) still build there, while a corpus
+ * whose first region alone outweighs it (arXiv) builds nothing there; later
+ * slices also stop at `SLICE_BUDGET_MILLISECONDS`, because steps differ in
+ * cost. Counted in steps, not time, so that holds on every machine.
+ */
+export const SCENE_STEPS_PER_SLICE = 32;
+
+/** Members whose outlining one scene step stands for, so a slice of steps holds about the same work on any corpus. */
+export const SCENE_POINTS_PER_STEP = 50;
+
+/** One step for a region, plus one per `SCENE_POINTS_PER_STEP` of its `points`. */
+function* region(points: number): Steps<void> {
+  const count = 1 + Math.ceil(points / SCENE_POINTS_PER_STEP);
+  for (let step = 0; step < count; step += 1) yield;
+}
+
+/**
+ * `buildScene` in steps (spec mobile §7): before each region (a leaf's shape
+ * and name anchor, a family's shape), weighted by its points, and after the
+ * colours and each name set, so a large corpus can be built across tasks.
+ * A region's steps come before its work, so a first slice too small for the
+ * first region (the one run during the render) does none of it.
+ */
+export function* buildingScene(
+  spec: MapSpec,
+  tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
+  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">,
+  measure: Measure,
+): Steps<Scene> {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
   // Territories too small to measure their own spacing get disks 1% of the corpus wide.
   const fallback = 0.01 * Math.max(extent(spec.nodes.map((node) => [node.x, node.y] as Point)), 1e-9);
@@ -130,7 +184,9 @@ export function buildScene(
   const shapes = new Map<string, Ring[]>();
   const leaves = leafTerritories(spec);
   const parents = parentIds(spec);
-  const inputs = leaves.map((territory) => {
+  const inputs: { id: string; name: string; anchor: Point; members: number }[] = [];
+  for (const territory of leaves) {
+    yield* region(territory.members.length);
     const rings = territory.boundary ? copyBoundary(territory.boundary) : outline(pointsOf(territory));
     shapes.set(territory.id, rings);
     const ring = largestRing(rings);
@@ -138,8 +194,8 @@ export function buildScene(
       ring && ring.length >= 3
         ? poleOfInaccessibility(ring, extent(ring) * 0.01)
         : [territory.centroid[0], territory.centroid[1]];
-    return { id: territory.id, name: territory.name, anchor, members: territory.members.length };
-  });
+    inputs.push({ id: territory.id, name: territory.name, anchor, members: territory.members.length });
+  }
   const anchors = new Map(inputs.map((input) => [input.id, input.anchor]));
   const territoriesById = new Map(spec.territories.map((territory) => [territory.id, territory]));
   const groups = deriveTerritoryGroups(spec);
@@ -157,6 +213,9 @@ export function buildScene(
   }));
   const groupShapes = new Map<string, Ring[]>();
   for (const group of groups) {
+    yield* region(
+      group.members.reduce((total, id) => total + (territoriesById.get(id) as Territory).members.length, 0),
+    );
     const parent = parents.has(group.id) ? territoriesById.get(group.id) : undefined;
     if (parent?.boundary) groupShapes.set(group.id, copyBoundary(parent.boundary));
     else if (group.members.length === 1 && group.members[0] === group.id)
@@ -178,25 +237,32 @@ export function buildScene(
     groups.length > 0
       ? familyColours(shapes, groupShapes, groups, leaves, theme.palette, tintDirection(theme))
       : { colours: assignTerritoryColours(shapes, leaves, theme.palette), groupColours: new Map<string, string>() };
+  yield;
+  const labels = placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure);
+  yield;
+  const groupLabels = placeLabels(
+    groupInputs,
+    { large: groupFont, medium: groupFont, small: groupFont },
+    tuning.labelClasses,
+    spaced,
+  );
+  yield;
+  const compactGroupLabels = placeLabels(
+    groupInputs,
+    { large: compactGroupFont, medium: compactGroupFont, small: compactGroupFont },
+    tuning.labelClasses,
+    spaced,
+  );
+  yield;
   return {
     byId,
     shapes,
-    labels: placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure),
+    labels,
     colours: families.colours,
     paintOrder: largestFirst(shapes),
     groups,
-    groupLabels: placeLabels(
-      groupInputs,
-      { large: groupFont, medium: groupFont, small: groupFont },
-      tuning.labelClasses,
-      spaced,
-    ),
-    compactGroupLabels: placeLabels(
-      groupInputs,
-      { large: compactGroupFont, medium: compactGroupFont, small: compactGroupFont },
-      tuning.labelClasses,
-      spaced,
-    ),
+    groupLabels,
+    compactGroupLabels,
     compactGroupFont,
     bounds: boxes(shapes),
     groupShapes,
