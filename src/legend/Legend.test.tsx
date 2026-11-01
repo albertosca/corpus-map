@@ -39,7 +39,7 @@ describe("Legend", () => {
     expect(screen.getByRole("button", { name: "North" })).toBeTruthy();
     expect(screen.getByText("Visited")).toBeTruthy();
     expect(screen.getByText("Not visited")).toBeTruthy();
-    expect(screen.getByText("Scroll to zoom, drag to pan")).toBeTruthy();
+    expect(screen.getByText("Pinch or scroll to zoom, drag to pan")).toBeTruthy();
   });
 
   it("starts collapsed in dense, opens on the toggle, and follows the next presentation change", () => {
@@ -205,5 +205,47 @@ describe("legend headings", () => {
   it("renders no headings for a flat legend", () => {
     render(<Legend {...props()} />);
     expect(screen.queryAllByRole("heading")).toHaveLength(0);
+  });
+});
+
+describe("legend touch targets (spec mobile §5)", () => {
+  /** Every control a finger presses: buttons, checkbox labels (and the spacer that aligns with them), the filter. */
+  function targets(container: HTMLElement): HTMLElement[] {
+    const labels = [...container.querySelectorAll("input[type=checkbox]")].map(
+      (box) => box.closest("label") as HTMLElement,
+    );
+    const spacers = [...container.querySelectorAll<HTMLElement>("li > span[aria-hidden=true]")];
+    return [
+      ...container.querySelectorAll<HTMLElement>("button"),
+      ...labels,
+      ...spacers,
+      container.querySelector("input[type=search]") as HTMLElement,
+    ];
+  }
+  const full = { groups, hidden: new Set(["south"]) };
+
+  it("with touchTargets gives every control a 44 px height, centred where it lays out its content", () => {
+    const { container } = render(<Legend {...props({ ...full, touchTargets: true })} />);
+    const all = targets(container);
+    // The toggle, Show all, two group headers, three rows; three checkbox labels and a spacer; the filter.
+    expect(all.length).toBeGreaterThanOrEqual(11);
+    for (const target of all) {
+      expect(target.style.minHeight).toBe("44px");
+      if (target.style.display.includes("flex")) expect(target.style.alignItems).toBe("center");
+    }
+  });
+
+  it("without touchTargets keeps today's styles", () => {
+    const { container } = render(<Legend {...props({ ...full, touchTargets: false })} />);
+    const styles = [...new Set(targets(container).map((target) => target.getAttribute("style")))].sort();
+    expect(styles).toMatchInlineSnapshot(`
+      [
+        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer;",
+        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; display: flex; align-items: center; gap: 6px; flex: 1 1 0%; text-align: left;",
+        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; flex: 1 1 0%; text-align: left;",
+        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; width: 100%; box-sizing: border-box; min-height: 24px; margin: 4px 0px;",
+        "display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 24px; min-height: 24px; cursor: pointer;",
+      ]
+    `);
   });
 });

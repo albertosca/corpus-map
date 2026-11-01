@@ -22,6 +22,8 @@ export interface LegendProps {
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
   /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
   narrow: boolean;
+  /** The map's box is narrower than 600 px: every control is at least 44 px tall (spec mobile §5). */
+  touchTargets?: boolean | undefined;
   /** The element group disclosures sit in, so a screen reader can jump between groups (spec slice B §6). */
   heading?: HeadingTag | undefined;
   onEntry: (id: string) => void;
@@ -41,6 +43,12 @@ const checkboxTarget = {
   minHeight: 24,
   cursor: "pointer",
 } as const;
+
+/** A finger-sized control: 44 px tall, its content centred vertically. */
+function touch<Style extends object>(style: Style, touchTargets: boolean): Style | (Style & typeof FINGER) {
+  return touchTargets ? { ...style, ...FINGER } : style;
+}
+const FINGER = { minHeight: 44, alignItems: "center" } as const;
 
 function stop(event: SyntheticEvent): void {
   event.stopPropagation();
@@ -69,6 +77,7 @@ export function LegendView(properties: LegendProps): ReactElement {
     maximumHeight,
     theme,
     narrow,
+    touchTargets = false,
     onEntry,
     onHiddenChange,
   } = properties;
@@ -99,6 +108,8 @@ export function LegendView(properties: LegendProps): ReactElement {
   const toggleGroup = (memberIds: readonly string[], shown: "all" | "none" | "mixed") =>
     setHidden(shown === "all" ? [...hidden, ...memberIds] : [...hidden].filter((other) => !memberIds.includes(other)));
   const text = { color: theme.territoryLabel, font: "500 13px system-ui, sans-serif" };
+  const button = touch(plainButton, touchTargets);
+  const checkbox = touch(checkboxTarget, touchTargets);
   return (
     <section
       aria-label="Map legend"
@@ -131,14 +142,14 @@ export function LegendView(properties: LegendProps): ReactElement {
           setHoldOpen(false);
           setOverride(!expanded);
         }}
-        style={{ ...text, ...plainButton, fontWeight: 600 }}
+        style={{ ...text, ...button, fontWeight: 600 }}
       >
         Legend
       </button>
       {expanded ? (
         <div id={listId}>
           {hidden.size > 0 ? (
-            <button type="button" onClick={() => onHiddenChange([])} style={{ ...text, ...plainButton }}>
+            <button type="button" onClick={() => onHiddenChange([])} style={{ ...text, ...button }}>
               {`Show all (${hidden.size} hidden)`}
             </button>
           ) : null}
@@ -152,7 +163,13 @@ export function LegendView(properties: LegendProps): ReactElement {
               setFilter(event.target.value);
               setManual({});
             }}
-            style={{ ...text, width: "100%", boxSizing: "border-box", minHeight: 24, margin: "4px 0" }}
+            style={{
+              ...text,
+              width: "100%",
+              boxSizing: "border-box",
+              minHeight: touchTargets ? 44 : 24,
+              margin: "4px 0",
+            }}
           />
           {model.groups.length === 0 ? <p style={{ margin: "4px 0" }}>No category matches</p> : null}
           {model.groups.map((group) => {
@@ -161,7 +178,7 @@ export function LegendView(properties: LegendProps): ReactElement {
               <div key={group.id}>
                 {model.flat ? null : (
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <label style={checkboxTarget}>
+                    <label style={checkbox}>
                       <input
                         type="checkbox"
                         name="corpus-map-legend-group"
@@ -180,7 +197,7 @@ export function LegendView(properties: LegendProps): ReactElement {
                         type="button"
                         aria-expanded={open}
                         onClick={() => setManual((previous) => ({ ...previous, [group.id]: !open }))}
-                        style={{ ...text, ...plainButton, fontWeight: 600, flex: 1, textAlign: "left" }}
+                        style={{ ...text, ...button, fontWeight: 600, flex: 1, textAlign: "left" }}
                       >
                         {group.name} <span style={{ fontWeight: 400 }}>{`${group.onScreenCount} on screen`}</span>
                       </button>
@@ -202,9 +219,9 @@ export function LegendView(properties: LegendProps): ReactElement {
                         {/* A one-member group's header checkbox already toggles this row; a second
                             "Show X" would repeat it. The spacer keeps the swatches aligned. */}
                         {!model.flat && group.memberIds.length === 1 ? (
-                          <span aria-hidden="true" style={checkboxTarget} />
+                          <span aria-hidden="true" style={checkbox} />
                         ) : (
-                          <label style={checkboxTarget}>
+                          <label style={checkbox}>
                             <input
                               type="checkbox"
                               name="corpus-map-legend-territory"
@@ -224,7 +241,7 @@ export function LegendView(properties: LegendProps): ReactElement {
                           }}
                           style={{
                             ...text,
-                            ...plainButton,
+                            ...button,
                             display: "flex",
                             alignItems: "center",
                             gap: 6,
@@ -266,7 +283,7 @@ export function LegendView(properties: LegendProps): ReactElement {
               Not visited
             </li>
           </ul>
-          <p style={{ margin: 0 }}>Scroll to zoom, drag to pan</p>
+          <p style={{ margin: 0 }}>Pinch or scroll to zoom, drag to pan</p>
         </div>
       ) : null}
     </section>

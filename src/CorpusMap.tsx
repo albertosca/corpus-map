@@ -2022,6 +2022,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               maximumHeight={legendMaximumHeight(legendPlacement, minimapCorner, MINIMAP_SIZE.height)}
               theme={legendTheme}
               narrow={width < 480}
+              touchTargets={width < NARROW_BOX_WIDTH}
               heading={headingTag}
               onEntry={stableOnLegendEntry}
               onHiddenChange={onHiddenChange}

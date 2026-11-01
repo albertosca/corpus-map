@@ -98,3 +98,12 @@ describe("legend review fixes (slice D final review)", () => {
     expect(screen.getByRole("button", { name: "South" })).toBeTruthy();
   });
 });
+
+describe("legend touch targets on a narrow box (spec mobile §5)", () => {
+  it("are 44 px below a 600 px box and 24 px at 600", () => {
+    const { rerender } = render(<CorpusMap spec={spec} width={599} height={300} renderCard={() => null} legend />);
+    expect(screen.getByRole("button", { name: "Legend" }).style.minHeight).toBe("44px");
+    rerender(<CorpusMap spec={spec} width={600} height={300} renderCard={() => null} legend />);
+    expect(screen.getByRole("button", { name: "Legend" }).style.minHeight).toBe("24px");
+  });
+});

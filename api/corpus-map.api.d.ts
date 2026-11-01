@@ -756,6 +756,8 @@ export interface LegendProps {
     theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
     /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
     narrow: boolean;
+    /** The map's box is narrower than 600 px: every control is at least 44 px tall (spec mobile §5). */
+    touchTargets?: boolean | undefined;
     /** The element group disclosures sit in, so a screen reader can jump between groups (spec slice B §6). */
     heading?: HeadingTag | undefined;
     onEntry: (id: string) => void;
