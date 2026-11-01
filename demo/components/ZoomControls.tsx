@@ -2,14 +2,24 @@ import type { CorpusMapHandle } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
 import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
-import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
+import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER, STRIP_HEIGHT_ESTIMATE } from "./floatingLayout";
 import { useViewportWidth } from "./narrow";
 
 interface ZoomControlsProps {
   mapRef: RefObject<CorpusMapHandle | null>;
   /** Whether the selected-item drawer is currently open (showcase Task 6 fix round 1). */
   drawerOpen?: boolean | undefined;
+  /**
+   * A narrow window (spec mobile §6): Fit alone, 44 × 44 (pinch and double tap replace Zoom in/out), one gutter above
+   * whatever covers the bottom edge — the strip, or the open sheet whose height `coveredBottom` gives.
+   */
+  narrow?: boolean | undefined;
+  /** On a narrow window, how much of the bottom edge is covered: the collapsed sheet's height while one is open, else the strip's. */
+  coveredBottom?: number | undefined;
 }
+
+/** Fit's side on a narrow window: the 44 px touch target (spec mobile §6). */
+const NARROW_BUTTON_SIZE = 44;
 
 /** The buttons' own width — shared with `buttonStyle` below and with the breakpoint calculation; exported so the test can compute the same breakpoint rather than duplicating the number. */
 export const BUTTON_WIDTH = 84;
@@ -80,8 +90,30 @@ const buttonStyle: CSSProperties = {
  * covers the controls (`Drawer.tsx`'s own doc comment covers why that is an
  * acceptable, reversible fallback rather than a bug).
  */
-export function ZoomControls({ mapRef: mapReference, drawerOpen = false }: ZoomControlsProps): ReactElement {
+export function ZoomControls({
+  mapRef: mapReference,
+  drawerOpen = false,
+  narrow = false,
+  coveredBottom = STRIP_HEIGHT_ESTIMATE,
+}: ZoomControlsProps): ReactElement {
   const viewportWidth = useViewportWidth();
+  if (narrow) {
+    return (
+      <div
+        data-zoom-controls
+        data-floating-control
+        style={{ ...wrapStyle, width: NARROW_BUTTON_SIZE, right: GUTTER, bottom: coveredBottom + GUTTER }}
+      >
+        <button
+          type="button"
+          style={{ ...buttonStyle, width: NARROW_BUTTON_SIZE, minHeight: NARROW_BUTTON_SIZE, padding: 0 }}
+          onClick={() => mapReference.current?.fit()}
+        >
+          Fit
+        </button>
+      </div>
+    );
+  }
   const style: CSSProperties = { ...wrapStyle, right: zoomControlsRight(viewportWidth, drawerOpen) };
   return (
     <div data-zoom-controls data-floating-control style={style}>

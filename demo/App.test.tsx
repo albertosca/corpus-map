@@ -15,12 +15,14 @@ import {
   GUTTER,
   INDICATOR_HEIGHT_ESTIMATE,
   INDICATOR_LEFT,
-  INDICATOR_MAX_CONTENT_WIDTH,
+  INDICATOR_MAXIMUM_CONTENT_WIDTH,
   MINIMAP_HEIGHT,
   MINIMAP_MARGIN,
   MINIMAP_WIDTH,
+  STRIP_HEIGHT_ESTIMATE,
   ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 } from "./components/floatingLayout";
+import { NARROW_WINDOW_WIDTH, sheetCollapsedHeight } from "./components/narrow";
 import { BUTTON_WIDTH } from "./components/ZoomControls";
 import { arxivSpec, type CorpusId, gallery } from "./corpora";
 import arxivJson from "./corpora/arxiv.json";
@@ -286,7 +288,7 @@ const VIEWPORT_HEIGHT_PX = 800;
  * The footer's height with its text wrapped inside its declared box: the
  * longest disclosure (the arXiv sentence, ~370px at 12px system-ui) takes at
  * most three lines at the narrowest band `Footer` ever sits in between the
- * bottom-row columns (`FOOTER_MIN_BAND_WIDTH`, 200px, less 28px of padding),
+ * bottom-row columns (`FOOTER_MINIMUM_BAND_WIDTH`, 200px, less 28px of padding),
  * so 3 × ~15px lines + 8px padding + 2px border ≈ 55, rounded up.
  */
 const FOOTER_HEIGHT_ESTIMATE = 60;
@@ -308,7 +310,8 @@ const CENTRED_FOOTER_WIDTH_ESTIMATE = 400;
  */
 function footerBox(container: HTMLElement, viewportWidth: number): Box | null {
   const element = container.querySelector<HTMLElement>("[data-footer]");
-  if (!element) return null;
+  // Inside the narrow window's bottom strip the credit has no box of its own: the strip is the box (`stripBox`).
+  if (!element || element.closest("[data-bottom-strip]")) return null;
   const bottom = toPx(element.style.bottom, viewportWidth);
   let leftEdge: number;
   let rightEdge: number;
@@ -332,20 +335,39 @@ function footerBox(container: HTMLElement, viewportWidth: number): Box | null {
   };
 }
 
-/** `[data-zoom-controls]`'s box: `right`/`bottom` are its own inline values; width comes from its first `<button>` child (the wrapper itself sets no `width`, only its buttons do — `flex-direction: column` sizes the wrapper to them). */
+/**
+ * `[data-zoom-controls]`'s box: `right`/`bottom` are its own inline values; width comes from its first `<button>` child (the wrapper itself sets no `width`, only its buttons do — `flex-direction: column` sizes the wrapper to them).
+ * On a narrow window the wrapper holds Fit alone, whose declared `minHeight` is its height.
+ */
 function zoomControlsBox(container: HTMLElement, viewportWidth: number): Box | null {
   const element = container.querySelector<HTMLElement>("[data-zoom-controls]");
-  const button = element?.querySelector<HTMLElement>("button");
+  const buttons = element ? Array.from(element.querySelectorAll<HTMLElement>("button")) : [];
+  const button = buttons[0];
   if (!element || !button) return null;
   const right = toPx(element.style.right, viewportWidth);
   const bottom = toPx(element.style.bottom, viewportWidth);
   const width = toPx(button.style.width, viewportWidth);
+  const height = buttons.length === 1 ? toPx(button.style.minHeight, viewportWidth) : ZOOM_CONTROLS_HEIGHT_ESTIMATE;
   return {
     label: "zoom-controls",
     x0: viewportWidth - right - width,
     x1: viewportWidth - right,
     yFromBottom0: bottom,
-    yFromBottom1: bottom + ZOOM_CONTROLS_HEIGHT_ESTIMATE,
+    yFromBottom1: bottom + height,
+  };
+}
+
+/** `[data-bottom-strip]`'s box (narrow window only): `left`/`right`/`bottom` are its own inline values; its height is `STRIP_HEIGHT_ESTIMATE`, two 12 px lines plus padding. */
+function stripBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const element = container.querySelector<HTMLElement>("[data-bottom-strip]");
+  if (!element) return null;
+  const bottom = toPx(element.style.bottom, viewportWidth);
+  return {
+    label: "bottom-strip",
+    x0: toPx(element.style.left, viewportWidth),
+    x1: viewportWidth - toPx(element.style.right, viewportWidth),
+    yFromBottom0: bottom,
+    yFromBottom1: bottom + STRIP_HEIGHT_ESTIMATE,
   };
 }
 
@@ -368,17 +390,34 @@ function sheetBox(container: HTMLElement, selector: string, label: string, viewp
   };
 }
 
+/**
+ * The drawer's box. On a narrow window it is a bottom sheet (`data-sheet-state`) spanning the width: collapsed, it
+ * reaches `sheetCollapsedHeight` of the window's height up from the bottom edge (the same function `App` and `Drawer`
+ * size it with); expanded, up to its `top`.
+ */
 function drawerBox(container: HTMLElement, viewportWidth: number): Box | null {
-  return sheetBox(container, "[data-drawer]", "drawer", viewportWidth);
+  const element = container.querySelector<HTMLElement>("[data-drawer]");
+  const state = element?.getAttribute("data-sheet-state");
+  if (!element || !state) return sheetBox(container, "[data-drawer]", "drawer", viewportWidth);
+  return {
+    label: `drawer (${state} sheet)`,
+    x0: 0,
+    x1: viewportWidth,
+    yFromBottom0: 0,
+    yFromBottom1:
+      state === "collapsed"
+        ? sheetCollapsedHeight(window.innerHeight)
+        : VIEWPORT_HEIGHT_PX - toPx(element.style.top, viewportWidth),
+  };
 }
 
-/** `[data-indicator]`'s box: `left`/`bottom` are its own inline values; width is `min(its own maxWidth, INDICATOR_MAX_CONTENT_WIDTH)` — the same model `ZoomControls`' own breakpoint is built from (`floatingLayout.ts`), so the test and the runtime code agree on what "wide enough" means. */
+/** `[data-indicator]`'s box: `left`/`bottom` are its own inline values; width is `min(its own maxWidth, INDICATOR_MAXIMUM_CONTENT_WIDTH)` — the same model `ZoomControls`' own breakpoint is built from (`floatingLayout.ts`), so the test and the runtime code agree on what "wide enough" means. */
 function indicatorBox(container: HTMLElement, viewportWidth: number): Box | null {
   const element = container.querySelector<HTMLElement>("[data-indicator]");
-  if (!element) return null;
+  if (!element || element.closest("[data-bottom-strip]")) return null;
   const left = toPx(element.style.left, viewportWidth);
   const bottom = toPx(element.style.bottom, viewportWidth);
-  const width = Math.min(toPx(element.style.maxWidth, viewportWidth), INDICATOR_MAX_CONTENT_WIDTH);
+  const width = Math.min(toPx(element.style.maxWidth, viewportWidth), INDICATOR_MAXIMUM_CONTENT_WIDTH);
   return {
     label: "indicator",
     x0: left,
@@ -463,12 +502,15 @@ function boxesIntersect(first: Box, second: Box): boolean {
  * sheet is open — so each sheet has to start below the bar's measured height.
  */
 function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: number): void {
+  const narrow = viewportWidth < NARROW_WINDOW_WIDTH;
   const boxes = [
     zoomControlsBox(container, viewportWidth),
     indicatorBox(container, viewportWidth),
     topBarBox(container, viewportWidth),
-    minimapBox(),
+    // A narrow window drops the minimap (spec mobile §6).
+    narrow ? null : minimapBox(),
     footerBox(container, viewportWidth),
+    stripBox(container, viewportWidth),
   ].filter((box): box is Box => box !== null);
   const pairs: Array<[Box, Box]> = [];
   for (let index = 0; index < boxes.length; index += 1) {
@@ -482,6 +524,10 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
   ]) {
     if (sheet && topBar) pairs.push([topBar, sheet]);
   }
+  // A collapsed bottom sheet must leave Fit above it, pressable (spec mobile §6); the strip it covers is reached again on close.
+  const zoom = zoomControlsBox(container, viewportWidth);
+  const drawer = drawerBox(container, viewportWidth);
+  if (narrow && zoom && drawer?.label === "drawer (collapsed sheet)") pairs.push([zoom, drawer]);
 
   for (const [first, second] of pairs) {
     expect(
@@ -1224,14 +1270,158 @@ describe("App (showcase Task 5)", () => {
         expect(zoomRight).toBeGreaterThan(drawerLeftFromViewportRight);
       });
 
-      it("at 375px, the drawer fits and the fallback holds — the zoom controls stay at their default offset, covered by the drawer", async () => {
-        setViewportWidth(375);
+      it("at 375px the drawer is a bottom sheet and Fit stays at its default right offset, lifted above the sheet (spec mobile §6)", async () => {
         const { container } = await renderApp(SELECT_SPEC);
-        await openDrawer();
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        // Zoom in/out are gone on a narrow window, so the map is zoomed to near before the window narrows.
+        zoomToNear();
+        setViewportWidth(375);
+        fireEvent(window, new Event("resize"));
+        act(() => FakeResizeObserver.fireAll());
+        fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+        await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
 
         checkAllFloatingControls(container);
         const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
         expect(zoom?.style.right).toBe("12px");
+        expect(zoom?.style.bottom).toBe(`${sheetCollapsedHeight(window.innerHeight) + GUTTER}px`);
+      });
+    });
+
+    describe("a narrow window (spec mobile §6)", () => {
+      const originalInnerWidth = window.innerWidth;
+
+      function setViewportWidth(width: number): void {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+      }
+
+      afterEach(() => {
+        setViewportWidth(originalInnerWidth);
+      });
+
+      /** Every button and select inside a floating control declares an inline `minHeight` of at least 44 px. */
+      function checkTouchTargets(container: HTMLElement): void {
+        for (const control of Array.from(container.querySelectorAll<HTMLElement>("[data-floating-control]"))) {
+          for (const child of Array.from(control.querySelectorAll<HTMLElement>("button, select"))) {
+            const name = `${labelFor(control)} > ${child.getAttribute("aria-label") ?? child.textContent}`;
+            expect(
+              Number.parseFloat(child.style.minHeight),
+              `${name} has no inline minHeight of 44 px`,
+            ).toBeGreaterThanOrEqual(44);
+          }
+        }
+      }
+
+      /** Renders wide, zooms to near (Zoom in is gone below 600 px), then narrows the window to 375. */
+      async function renderNarrow(spec: MapSpec = SELECT_SPEC): Promise<HTMLElement> {
+        const { container } = await renderApp(spec);
+        await screen.findByText(territoryButtonText(spec));
+        expect(container.querySelector("[data-minimap]")).not.toBeNull();
+        zoomToNear();
+        setViewportWidth(375);
+        fireEvent(window, new Event("resize"));
+        act(() => FakeResizeObserver.fireAll());
+        return container;
+      }
+
+      it("folds the top bar into a Menu and keeps only Fit, 44 × 44, with no minimap", async () => {
+        const container = await renderNarrow();
+        expect(screen.getByRole("button", { name: "Menu" })).not.toBeNull();
+        expect(screen.queryByRole("button", { name: "Tuning" })).toBeNull();
+        expect(container.querySelector("[data-minimap]")).toBeNull();
+        const buttons = Array.from(container.querySelectorAll<HTMLElement>("[data-zoom-controls] button"));
+        expect(buttons.map((button) => button.textContent)).toEqual(["Fit"]);
+        expect(buttons[0]?.style.width).toBe("44px");
+        expect(buttons[0]?.style.minHeight).toBe("44px");
+        const zoom = container.querySelector<HTMLElement>("[data-zoom-controls]");
+        expect(zoom?.style.bottom).toBe(`${STRIP_HEIGHT_ESTIMATE + GUTTER}px`);
+      });
+
+      it("shares one bottom strip between the indicator and the arXiv credit, in 12 px text", async () => {
+        const container = await renderNarrow();
+        const strip = container.querySelector<HTMLElement>("[data-bottom-strip]");
+        expect(strip).not.toBeNull();
+        expect(strip?.style.fontSize).toBe("12px");
+        const indicator = strip?.querySelector<HTMLElement>("[data-indicator]");
+        const footer = strip?.querySelector<HTMLElement>("[data-footer]");
+        expect(indicator).not.toBeNull();
+        expect(footer?.textContent).toContain("Thank you to arXiv");
+        // In flow inside the strip, not floating boxes of their own.
+        for (const element of [indicator, footer]) {
+          expect(element?.style.position).toBe("");
+          expect(element?.hasAttribute("data-floating-control")).toBe(false);
+        }
+      });
+
+      it("opens a selected item in a collapsed bottom sheet and keeps a revealed item above it (insets.bottom)", async () => {
+        const relatedSpec = {
+          ...SELECT_SPEC,
+          territories: [
+            { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "west"], centroid: [-0.5, 0] },
+            { id: "cs.SE", name: "Software Engineering", members: ["p2", "east"], centroid: [0.5, 0] },
+          ],
+          nodes: SELECT_SPEC.nodes.map((node) =>
+            node.id === "p2" || node.id === "east" ? { ...node, territory: "cs.SE" } : node,
+          ),
+          edges: [[0, 1, 90]],
+        };
+        const { container } = await renderApp(relatedSpec);
+        await screen.findByText("Artificial Intelligence, 2 items");
+        zoomToNear();
+        setViewportWidth(375);
+        fireEvent(window, new Event("resize"));
+        act(() => FakeResizeObserver.fireAll());
+
+        fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+        const dialog = await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+        expect(container.querySelector("[data-drawer]")?.getAttribute("data-sheet-state")).toBe("collapsed");
+        fireEvent.click(within(within(dialog).getByRole("list")).getByRole("button"));
+        await waitFor(() => expect(window.location.hash).toContain("selected=p2"));
+        // The sheet covers the map's bottom edge, so the paper (y 0) is centred
+        // in the area above it: the box centre then shows a point below the
+        // paper. Without the inset the view's centre would be the paper.
+        const view = new URLSearchParams(window.location.hash.slice(1)).get("view")?.split(",").map(Number);
+        expect(Math.abs(view?.[1] ?? 0)).toBeGreaterThan(0);
+      });
+
+      it("opens Tuning from the Menu as an expanded sheet below the top bar", async () => {
+        const container = await renderNarrow();
+        fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        await screen.findByRole("dialog", { name: "Tuning" });
+        const panel = container.querySelector<HTMLElement>("[data-tuning-panel]");
+        expect(panel?.getAttribute("data-sheet-state")).toBe("expanded");
+        expect(panel?.style.left).toBe("0px");
+        expect(panel?.style.right).toBe("0px");
+        expect(panel?.style.top).toBe(`${FakeResizeObserver.topBarHeight(375)}px`);
+        checkAllFloatingControls(container);
+      });
+
+      it("gives every button and select inside a floating control a 44 px minimum height", async () => {
+        const container = await renderNarrow();
+        checkTouchTargets(container);
+
+        fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+        checkTouchTargets(container);
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        await screen.findByRole("dialog", { name: "Tuning" });
+        checkTouchTargets(container);
+        fireEvent.keyDown(document, { key: "Escape" });
+
+        fireEvent.click(await screen.findByRole("button", { name: "A Tiny Paper About Testing" }));
+        await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+        checkTouchTargets(container);
+      });
+
+      it("restores the wide layout when the window widens again", async () => {
+        const container = await renderNarrow();
+        setViewportWidth(1024);
+        fireEvent(window, new Event("resize"));
+        act(() => FakeResizeObserver.fireAll());
+        expect(container.querySelector("[data-bottom-strip]")).toBeNull();
+        expect(container.querySelector("[data-minimap]")).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Zoom in" })).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Tuning" })).not.toBeNull();
       });
     });
 
@@ -1295,6 +1485,8 @@ describe("App (showcase Task 5)", () => {
           fireEvent(window, new Event("resize"));
           act(() => FakeResizeObserver.fireAll());
 
+          // Below 600 px Tuning sits behind the top bar's Menu (spec mobile §6).
+          if (width < NARROW_WINDOW_WIDTH) fireEvent.click(screen.getByRole("button", { name: "Menu" }));
           fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
           await screen.findByRole("dialog", { name: "Tuning" });
           checkNoFloatingBoxIntersections(container, width);
@@ -1342,7 +1534,7 @@ describe("App (showcase Task 5)", () => {
         // just one; the important part is that it is strictly more than
         // zero (a real, positive margin), parsed from inline values, no
         // layout engine.
-        const columnRight = Math.max(minimap.x1, INDICATOR_LEFT + INDICATOR_MAX_CONTENT_WIDTH);
+        const columnRight = Math.max(minimap.x1, INDICATOR_LEFT + INDICATOR_MAXIMUM_CONTENT_WIDTH);
         expect(zoomBox.x0 - columnRight).toBe(2 * GUTTER);
         // And, unchanged from fix round 1, still clears the drawer's own
         // left edge by exactly one GUTTER.

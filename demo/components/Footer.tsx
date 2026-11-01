@@ -4,8 +4,8 @@ import { token } from "../tokens";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
   BOTTOM_ROW_HEIGHT,
-  FOOTER_MAX_WIDTH,
-  FOOTER_MIN_BAND_WIDTH,
+  FOOTER_MAXIMUM_WIDTH,
+  FOOTER_MINIMUM_BAND_WIDTH,
   GUTTER,
 } from "./floatingLayout";
 import { useViewportWidth } from "./narrow";
@@ -15,6 +15,8 @@ interface FooterProps {
   corpusId: CorpusId;
   /** Whether the drawer or the tuning panel is open — it decides where the zoom controls sit, and the footer keeps clear of them. */
   drawerOpen?: boolean | undefined;
+  /** In flow inside the narrow window's bottom strip (spec mobile §6): no position, box or chip of its own. */
+  inline?: boolean | undefined;
 }
 
 // Exact strings (spec 4 §2, task-5-brief): no arXiv logo, and the corpus is
@@ -38,7 +40,7 @@ export interface FooterPlacement {
  * footer covered the minimap at 375-600px and Fit at 768px with the drawer
  * open). The rule: in the bottom row, between the bottom-left column
  * (minimap + indicator) and the zoom controls in whichever position they are
- * in, when that band is at least `FOOTER_MIN_BAND_WIDTH` wide; otherwise
+ * in, when that band is at least `FOOTER_MINIMUM_BAND_WIDTH` wide; otherwise
  * lifted one gutter above the whole bottom row, from the left gutter to the
  * zoom controls' right edge. Either way the band clears every other bottom
  * control by construction, from the same constants they are placed with.
@@ -47,7 +49,7 @@ export function footerPlacement(viewportWidth: number, drawerOpen: boolean): Foo
   const zoomRight = zoomControlsRight(viewportWidth, drawerOpen);
   const left = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER;
   const right = zoomRight + BUTTON_WIDTH + GUTTER;
-  if (viewportWidth - left - right >= FOOTER_MIN_BAND_WIDTH) {
+  if (viewportWidth - left - right >= FOOTER_MINIMUM_BAND_WIDTH) {
     return { left, right, bottom: GUTTER, lifted: false };
   }
   return { left: GUTTER, right: zoomRight, bottom: BOTTOM_ROW_HEIGHT + GUTTER, lifted: true };
@@ -58,7 +60,7 @@ const style: CSSProperties = {
   zIndex: 10,
   // With `left` and `right` both set, `maxWidth` caps the chip and the auto
   // margins centre it inside the band (CSS 2.1 §10.3.7); the text wraps.
-  maxWidth: FOOTER_MAX_WIDTH,
+  maxWidth: FOOTER_MAXIMUM_WIDTH,
   marginLeft: "auto",
   marginRight: "auto",
   textAlign: "center",
@@ -71,15 +73,29 @@ const style: CSSProperties = {
   fontSize: 12,
 };
 
+/** Takes the strip's room left of the indicator and wraps there; the strip carries the text size and the surface. */
+const inlineStyle: CSSProperties = {
+  flex: "1 1 0",
+  minWidth: 0,
+  whiteSpace: "normal",
+};
+
 /**
  * The disclosure line (spec 4 §2): the arXiv attribution or the
  * synthetic-corpus notice, exactly. Nothing for a corpus that carries
  * neither (elements, constellations). Placed by `footerPlacement`.
  */
-export function Footer({ corpusId, drawerOpen = false }: FooterProps): ReactElement | null {
+export function Footer({ corpusId, drawerOpen = false, inline = false }: FooterProps): ReactElement | null {
   const viewportWidth = useViewportWidth();
   const text = DISCLOSURE[corpusId];
   if (!text) return null;
+  if (inline) {
+    return (
+      <footer data-footer style={inlineStyle}>
+        {text}
+      </footer>
+    );
+  }
   const { left, right, bottom, lifted } = footerPlacement(viewportWidth, drawerOpen);
   return (
     <footer

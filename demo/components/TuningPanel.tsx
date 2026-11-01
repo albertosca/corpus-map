@@ -42,6 +42,8 @@ export interface TuningPanelProps {
   mapContainerRef: RefObject<HTMLElement | null>;
   /** Where the panel starts from the top: the top bar's measured height, so the corpus picker and the Tuning button stay usable while it is open. */
   topInset?: number | undefined;
+  /** `"sheet"` on a narrow window (spec mobile §6): the panel spans the width from `topInset` down, the item sheet's shell, always expanded. */
+  layout?: "side" | "sheet" | undefined;
 }
 
 /** Neutral colours, reused (not reinvented) from the rest of the demo shell — see `visual restraint`, spec 4 §2. */
@@ -100,6 +102,21 @@ const iconButtonStyle: CSSProperties = {
   // check.
   maxWidth: "100%",
 };
+
+/** The item sheet's shell, expanded: full width under the top bar, rounded on top (spec mobile §6). */
+const sheetPanelStyle: CSSProperties = {
+  ...panelStyle,
+  left: 0,
+  width: "100vw",
+  maxWidth: "100vw",
+  borderLeft: "none",
+  borderTop: `1px solid ${PANEL_BORDER_COLOR}`,
+  borderRadius: "12px 12px 0 0",
+  boxShadow: `0 -2px 10px ${token("shadow")}`,
+};
+
+/** A finger's target on a narrow window: 44 px tall (spec mobile §6). */
+const sheetButtonStyle: CSSProperties = { ...iconButtonStyle, minHeight: 44 };
 
 const actionsRowStyle: CSSProperties = {
   display: "flex",
@@ -300,6 +317,7 @@ export function TuningPanel({
   returnFocusTo,
   mapContainerRef: mapContainerReference,
   topInset = 0,
+  layout = "side",
 }: TuningPanelProps): ReactElement | null {
   const titleId = useId();
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -389,31 +407,35 @@ export function TuningPanel({
     onSyntheticSeedChange(Number(raw));
   };
 
+  const sheet = layout === "sheet";
+  const buttonStyle = sheet ? sheetButtonStyle : iconButtonStyle;
+
   return (
     <div
       ref={panelReference}
       data-tuning-panel
       data-floating-control
+      {...(sheet ? { "data-sheet-state": "expanded" } : {})}
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
-      style={{ ...panelStyle, top: topInset }}
+      style={{ ...(sheet ? sheetPanelStyle : panelStyle), top: topInset }}
     >
       <div style={headerRowStyle}>
         <h2 id={titleId} style={titleStyle}>
           Tuning
         </h2>
-        <button type="button" ref={closeButtonReference} onClick={handleClose} style={iconButtonStyle}>
+        <button type="button" ref={closeButtonReference} onClick={handleClose} style={buttonStyle}>
           Close
         </button>
       </div>
       <p style={statusStyle}>Editing: {corpusLabel}</p>
 
       <div style={actionsRowStyle}>
-        <button type="button" onClick={onReset} style={iconButtonStyle}>
+        <button type="button" onClick={onReset} style={buttonStyle}>
           Reset
         </button>
-        <button type="button" onClick={handleCopySettings} style={iconButtonStyle}>
+        <button type="button" onClick={handleCopySettings} style={buttonStyle}>
           Copy settings
         </button>
       </div>
@@ -529,7 +551,7 @@ export function TuningPanel({
       ) : null}
 
       <section aria-label="Wheel capture">
-        <WheelCapture containerRef={mapContainerReference} />
+        <WheelCapture containerRef={mapContainerReference} touchTargets={sheet} />
       </section>
     </div>
   );

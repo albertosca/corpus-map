@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Footer, footerPlacement } from "./Footer";
-import { BOTTOM_ROW_HEIGHT, FOOTER_MIN_BAND_WIDTH, GUTTER } from "./floatingLayout";
+import { BOTTOM_ROW_HEIGHT, FOOTER_MINIMUM_BAND_WIDTH, GUTTER } from "./floatingLayout";
 
 describe("Footer (showcase Task 5)", () => {
   it("shows the exact arXiv attribution sentence for arxiv", () => {
@@ -31,27 +31,36 @@ describe("Footer (showcase Task 5)", () => {
         [480, false],
         [768, true],
       ] as const) {
-        const p = footerPlacement(width, open);
-        expect(p.lifted, `width ${width}, drawer ${open ? "open" : "closed"}`).toBe(true);
-        expect(p.bottom).toBe(BOTTOM_ROW_HEIGHT + GUTTER);
-        expect(p.left).toBe(GUTTER);
+        const placement = footerPlacement(width, open);
+        expect(placement.lifted, `width ${width}, drawer ${open ? "open" : "closed"}`).toBe(true);
+        expect(placement.bottom).toBe(BOTTOM_ROW_HEIGHT + GUTTER);
+        expect(placement.left).toBe(GUTTER);
       }
       // Beside the shifted zoom controls: its right edge meets theirs, clear of the drawer.
       expect(footerPlacement(768, true).right).toBe(332);
     });
 
-    it("sits in the bottom row, in a band at least FOOTER_MIN_BAND_WIDTH wide, at 600, 768 and 1440 with the drawer closed and at 1440 with it open", () => {
+    it("sits in the bottom row, in a band at least FOOTER_MINIMUM_BAND_WIDTH wide, at 600, 768 and 1440 with the drawer closed and at 1440 with it open", () => {
       for (const [width, open] of [
         [600, false],
         [768, false],
         [1440, false],
         [1440, true],
       ] as const) {
-        const p = footerPlacement(width, open);
-        expect(p.lifted, `width ${width}, drawer ${open ? "open" : "closed"}`).toBe(false);
-        expect(p.bottom).toBe(GUTTER);
-        expect(width - p.left - p.right).toBeGreaterThanOrEqual(FOOTER_MIN_BAND_WIDTH);
+        const placement = footerPlacement(width, open);
+        expect(placement.lifted, `width ${width}, drawer ${open ? "open" : "closed"}`).toBe(false);
+        expect(placement.bottom).toBe(GUTTER);
+        expect(width - placement.left - placement.right).toBeGreaterThanOrEqual(FOOTER_MINIMUM_BAND_WIDTH);
       }
     });
+  });
+
+  it("inline: renders in flow, without data-floating-control, and wraps", () => {
+    const { container } = render(<Footer corpusId="arxiv" inline />);
+    const footer = container.querySelector<HTMLElement>("[data-footer]");
+    expect(footer).not.toBeNull();
+    expect(footer?.hasAttribute("data-floating-control")).toBe(false);
+    expect(footer?.style.position).toBe("");
+    expect(footer?.style.whiteSpace).toBe("normal");
   });
 });

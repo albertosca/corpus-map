@@ -15,6 +15,8 @@ export interface WheelEventSample {
 export interface WheelCaptureProps {
   /** The map's own container — a passive, read-only listener attaches here and is removed on unmount; it never calls `preventDefault`, so it never competes with the library's own non-passive zoom listener on the same element. */
   containerRef: RefObject<HTMLElement | null>;
+  /** Inside the tuning sheet on a narrow window: the Copy button takes a finger's 44 px height (spec mobile §6). */
+  touchTargets?: boolean | undefined;
 }
 
 const MAXIMUM_SAMPLES = 50;
@@ -105,7 +107,10 @@ function toClipboardPayload(samples: readonly WheelEventSample[]): string {
  * (`TuningPanel` mounts it conditionally); mounting attaches the listener,
  * unmounting removes it.
  */
-export function WheelCapture({ containerRef: containerReference }: WheelCaptureProps): ReactElement {
+export function WheelCapture({
+  containerRef: containerReference,
+  touchTargets = false,
+}: WheelCaptureProps): ReactElement {
   const [samples, setSamples] = useState<WheelEventSample[]>([]);
   const lastTimeReference = useRef<number | null>(null);
   const nextIdReference = useRef(0);
@@ -146,7 +151,11 @@ export function WheelCapture({ containerRef: containerReference }: WheelCaptureP
   return (
     <div data-wheel-capture style={wrapStyle}>
       <h3 style={headingStyle}>Wheel capture</h3>
-      <button type="button" onClick={handleCopy} style={copyButtonStyle}>
+      <button
+        type="button"
+        onClick={handleCopy}
+        style={touchTargets ? { ...copyButtonStyle, minHeight: 44 } : copyButtonStyle}
+      >
         Copy
       </button>
       {copyMessage ? (

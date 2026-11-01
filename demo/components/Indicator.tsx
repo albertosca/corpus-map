@@ -33,6 +33,8 @@ export function createViewStore(): ViewStore {
 
 interface IndicatorProps {
   store: ViewStore;
+  /** In flow inside the narrow window's bottom strip (spec mobile §6): no position, box or chip of its own. */
+  inline?: boolean | undefined;
 }
 
 // Sits in the library minimap's bottom-left corner, stacked above it with
@@ -61,11 +63,17 @@ const style: CSSProperties = {
  * read straight from `CorpusMap`'s own `onViewChange` payload — nothing
  * computed here.
  */
-export function Indicator({ store }: IndicatorProps): ReactElement | null {
+/** One line that never wraps, beside the credit in the strip; the strip carries the text size and the surface. */
+const inlineStyle: CSSProperties = {
+  flex: "0 0 auto",
+  whiteSpace: "nowrap",
+};
+
+export function Indicator({ store, inline = false }: IndicatorProps): ReactElement | null {
   const view = useSyncExternalStore(store.subscribe, store.get);
   if (!view) return null;
   return (
-    <div data-indicator data-floating-control style={style}>
+    <div data-indicator {...(inline ? {} : { "data-floating-control": "" })} style={inline ? inlineStyle : style}>
       {view.regime} · {view.ratio.toFixed(1)}× · {view.visibleCount} {view.visibleCount === 1 ? "item" : "items"}
     </div>
   );

@@ -334,4 +334,23 @@ describe("TuningPanel (showcase Task 7)", () => {
       expect(shouting).toEqual([]);
     });
   });
+
+  describe("sheet layout (spec mobile §6)", () => {
+    it("spans the window width as an expanded sheet with 44 px buttons", () => {
+      const { container } = renderPanel({ layout: "sheet" });
+      const panel = container.querySelector<HTMLElement>("[data-sheet-state]");
+      expect(panel?.getAttribute("data-sheet-state")).toBe("expanded");
+      expect(panel?.style.left).toBe("0px");
+      expect(panel?.style.width).toBe("100vw");
+      for (const name of ["Close", "Reset", "Copy settings", "Copy"]) {
+        const button = screen.getByRole("button", { name: new RegExp(`^${name}$`) });
+        expect(button.style.minHeight, name).toBe("44px");
+      }
+    });
+
+    it("the side layout carries no sheet state", () => {
+      const { container } = renderPanel();
+      expect(container.querySelector("[data-sheet-state]")).toBeNull();
+    });
+  });
 });

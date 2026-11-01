@@ -49,7 +49,7 @@ export const INDICATOR_LEFT = MINIMAP_MARGIN;
  * indicator's own `padding: "4px 10px"` (20px), that is ~202px; rounded up
  * for safety margin.
  */
-export const INDICATOR_MAX_CONTENT_WIDTH = 210;
+export const INDICATOR_MAXIMUM_CONTENT_WIDTH = 210;
 
 /** Breathing room between any two of these boxes, or between one of them and the viewport edge. */
 export const GUTTER = 12;
@@ -61,7 +61,7 @@ export const GUTTER = 12;
  */
 export const BOTTOM_LEFT_COLUMN_WIDTH = Math.max(
   MINIMAP_MARGIN + MINIMAP_WIDTH,
-  INDICATOR_LEFT + INDICATOR_MAX_CONTENT_WIDTH,
+  INDICATOR_LEFT + INDICATOR_MAXIMUM_CONTENT_WIDTH,
 );
 
 /**
@@ -96,7 +96,15 @@ export const BOTTOM_ROW_HEIGHT = Math.max(
  * that it is lifted one gutter above the whole bottom row instead, spanning
  * from the left gutter to the zoom controls' right edge.
  */
-export const FOOTER_MIN_BAND_WIDTH = 200;
+export const FOOTER_MINIMUM_BAND_WIDTH = 200;
 
 /** The footer chip's own width ceiling, centred in its band (at or under the 343px content width of a 375px viewport). */
-export const FOOTER_MAX_WIDTH = 340;
+export const FOOTER_MAXIMUM_WIDTH = 340;
+
+/**
+ * The narrow window's bottom strip (spec mobile §6), which holds the
+ * indicator and the credit side by side: at most two 12 px lines (~15 px
+ * each) plus 4 px of padding above and below and a 1 px border, rounded up.
+ * Fit sits one gutter above it.
+ */
+export const STRIP_HEIGHT_ESTIMATE = 40;

@@ -6,7 +6,7 @@ import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
 import { DRAWER_MAXIMUM_WIDTH, Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
 import { createViewStore, Indicator } from "./components/Indicator";
-import { useViewportWidth } from "./components/narrow";
+import { sheetCollapsedHeight, useNarrowWindow, useViewportHeight, useViewportWidth } from "./components/narrow";
 import { type LinkStatus, TopBar } from "./components/TopBar";
 import { TuningPanel } from "./components/TuningPanel";
 import { useBorderBoxHeight } from "./components/useBorderBoxHeight";
@@ -27,6 +27,29 @@ const shellStyle: CSSProperties = {
 const mapShellStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
+};
+
+/**
+ * The narrow window's bottom edge (spec mobile §6): the indicator and the
+ * arXiv credit side by side in 12 px text, the credit wrapping to at most a
+ * second line in the room the indicator leaves. Fit sits one gutter above it.
+ */
+const bottomStripStyle: CSSProperties = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  maxWidth: "100vw",
+  zIndex: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "4px 12px",
+  lineHeight: 1.25,
+  fontSize: 12,
+  background: token("surface"),
+  borderTop: `1px solid ${token("border")}`,
+  color: token("text"),
 };
 
 const loadingStyle: CSSProperties = {
@@ -215,6 +238,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   const topBarHeight = useBorderBoxHeight(topBarReference);
   // The drawer's rendered width is `min(90vw, DRAWER_MAXIMUM_WIDTH)`.
   const viewportWidth = useViewportWidth();
+  // Below 600 px the demo lays itself out for a phone (spec mobile §6).
+  const narrow = useNarrowWindow();
+  const collapsedSheetHeight = sheetCollapsedHeight(useViewportHeight());
 
   // The linked view and selection apply while the page still shows the
   // corpus the link named. A user switch ends that for good: the map refits
@@ -497,6 +523,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         barRef={topBarReference}
         onCopyLink={handleCopyLink}
         linkStatus={linkStatus}
+        narrow={narrow}
       />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
@@ -508,7 +535,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             ref={mapReference}
             spec={current.spec}
             renderCard={CARDS[current.id]}
-            minimap
+            minimap={!narrow}
             legend
             headingLevel={2}
             theme={scheme === "dark" ? DARK_THEME : DEFAULT_THEME}
@@ -522,8 +549,16 @@ export function App({ loadArxiv }: AppProps = {}) {
             onSelectedChange={handleSelectedChange}
             onHiddenTerritoriesChange={(ids) => setHiddenOnMap({ mapKey, ids })}
             // The drawer and the panel cover the map's right edge, so edge
-            // markers and a related paper's reveal stay left of them.
-            insets={{ right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0 }}
+            // markers and a related paper's reveal stay left of them. On a
+            // narrow window the item sheet covers the bottom edge instead: the
+            // collapsed height even while it is expanded, since an expanded
+            // sheet hides the whole map and the item is then already in sight
+            // when it collapses again.
+            insets={
+              narrow
+                ? { bottom: selected !== null ? collapsedSheetHeight : 0 }
+                : { right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0 }
+            }
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>
@@ -542,10 +577,25 @@ export function App({ loadArxiv }: AppProps = {}) {
           exclusive, `TuningPanel`'s own doc comment) -- `ZoomControls` shifts
           clear of whichever of the two is open, exactly as it already does
           for the drawer alone. */}
-      <ZoomControls mapRef={mapReference} drawerOpen={selected !== null || panelOpen} />
-      <Indicator store={viewStore} />
-      <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
+      <ZoomControls
+        mapRef={mapReference}
+        drawerOpen={selected !== null || panelOpen}
+        narrow={narrow}
+        {...(narrow && selected !== null ? { coveredBottom: collapsedSheetHeight } : {})}
+      />
+      {narrow ? (
+        <div data-bottom-strip data-floating-control style={bottomStripStyle}>
+          <Indicator store={viewStore} inline />
+          <Footer corpusId={corpusId} inline />
+        </div>
+      ) : (
+        <>
+          <Indicator store={viewStore} />
+          <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
+        </>
+      )}
       <Drawer
+        layout={narrow ? "sheet" : "side"}
         node={selected}
         territoryName={territoryName}
         isArxiv={current?.id === "arxiv"}
@@ -582,6 +632,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         returnFocusTo={gearButtonReference}
         mapContainerRef={mapShellReference}
         topInset={topBarHeight}
+        layout={narrow ? "sheet" : "side"}
       />
     </div>
   );

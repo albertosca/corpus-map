@@ -41,4 +41,13 @@ describe("Indicator (showcase Task 5)", () => {
     unmount();
     expect(() => store.set({ regime: "far", ratio: 2, visibleCount: 3, presentation: "guided" })).not.toThrow();
   });
+
+  it("inline: renders in flow, without data-floating-control", () => {
+    const store = storeWith({ regime: "far", ratio: 1, visibleCount: 3, presentation: "dense" });
+    const { container } = render(<Indicator store={store} inline />);
+    const element = container.firstElementChild as HTMLElement | null;
+    expect(element).not.toBeNull();
+    expect(element?.hasAttribute("data-floating-control")).toBe(false);
+    expect(element?.style.position).toBe("");
+  });
 });

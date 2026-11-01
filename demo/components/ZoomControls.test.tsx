@@ -3,7 +3,7 @@ import type { CorpusMapHandle } from "corpus-map";
 import type { RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
-import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
+import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER, STRIP_HEIGHT_ESTIMATE } from "./floatingLayout";
 import { BUTTON_WIDTH, ZoomControls } from "./ZoomControls";
 
 function fakeHandleRef(): { reference: RefObject<CorpusMapHandle | null>; handle: CorpusMapHandle } {
@@ -134,6 +134,29 @@ describe("ZoomControls (showcase Task 5)", () => {
       const element = atContainer.querySelector<HTMLElement>("[data-zoom-controls]");
       const shiftedRight = Number.parseFloat(element?.style.right ?? "");
       expect(shiftedRight).toBe(DRAWER_MAXIMUM_WIDTH + GUTTER);
+    });
+  });
+
+  describe("narrow (spec mobile §6)", () => {
+    it("renders only Fit, 44 px square, above the bottom strip by default", () => {
+      const { reference, handle } = fakeHandleRef();
+      const { container } = render(<ZoomControls mapRef={reference} narrow />);
+      const buttons = screen.getAllByRole("button");
+      expect(buttons.map((button) => button.textContent)).toEqual(["Fit"]);
+      expect(buttons[0]?.style.minHeight).toBe("44px");
+      expect(buttons[0]?.style.width).toBe("44px");
+      const wrapper = container.querySelector<HTMLElement>("[data-floating-control]");
+      expect(wrapper?.style.right).toBe(`${GUTTER}px`);
+      expect(wrapper?.style.bottom).toBe(`${STRIP_HEIGHT_ESTIMATE + GUTTER}px`);
+      fireEvent.click(buttons[0] as HTMLElement);
+      expect(handle.fit).toHaveBeenCalledTimes(1);
+    });
+
+    it("sits above whatever coveredBottom names", () => {
+      const { reference } = fakeHandleRef();
+      const { container } = render(<ZoomControls mapRef={reference} narrow coveredBottom={180} />);
+      const wrapper = container.querySelector<HTMLElement>("[data-floating-control]");
+      expect(wrapper?.style.bottom).toBe(`${180 + GUTTER}px`);
     });
   });
 });
