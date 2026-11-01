@@ -60,8 +60,38 @@ describe("keyboardCommand", () => {
   });
 
   it("ignores keys it does not own", () => {
-    for (const key of ["a", "Tab", "Enter", " ", "PageDown"]) {
+    for (const key of ["a", "Tab", "PageDown"]) {
       expect(keyboardCommand({ ...plain, key })).toBeNull();
+    }
+  });
+});
+
+describe("keyboardCommand with a selection (spec spatial keys §2)", () => {
+  it.each([
+    ["ArrowRight", "right"],
+    ["ArrowLeft", "left"],
+    ["ArrowUp", "up"],
+    ["ArrowDown", "down"],
+  ] as const)("turns %s into a move to the neighbour %s", (key, direction) => {
+    expect(keyboardCommand({ ...plain, key }, true)).toEqual({ kind: "neighbour", direction });
+  });
+
+  it("pans by the small step with Shift while selecting", () => {
+    expect(keyboardCommand({ ...plain, key: "ArrowRight", shiftKey: true }, true)).toEqual({
+      kind: "pan",
+      horizontal: 0.1,
+      vertical: 0,
+    });
+  });
+
+  it.each(["Enter", " "])("starts the walk on %j without a selection, and leaves it alone with one", (key) => {
+    expect(keyboardCommand({ ...plain, key })).toEqual({ kind: "start" });
+    expect(keyboardCommand({ ...plain, key }, true)).toBeNull();
+  });
+
+  it("leaves Ctrl/Cmd+Enter and Alt+Enter to the browser", () => {
+    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      expect(keyboardCommand({ ...plain, ...modifiers, key: "Enter" })).toBeNull();
     }
   });
 });

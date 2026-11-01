@@ -1148,7 +1148,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     // Only the surface's own keys: the tree, legend and minimap inside it keep theirs.
     if (event.target !== event.currentTarget) return;
     const command = keyboardCommand(event);
-    if (command === null) return;
+    if (command === null || command.kind === "start" || command.kind === "neighbour") return;
     if (command.kind === "regimeOut") {
       // Escape in layers (spec slice C §5): the innermost thing closes first.
       if (selected !== null) {
