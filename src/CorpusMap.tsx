@@ -14,6 +14,7 @@ import {
 } from "react";
 import { AccessibleTree, itemCount } from "./a11y/AccessibleTree";
 import { type HeadingLevel, resolveHeadingLevel } from "./a11y/headingLevel";
+import { type Direction, nearestTo, neighbourInDirection } from "./a11y/spatialNeighbour";
 import { CardOverlay, DEFAULT_CARD_SIZE } from "./cards/CardOverlay";
 import { placeSelectedCard, type SelectedCardPlacement } from "./cards/placeSelectedCard";
 import { EdgeMarkers } from "./edges/EdgeMarkers";
@@ -45,6 +46,7 @@ import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hi
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
+import { followInto } from "./viewport/follow";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import {
   drawableView,
@@ -239,6 +241,15 @@ interface RegimeReset {
 
 /** How long keyboard movement must rest before the on-screen count is announced (spec slice B §4). */
 const COUNT_ANNOUNCEMENT_DELAY = 500;
+/** What an arrow with nothing in its direction speaks (spec spatial keys §5). */
+const NO_NEIGHBOUR: Readonly<Record<Direction, string>> = {
+  left: "No item to the left",
+  right: "No item to the right",
+  up: "No item above",
+  down: "No item below",
+};
+/** Below this point fade, Enter's selection would be undrawn, so it lands at near (spec spatial keys §4). */
+const DRAWN_POINT_ALPHA = 0.1;
 
 /** A press released within this many pixels of where it started is a click, not a drag. */
 const CLICK_SLOP = 4;
@@ -779,6 +790,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         : { ...spec, nodes: spec.nodes.filter((node) => node.territory === null || !dimmed.has(node.territory)) },
     [spec, dimmed],
   );
+  const liveNodesById = useMemo(() => new Map(liveSpec.nodes.map((node) => [node.id, node])), [liveSpec]);
+  const territoryNames = useMemo(
+    () => new Map(spec.territories.map((territory) => [territory.id, territory.name])),
+    [spec],
+  );
   // Selection (spec slice C §3): requested by the prop or own state; the
   // effective id is that of a live node, else null, so a dimmed or absent
   // item is neither drawn nor marked, and comes back when shown again.
@@ -793,6 +809,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // asked again by the next press or Escape.
   const requestedSelectionReference = useRef(requestedSelection);
   const pendingSelectionReference = useRef<{ id: string | null } | null>(null);
+  // The latest request and the selection drawn when it was made; unlike the
+  // pending one it survives commits, so a key press can start from it while
+  // the drawn selection has not moved yet (spec spatial keys §6).
+  const latestSelectionRequestReference = useRef<{ id: string | null; drawn: string | null } | null>(null);
   const selectionControlledReference = useRef(selectionControlled);
   const onSelectedChangeReference = useRef(properties.onSelectedChange);
   useLayoutEffect(() => {
@@ -804,6 +824,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const requestSelection = useCallback((id: string | null) => {
     const current = pendingSelectionReference.current ?? { id: requestedSelectionReference.current };
     if (id === current.id) return;
+    latestSelectionRequestReference.current = { id, drawn: requestedSelectionReference.current };
     const pending = { id };
     pendingSelectionReference.current = pending;
     window.requestAnimationFrame(() => {
@@ -1144,11 +1165,74 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     }, COUNT_ANNOUNCEMENT_DELAY);
   };
 
+  // Keyboard announcements (spec spatial keys §5) replace a pending count; a
+  // polite region does not speak unchanged text again, so every one toggles
+  // a trailing no-break space and a repeated press is heard.
+  const announcementParity = useRef(false);
+  const announce = (text: string) => {
+    if (countTimer.current !== null) {
+      clearTimeout(countTimer.current);
+      countTimer.current = null;
+    }
+    announcementParity.current = !announcementParity.current;
+    setCountAnnouncement(announcementParity.current ? `${text}\u00a0` : text);
+  };
+  // A keyboard selection (spec spatial keys §4-§6): the same gate and callback
+  // as a press, a spoken name, and a view that keeps the item in sight —
+  // landing at near when `land` (Enter with the points undrawn), else
+  // centring at the current scale only when it nears the usable area's edge.
+  const selectByKey = (node: MapNode, land: boolean) => {
+    requestSelection(node.id);
+    onSelect?.(node);
+    const territoryName = node.territory === null ? undefined : territoryNames.get(node.territory);
+    announce(territoryName === undefined ? node.label : `${node.label}, ${territoryName}`);
+    const area = usableArea(width, height, insets);
+    if (land) {
+      const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
+      const scale = Math.min(fitScale * MAXIMUM_ZOOM_IN, Math.max(fitScale / MAXIMUM_ZOOM_OUT, target));
+      requestViewport(
+        {
+          scale,
+          tx: area.left + area.width / 2 - node.x * scale,
+          ty: area.top + area.height / 2 - node.y * scale,
+        },
+        "interaction",
+      );
+    } else requestViewport((previous) => followInto(previous, node.x, node.y, area), "interaction");
+  };
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Only the surface's own keys: the tree, legend and minimap inside it keep theirs.
     if (event.target !== event.currentTarget) return;
-    const command = keyboardCommand(event);
-    if (command === null || command.kind === "start" || command.kind === "neighbour") return;
+    // A move starts from the latest request while the drawn selection is the
+    // one it was made over, so held arrows under a controlled selection that
+    // commits late advance one item per press; once the drawn one moves, from it.
+    const latest = latestSelectionRequestReference.current;
+    const originId = latest !== null && latest.drawn === requestedSelection ? latest.id : selected;
+    const origin = originId === null ? undefined : liveNodesById.get(originId);
+    const command = keyboardCommand(event, origin !== undefined);
+    if (command === null) return;
+    if (command.kind === "start" || command.kind === "neighbour") {
+      if (command.kind === "start") {
+        const area = usableArea(width, height, insets);
+        const [centreHorizontal, centreVertical] = toWorld(
+          viewport,
+          area.left + area.width / 2,
+          area.top + area.height / 2,
+        );
+        const nearest = nearestTo(liveSpec.nodes, centreHorizontal, centreVertical);
+        if (nearest === null) return;
+        selectByKey(nearest, pointAlpha < DRAWN_POINT_ALPHA);
+      } else if (origin !== undefined) {
+        const next = neighbourInDirection(origin, liveSpec.nodes, command.direction);
+        if (next === null) announce(NO_NEIGHBOUR[command.direction]);
+        else selectByKey(next, false);
+      }
+      event.preventDefault();
+      setSurfaceFocusVisible(true);
+      if (hoverReference.current !== null) setHover(null);
+      return;
+    }
     if (command.kind === "regimeOut") {
       // Escape in layers (spec slice C §5): the innermost thing closes first.
       if (selected !== null) {
