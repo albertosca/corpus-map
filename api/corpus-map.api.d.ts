@@ -1745,6 +1745,104 @@ export declare function followInto(viewport: Viewport, horizontal: number, verti
     height: number;
 }): Viewport;
 
+// viewport/gestures.d.ts
+/**
+ * The gesture recogniser (spec mobile §2): a pure state machine that turns
+ * pointer events into intents. No DOM, no React and no clock of its own: time
+ * comes from the event, so a test controls it. Two finger slots at most, so
+ * every event costs O(1).
+ */
+/** How far, in box pixels, a press may end from where it went down and still be a tap. */
+export declare const CLICK_SLOP = 4;
+/** Two taps within this many milliseconds, up to up, make a double tap (touch only). */
+export declare const DOUBLE_TAP_INTERVAL = 300;
+/** ...and within this many pixels of each other. */
+export declare const DOUBLE_TAP_DISTANCE = 24;
+/** Two fingers down and up within this many milliseconds of the first down make a two-finger tap. */
+export declare const TWO_FINGER_TAP_INTERVAL = 300;
+export interface GesturePointer {
+    kind: "down" | "move" | "up" | "cancel";
+    pointerId: number;
+    /** "mouse", "pen" or "touch". */
+    pointerType: string;
+    /** Box pixels. */
+    x: number;
+    y: number;
+    /** The event's `timeStamp`, in milliseconds. */
+    time: number;
+}
+export type GestureIntent = {
+    kind: "pan";
+    dx: number;
+    dy: number;
+} | {
+    kind: "pinch";
+    factor: number;
+    centreX: number;
+    centreY: number;
+    dx: number;
+    dy: number;
+} | {
+    kind: "tap";
+    x: number;
+    y: number;
+    pointerType: string;
+} | {
+    kind: "doubleTap";
+    x: number;
+    y: number;
+} | {
+    kind: "twoFingerTap";
+    x: number;
+    y: number;
+};
+interface Finger {
+    readonly pointerId: number;
+    readonly x: number;
+    readonly y: number;
+    readonly startX: number;
+    readonly startY: number;
+}
+/**
+ * Opaque to callers. `phase` "one" is a single press that can still tap;
+ * "pinch" is two fingers; "pan" is the finger left after a pinch, which never
+ * taps (it can only finish a two-finger tap).
+ */
+export interface GestureState {
+    readonly phase: "idle" | "one" | "pinch" | "pan";
+    readonly pointerType: string;
+    readonly first: Finger | null;
+    readonly second: Finger | null;
+    readonly firstDownTime: number;
+    /** Two fingers, both still inside the slop and inside the interval so far. */
+    readonly twoFingerTap: boolean;
+    /** Where the finger lifted first in a two-finger tap last was. */
+    readonly lifted: {
+        readonly x: number;
+        readonly y: number;
+    } | null;
+    /** The pinch's distance and midpoint at its start or at the last emitted pinch. */
+    readonly anchor: {
+        readonly distance: number;
+        readonly x: number;
+        readonly y: number;
+    } | null;
+    /** The last touch tap, a candidate first half of a double tap. */
+    readonly lastTap: {
+        readonly x: number;
+        readonly y: number;
+        readonly time: number;
+    } | null;
+}
+export declare function initialGestureState(): GestureState;
+/** Whether a gesture is in progress, so a move belongs to it and is not a hover. */
+export declare function isPressed(state: GestureState): boolean;
+export declare function step(state: GestureState, event: GesturePointer): {
+    state: GestureState;
+    intents: readonly GestureIntent[];
+};
+export {};
+
 // viewport/keyboard.d.ts
 import type { Direction } from "../a11y/spatialNeighbour";
 import type { LodThresholds, Regime } from "../lod/lod";

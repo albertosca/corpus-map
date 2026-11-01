@@ -112,6 +112,16 @@ describe("the gesture recogniser (spec mobile §2)", () => {
       expect(intents[intents.length - 1]).toEqual({ kind: "tap", x: 51, y: 50, pointerType: "mouse" });
     });
 
+    it("restarts the press on a second down from the pointer it holds (its up was lost)", () => {
+      const { intents } = run([mouse("down", 0, 0, 0), mouse("down", 50, 50, 100), mouse("up", 50, 50, 150)]);
+      expect(intents).toEqual([{ kind: "tap", x: 50, y: 50, pointerType: "mouse" }]);
+    });
+
+    it("never pinches one finger with itself when its down repeats", () => {
+      const { intents } = run([touch("down", 1, 0, 0, 0), touch("down", 1, 100, 0, 10), touch("move", 1, 140, 0, 20)]);
+      expect(intents).toEqual([{ kind: "pan", dx: 40, dy: 0 }]);
+    });
+
     it("is pressed between a down and its up, and not otherwise", () => {
       const pressed = step(initialGestureState(), touch("down", 1, 0, 0, 0)).state;
       expect(isPressed(initialGestureState())).toBe(false);

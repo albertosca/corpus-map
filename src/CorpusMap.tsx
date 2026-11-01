@@ -47,6 +47,14 @@ import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition 
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
 import { fitScene } from "./viewport/fitScene";
 import { followInto } from "./viewport/follow";
+import {
+  DOUBLE_TAP_INTERVAL,
+  type GestureIntent,
+  type GesturePointer,
+  initialGestureState,
+  isPressed,
+  step,
+} from "./viewport/gestures";
 import { keyboardCommand, regimeOutRatio } from "./viewport/keyboard";
 import {
   drawableView,
@@ -259,9 +267,6 @@ function continuesChain(
   return drawn === latest.drawnAtStart || latest.chain.has(drawn);
 }
 
-/** A press released within this many pixels of where it started is a click, not a drag. */
-const CLICK_SLOP = 4;
-
 function cardIdAt(root: HTMLElement | null, horizontal: number, vertical: number): string | null {
   if (!root) return null;
   // Reverse the DOM order rather than index from the end: `noUncheckedIndexedAccess`
@@ -308,13 +313,6 @@ function placeTooltip(
   element.style.transform = `translate(${left}px, ${top}px)`;
 }
 
-interface Press {
-  x: number;
-  y: number;
-  startX: number;
-  startY: number;
-}
-
 /** A pointer position, surface-relative (`x`, `y`) and in client coordinates for the card hit-test. */
 interface HoverPosition {
   x: number;
@@ -323,10 +321,16 @@ interface HoverPosition {
   clientY: number;
 }
 
-/** Accumulated, not-yet-applied drag delta, flushed once per animation frame. */
+/**
+ * Accumulated, not-yet-applied drag delta and pinch, flushed once per
+ * animation frame: the pinch factors multiply and the latest centre wins.
+ */
 interface Pending {
   dx: number;
   dy: number;
+  factor: number;
+  centreX: number;
+  centreY: number;
 }
 
 /**
@@ -682,7 +686,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     onViewportChangeReference.current?.(fitPublic, { reason: "spec" });
   }, [specChanges, fitted, width, height, viewportControlled, thresholds, tuning.hysteresis]);
   const canvasReference = useRef<HTMLCanvasElement>(null);
-  const drag = useRef<Press | null>(null);
+  const gesture = useRef(initialGestureState());
+  // A touch tap on empty map while something is selected clears the
+  // selection only once a double tap is ruled out (spec mobile §2): the
+  // first tap of a double tap must not drop the selection it zooms toward.
+  const heldTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<Pending | null>(null);
   // A world point from a minimap press/drag (showcase Task 4), flushed in
   // the same rAF-coalesced frame as `pending`'s drag delta, through the same
@@ -720,8 +728,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useEffect(() => {
     return () => {
       if (rafId.current !== null) window.cancelAnimationFrame(rafId.current);
+      if (heldTap.current !== null) clearTimeout(heldTap.current);
     };
   }, []);
+  // A new spec forgets a held tap: the selection it would clear belongs to the old corpus's map.
+  useEffect(() => {
+    if (heldTap.current !== null) clearTimeout(heldTap.current);
+    heldTap.current = null;
+  }, [spec]);
 
   const ratio = viewport.scale / fitScale;
   // Hysteresis regime, adjusted during render (the same pattern as the
@@ -1126,13 +1140,16 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     );
   };
 
-  const zoomStep = (direction: "in" | "out") => {
+  // One zoom step (the wheel's notch) anchored at a box point: the box centre
+  // for the handle and the keys, the tap for a double tap or a two-finger tap.
+  const zoomStepAbout = (horizontal: number, vertical: number, direction: "in" | "out") => {
     const factor = wheelZoomFactor({ deltaY: direction === "in" ? -120 : 120, deltaMode: 0, ctrlKey: false }, tuning);
     requestViewport((previous) => {
       const target = zoomStepScale(previous.scale, factor, fitScale, MAXIMUM_ZOOM_OUT, MAXIMUM_ZOOM_IN);
-      return zoomTo(previous, width / 2, height / 2, target);
+      return zoomTo(previous, horizontal, vertical, target);
     }, "interaction");
   };
+  const zoomStep = (direction: "in" | "out") => zoomStepAbout(width / 2, height / 2, direction);
   // Resets the regime hysteresis the same way a `spec` change does (the
   // `fitBasis` branch above): a fit is an explicit "back to the
   // overview" action, landing the ratio back at exactly 1, and a regime
@@ -1332,9 +1349,24 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     }, 0);
   };
 
+  // A pointer event in box coordinates, for the gesture recogniser (spec mobile §2).
+  const boxPointer = (event: PointerEvent, kind: GesturePointer["kind"]): GesturePointer => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      kind,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      time: event.timeStamp,
+    };
+  };
+
+  // A mouse or a pen presses with its primary button only; a touch screen
+  // sends every finger, and the recogniser keeps two of them for a pinch.
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0 || !event.isPrimary) return;
-    drag.current = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
+    if (event.pointerType !== "touch" && (event.button !== 0 || !event.isPrimary)) return;
+    gesture.current = step(gesture.current, boxPointer(event, "down")).state;
     (event.target as Element).setPointerCapture?.(event.pointerId);
     // Pressing clears the hover name: a scheduled frame from just before the
     // press could still be in flight, so this also drops the queued point,
@@ -1472,7 +1504,22 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       rafId.current = null;
       const accumulated = pending.current;
       pending.current = null;
-      if (accumulated) requestViewport((previous) => panBy(previous, accumulated.dx, accumulated.dy), "interaction");
+      // The pinch scales about its latest centre after the pan, in one
+      // update, and steps like the wheel: never away from the band.
+      if (accumulated) {
+        requestViewport((previous) => {
+          const panned = panBy(previous, accumulated.dx, accumulated.dy);
+          if (accumulated.factor === 1) return panned;
+          const target = zoomStepScale(
+            panned.scale,
+            accumulated.factor,
+            fitScaleReference.current,
+            MAXIMUM_ZOOM_OUT,
+            MAXIMUM_ZOOM_IN,
+          );
+          return zoomTo(panned, accumulated.centreX, accumulated.centreY, target);
+        }, "interaction");
+      }
       // A minimap press/drag (showcase Task 4): centres the main view on
       // the pressed world point through the very same `requestViewport` a drag pans
       // with, just landing on an absolute `tx`/`ty` instead of an
@@ -1494,7 +1541,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       // A press or a `pointerleave` already cleared `hover` synchronously at
       // its own call site, effects included, strictly before any
       // already-scheduled flush like this one can run; a drag never names.
-      if (drag.current === null && hoverPosition) resolveHover(hoverPosition);
+      if (!isPressed(gesture.current) && hoverPosition) resolveHover(hoverPosition);
     });
   };
 
@@ -1505,15 +1552,23 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // the same scheduled callback below rather than with its own `setHover`
   // here in the handler.
   const onPointerMove = (event: PointerEvent) => {
-    const press = drag.current;
-    if (press) {
-      const horizontalDelta = event.clientX - press.x;
-      const verticalDelta = event.clientY - press.y;
-      drag.current = { ...press, x: event.clientX, y: event.clientY };
-      const queued = pending.current;
-      pending.current = queued
-        ? { dx: queued.dx + horizontalDelta, dy: queued.dy + verticalDelta }
-        : { dx: horizontalDelta, dy: verticalDelta };
+    if (isPressed(gesture.current)) {
+      const result = step(gesture.current, boxPointer(event, "move"));
+      gesture.current = result.state;
+      for (const intent of result.intents) {
+        const queued = pending.current ?? { dx: 0, dy: 0, factor: 1, centreX: 0, centreY: 0 };
+        if (intent.kind === "pan")
+          pending.current = { ...queued, dx: queued.dx + intent.dx, dy: queued.dy + intent.dy };
+        else if (intent.kind === "pinch") {
+          pending.current = {
+            dx: queued.dx + intent.dx,
+            dy: queued.dy + intent.dy,
+            factor: queued.factor * intent.factor,
+            centreX: intent.centreX,
+            centreY: intent.centreY,
+          };
+        }
+      }
     } else {
       const rect = rootReference.current?.getBoundingClientRect();
       hoverPoint.current = rect
@@ -1532,8 +1587,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     scheduleFrame();
   };
 
-  const onPointerCancel = () => {
-    drag.current = null;
+  const onPointerCancel = (event: PointerEvent) => {
+    gesture.current = step(gesture.current, boxPointer(event, "cancel")).state;
   };
 
   // The legend and the minimap stop pointer moves, so the map never sees the
@@ -1552,21 +1607,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     if (hover !== null) setHover(null);
   };
 
-  // The card overlay is inert, so it cannot receive the click itself: a
-  // press released within CLICK_SLOP of where it started is resolved here
-  // against the visible cards' boxes. Topmost (last in DOM order) wins.
-  const onPointerUp = (event: PointerEvent) => {
-    if (event.button !== 0 || !event.isPrimary) return;
-    const press = drag.current;
-    drag.current = null;
-    if (!press || Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > CLICK_SLOP) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const position = {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-      clientX: event.clientX,
-      clientY: event.clientY,
-    };
+  const forgetHeldTap = () => {
+    if (heldTap.current !== null) clearTimeout(heldTap.current);
+    heldTap.current = null;
+  };
+
+  // The card overlay is inert, so it cannot receive the click itself: a tap
+  // (a press released within the recogniser's slop of where it started) is
+  // resolved here against the visible cards' boxes. Topmost (last in DOM
+  // order) wins.
+  const resolveTap = (position: HoverPosition, pointerType: string) => {
+    forgetHeldTap();
     // A marker sits above the cards, so it takes the press first.
     const markerId = markerAt(markers, position.x, position.y);
     if (markerId !== null) {
@@ -1576,14 +1627,46 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       goTo(markerId);
       return;
     }
-    const cardId = cardAt(event.clientX, event.clientY);
+    const cardId = cardAt(position.clientX, position.clientY);
     const id = cardId ?? labelNear(position) ?? pointNear(position);
-    requestSelection(id);
-    const node = id === null ? undefined : nodesById.get(id);
-    if (node && onSelect) onSelect(node);
+    if (id === null && pointerType === "touch" && selected !== null) {
+      heldTap.current = setTimeout(() => {
+        heldTap.current = null;
+        requestSelection(null);
+      }, DOUBLE_TAP_INTERVAL);
+    } else {
+      requestSelection(id);
+      const node = id === null ? undefined : nodesById.get(id);
+      if (node && onSelect) onSelect(node);
+    }
     // A touch has no hover: a tap off a card names what is under it, the
     // way a mouse resting there would (spec categories §7).
-    if (event.pointerType === "touch" && cardId === null) resolveHover(position);
+    if (pointerType === "touch" && cardId === null) resolveHover(position);
+  };
+
+  const dispatch = (intent: GestureIntent, event: PointerEvent) => {
+    if (intent.kind === "tap") {
+      const rect = event.currentTarget.getBoundingClientRect();
+      resolveTap(
+        { x: intent.x, y: intent.y, clientX: intent.x + rect.left, clientY: intent.y + rect.top },
+        intent.pointerType,
+      );
+      return;
+    }
+    if (intent.kind === "doubleTap") forgetHeldTap();
+    if (intent.kind === "doubleTap" || intent.kind === "twoFingerTap") {
+      zoomStepAbout(intent.x, intent.y, intent.kind === "doubleTap" ? "in" : "out");
+      // A zoom moves every point under a name resolved before it, as the wheel's does.
+      hoverPoint.current = null;
+      if (hoverReference.current !== null) setHover(null);
+    }
+  };
+
+  const onPointerUp = (event: PointerEvent) => {
+    if (event.pointerType !== "touch" && (event.button !== 0 || !event.isPrimary)) return;
+    const result = step(gesture.current, boxPointer(event, "up"));
+    gesture.current = result.state;
+    for (const intent of result.intents) dispatch(intent, event);
   };
 
   // The hovered point's territory, named beside its label (spec categories §7).

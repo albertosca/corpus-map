@@ -125,14 +125,15 @@ function owns(state: GestureState, pointerId: number): boolean {
 
 function down(state: GestureState, event: GesturePointer): GestureState {
   const finger: Finger = { pointerId: event.pointerId, x: event.x, y: event.y, startX: event.x, startY: event.y };
-  if (state.phase === "idle") {
+  // A down from a pointer already held means its up was lost: start over from this one.
+  if (state.phase === "idle" || owns(state, event.pointerId)) {
     return {
       ...IDLE,
       phase: "one",
       pointerType: event.pointerType,
       first: finger,
       firstDownTime: event.time,
-      lastTap: state.lastTap,
+      lastTap: state.phase === "idle" ? state.lastTap : null,
     };
   }
   const touchPair = state.pointerType === "touch" && event.pointerType === "touch";
