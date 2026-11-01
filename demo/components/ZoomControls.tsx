@@ -1,9 +1,9 @@
 import type { CorpusMapHandle } from "corpus-map";
 import type { CSSProperties, ReactElement, RefObject } from "react";
-import { useEffect, useState } from "react";
 import { token } from "../tokens";
 import { DRAWER_MAXIMUM_WIDTH } from "./Drawer";
 import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER } from "./floatingLayout";
+import { useViewportWidth } from "./narrow";
 
 interface ZoomControlsProps {
   mapRef: RefObject<CorpusMapHandle | null>;
@@ -67,21 +67,6 @@ const buttonStyle: CSSProperties = {
   color: token("text"),
   fontSize: 13,
 };
-
-/**
- * `window.innerWidth`, read once at mount (a client-only demo, never
- * server-rendered, so there is no hydration mismatch to guard against) and
- * kept live across a real browser resize. Shared with `Footer`.
- */
-export function useViewportWidth(): number {
-  const [width, setWidth] = useState(() => window.innerWidth);
-  useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return width;
-}
 
 /**
  * Zoom in / zoom out / fit, bottom-right (spec 4 §2), driving the library's

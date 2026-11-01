@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { MapNode } from "corpus-map";
 import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditAccessibility, violationIds } from "../../test/audit";
 import { Drawer } from "./Drawer";
 
@@ -270,5 +270,242 @@ describe("Drawer (showcase Task 6)", () => {
       renderWithReturnTarget(ARXIV_NODE, { isArxiv: true });
       expect(screen.queryByRole("heading", { name: "Related" })).toBeNull();
     });
+  });
+});
+
+describe("Drawer side layout styles (spec mobile §6: unchanged)", () => {
+  it("keeps today's inline styles", () => {
+    const { container } = renderWithReturnTarget(ARXIV_NODE, {
+      isArxiv: true,
+      territoryName: "Artificial Intelligence",
+      topInset: 48,
+      related: [{ node: ELEMENT_NODE, weight: 0.9, reason: "gui" }],
+    });
+    const drawer = container.querySelector("[data-drawer]") as HTMLElement;
+    const styles = [drawer, ...drawer.querySelectorAll<HTMLElement>("[style]")].map((element) =>
+      element.getAttribute("style"),
+    );
+    expect(drawer.className).toBe("cm-drawer-panel");
+    expect(styles).toMatchInlineSnapshot(`
+      [
+        "position: fixed; top: 48px; right: 0px; bottom: 0px; width: 90vw; max-width: 320px; z-index: 20; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding: 16px 18px; background: var(--surface-solid); border-left: 1px solid var(--border); box-shadow: -2px 0 10px var(--shadow); color: var(--text); font-size: 14px;",
+        "display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;",
+        "margin: 0px; font-size: 16px; font-weight: 600; line-height: 1.35;",
+        "flex-shrink: 0; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 13px; max-width: 100%;",
+        "margin: 0px;",
+        "margin: 0px;",
+        "margin: 0px;",
+        "color: var(--link);",
+        "margin: 6px 0px 0px; font-size: 14px; font-weight: 600;",
+        "margin: 0px; padding: 0px; list-style: none; display: flex; flex-direction: column; gap: 6px;",
+        "display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; max-width: 100%; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer;",
+        "color: var(--text-muted); font-size: 12px;",
+      ]
+    `);
+  });
+});
+
+describe("Drawer sheet layout (spec mobile §6)", () => {
+  const WINDOW_HEIGHT = 800;
+  const TOP = 56;
+  // Collapsed: the sheet spans from the top inset to the bottom, shifted down so 40% of the window shows.
+  const COLLAPSED_SHIFT = WINDOW_HEIGHT - TOP - 320;
+  const original = window.innerHeight;
+  let frames: FrameRequestCallback[] = [];
+
+  beforeEach(() => {
+    window.innerHeight = WINDOW_HEIGHT;
+    frames = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+  });
+  afterEach(() => {
+    window.innerHeight = original;
+    vi.restoreAllMocks();
+  });
+
+  function flushFrames(): void {
+    act(() => {
+      const pending = frames;
+      frames = [];
+      for (const callback of pending) callback(performance.now());
+    });
+  }
+
+  function sheet(extra: Partial<Parameters<typeof Drawer>[0]> = {}) {
+    const rendered = renderWithReturnTarget(ARXIV_NODE, {
+      isArxiv: true,
+      territoryName: "Artificial Intelligence",
+      layout: "sheet",
+      topInset: TOP,
+      related: [{ node: ELEMENT_NODE, weight: 0.9, reason: "gui" }],
+      ...extra,
+    });
+    const panel = rendered.container.querySelector("[data-drawer]") as HTMLElement;
+    const handle = rendered.container.querySelector("[data-sheet-handle]") as HTMLElement;
+    return { ...rendered, panel, handle };
+  }
+
+  const touch = { pointerId: 7, pointerType: "touch", button: 0 };
+  function drag(handle: HTMLElement, start: number, end: number): void {
+    fireEvent.pointerDown(handle, { ...touch, clientX: 100, clientY: start });
+    fireEvent.pointerMove(handle, { ...touch, clientX: 100, clientY: end });
+    fireEvent.pointerUp(handle, { ...touch, clientX: 100, clientY: end });
+    // The browser follows a press and release on the same button with a click.
+    fireEvent.click(handle);
+  }
+
+  it("spans the width on the bottom edge, from the top inset, collapsed to 40% of the window", () => {
+    const { panel } = sheet();
+    expect(panel.style.position).toBe("fixed");
+    expect(panel.style.left).toBe("0px");
+    expect(panel.style.right).toBe("0px");
+    expect(panel.style.bottom).toBe("0px");
+    expect(panel.style.top).toBe(`${TOP}px`);
+    expect(panel.style.maxWidth).toBe("100vw");
+    expect(panel.style.overflowY).toBe("auto");
+    expect(panel.style.transform).toBe("translateY(calc(100% - 320px))");
+    expect(panel.getAttribute("data-sheet-state")).toBe("collapsed");
+  });
+
+  it("has a 44 px handle button that expands and collapses on a tap", () => {
+    const { panel, handle } = sheet();
+    expect(handle.tagName).toBe("BUTTON");
+    expect(handle.getAttribute("aria-label")).toBe("Expand details");
+    expect(handle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(handle);
+    expect(handle.getAttribute("aria-label")).toBe("Collapse details");
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.style.transform).toBe("none");
+    expect(panel.getAttribute("data-sheet-state")).toBe("expanded");
+    fireEvent.click(handle);
+    expect(handle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("gives every button in the sheet a 44 px minimum height", () => {
+    const { panel } = sheet();
+    const buttons = [...panel.querySelectorAll<HTMLElement>("button")];
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    for (const button of buttons) expect(Number.parseFloat(button.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("expands when the handle is dragged up past the midpoint and released", () => {
+    const { handle } = sheet();
+    drag(handle, 500, 500 - COLLAPSED_SHIFT / 2 - 10);
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("snaps back when the drag stops short of the midpoint", () => {
+    const { handle, panel } = sheet();
+    drag(handle, 500, 500 - COLLAPSED_SHIFT / 2 + 10);
+    expect(handle.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.style.transform).toBe("translateY(calc(100% - 320px))");
+  });
+
+  it("toggles like a tap when the press does not move", () => {
+    const { handle } = sheet();
+    drag(handle, 500, 500);
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("follows the finger once per frame and never above the expanded top", () => {
+    const { handle, panel } = sheet();
+    fireEvent.pointerDown(handle, { ...touch, clientX: 100, clientY: 500 });
+    fireEvent.pointerMove(handle, { ...touch, clientX: 100, clientY: 450 });
+    fireEvent.pointerMove(handle, { ...touch, clientX: 100, clientY: 400 });
+    expect(frames).toHaveLength(1);
+    flushFrames();
+    expect(panel.style.transform).toBe(`translateY(${COLLAPSED_SHIFT - 100}px)`);
+    fireEvent.pointerMove(handle, { ...touch, clientX: 100, clientY: -2000 });
+    flushFrames();
+    expect(panel.style.transform).toBe("translateY(0px)");
+    fireEvent.pointerUp(handle, { ...touch, clientX: 100, clientY: -2000 });
+    expect(panel.style.transform).toBe("none");
+  });
+
+  it("closes, returning focus to the map, when dragged down from collapsed by more than half its height", () => {
+    const { handle, onClose, returnFocusTo } = sheet();
+    drag(handle, 500, 500 + 161);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(returnFocusTo.current);
+  });
+
+  it("stays open when dragged down from collapsed by less than half its height", () => {
+    const { handle, onClose } = sheet();
+    drag(handle, 500, 500 + 159);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(handle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("still closes on Close and on Escape, returning focus to the map", () => {
+    const first = sheet();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(first.onClose).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(first.returnFocusTo.current);
+    first.unmount();
+    const second = sheet();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(second.onClose).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(second.returnFocusTo.current);
+  });
+
+  it("opens collapsed again after a close", () => {
+    const { handle, rerender, returnFocusTo, onClose } = sheet();
+    fireEvent.click(handle);
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+    const element = (node: MapNode | null) => (
+      <>
+        <button type="button" ref={returnFocusTo}>
+          map surface stand-in
+        </button>
+        <Drawer
+          node={node}
+          territoryName={null}
+          isArxiv={false}
+          onClose={onClose}
+          returnFocusTo={returnFocusTo}
+          related={[]}
+          onOpenRelated={vi.fn()}
+          layout="sheet"
+          topInset={TOP}
+        />
+      </>
+    );
+    rerender(element(null));
+    rerender(element(ELEMENT_NODE));
+    expect(screen.getByRole("button", { name: "Expand details" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("is controlled when `expanded` is passed, reporting each request", () => {
+    const onExpandedChange = vi.fn();
+    const { handle } = sheet({ expanded: true, onExpandedChange });
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(handle);
+    expect(onExpandedChange).toHaveBeenCalledWith(false);
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("animates the transform, unless the reader asked for reduced motion", () => {
+    const { panel, unmount } = sheet();
+    expect(panel.style.transition).toContain("transform");
+    unmount();
+    // jsdom has no matchMedia: define one for this test only.
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) => ({ matches: query.includes("reduce"), media: query }) as MediaQueryList,
+    );
+    try {
+      const reduced = sheet();
+      expect(reduced.panel.style.transition).toBe("");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("passes the accessibility audit", async () => {
+    const { container } = sheet();
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
   });
 });

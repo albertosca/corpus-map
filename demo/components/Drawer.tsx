@@ -1,8 +1,9 @@
 import type { MapNode, RelatedItem } from "corpus-map";
-import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
-import { useEffect, useEffectEvent, useId, useRef } from "react";
+import type { CSSProperties, ReactElement, ReactNode, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { ARXIV_ABS_URL_PREFIX, type ArxivCategory } from "../corpora/compact";
 import { token } from "../tokens";
+import { sheetCollapsedHeight, useViewportHeight } from "./narrow";
 
 export interface DrawerProps {
   /** The selected node, or `null` when nothing is selected — renders nothing in that case. */
@@ -20,6 +21,12 @@ export interface DrawerProps {
   related: readonly RelatedItem[];
   /** Called with a related item's id when its button is pressed. */
   onOpenRelated: (id: string) => void;
+  /** "side" (default): a strip on the right. "sheet": a bottom sheet across the width, for a narrow window (spec mobile §6). */
+  layout?: "side" | "sheet" | undefined;
+  /** The sheet's state when the parent controls it; absent, the sheet keeps its own, collapsed on every open. */
+  expanded?: boolean | undefined;
+  /** Called with the state the reader asked the sheet for (a tap or a drag of its handle). */
+  onExpandedChange?: ((expanded: boolean) => void) | undefined;
 }
 
 const ANIMATION_STYLE = `
@@ -62,6 +69,62 @@ const panelStyle: CSSProperties = {
   color: token("text"),
   fontSize: 14,
 };
+
+/** The sheet at its expanded height; collapsing it only moves it down (`transform`), so it never lays out again. */
+const sheetStyle: CSSProperties = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  maxWidth: "100vw",
+  zIndex: 20,
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  overflowY: "auto",
+  padding: "0 18px 16px",
+  background: token("surfaceSolid"),
+  borderTop: `1px solid ${token("border")}`,
+  borderRadius: "12px 12px 0 0",
+  boxShadow: `0 -2px 10px ${token("shadow")}`,
+  color: token("text"),
+  fontSize: 14,
+};
+
+/** The handle stays at the top while the content scrolls under it. */
+const handleStyle: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  maxWidth: "100%",
+  minHeight: 44,
+  padding: 0,
+  border: "none",
+  background: token("surfaceSolid"),
+  cursor: "grab",
+  touchAction: "none",
+};
+
+const gripStyle: CSSProperties = {
+  width: 36,
+  height: 4,
+  borderRadius: 2,
+  background: token("borderStrong"),
+};
+
+/** A press that moves less than this is a tap, not a drag. */
+const TAP_SLOP = 4;
+
+const SHEET_TRANSITION = "transform 200ms ease-out";
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
 
 const headerRowStyle: CSSProperties = {
   display: "flex",
@@ -250,9 +313,40 @@ export function Drawer({
   topInset = 0,
   related,
   onOpenRelated,
+  layout = "side",
+  expanded: controlledExpanded,
+  onExpandedChange,
 }: DrawerProps): ReactElement | null {
   const titleId = useId();
   const closeButtonReference = useRef<HTMLButtonElement>(null);
+  const panelReference = useRef<HTMLDivElement>(null);
+  const windowHeight = useViewportHeight();
+
+  // The sheet's own state, collapsed again on every open (React's "adjust
+  // state on a prop change" pattern, during render).
+  const [ownExpanded, setOwnExpanded] = useState(false);
+  const [wasOpen, setWasOpen] = useState(node !== null);
+  if (wasOpen !== (node !== null)) {
+    setWasOpen(node !== null);
+    if (node === null) setOwnExpanded(false);
+  }
+  const expanded = controlledExpanded ?? ownExpanded;
+  const requestExpanded = (next: boolean) => {
+    if (controlledExpanded === undefined) setOwnExpanded(next);
+    onExpandedChange?.(next);
+  };
+  const collapsedHeight = sheetCollapsedHeight(windowHeight);
+  // How far down the collapsed sheet sits from its expanded place.
+  const collapsedShift = Math.max(0, windowHeight - topInset - collapsedHeight);
+  const restingTransform = (state: boolean) => (state ? "none" : `translateY(calc(100% - ${collapsedHeight}px))`);
+
+  // A handle drag (spec mobile §6, §7): the offset lives in a ref and is
+  // written to the panel once per frame, never through React state, so a
+  // drag re-renders nothing. A release snaps to the nearer state, or closes
+  // when it ends more than half the collapsed height below it.
+  const drag = useRef<{ pointerId: number; start: number; from: number; offset: number; moved: boolean } | null>(null);
+  const framePending = useRef(false);
+  const suppressClick = useRef(false);
 
   // No `useCallback` here on purpose: this reads `returnFocusTo.current` —
   // a ref access the React Compiler's static analysis cannot reconcile
@@ -293,6 +387,56 @@ export function Drawer({
 
   if (!node) return null;
 
+  const onHandlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    suppressClick.current = false;
+    const from = expanded ? 0 : collapsedShift;
+    drag.current = { pointerId: event.pointerId, start: event.clientY, from, offset: from, moved: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const onHandlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const travel = event.clientY - current.start;
+    if (Math.abs(travel) >= TAP_SLOP) current.moved = true;
+    current.offset = Math.max(0, current.from + travel);
+    if (framePending.current) return;
+    framePending.current = true;
+    requestAnimationFrame(() => {
+      framePending.current = false;
+      const panel = panelReference.current;
+      if (!drag.current || !panel) return;
+      panel.style.transition = "none";
+      panel.style.transform = `translateY(${drag.current.offset}px)`;
+    });
+  };
+  const onHandlePointerEnd = (event: ReactPointerEvent<HTMLButtonElement>, cancelled: boolean) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    drag.current = null;
+    // A press that never moved is a tap: the click that follows toggles.
+    if (!current.moved) return;
+    suppressClick.current = true;
+    if (!cancelled && current.offset > collapsedShift + collapsedHeight / 2) {
+      close();
+      return;
+    }
+    const next = cancelled ? expanded : current.offset < collapsedShift / 2;
+    const panel = panelReference.current;
+    if (panel) {
+      // Written here too: a snap back to the same state re-renders nothing.
+      panel.style.transition = prefersReducedMotion() ? "" : SHEET_TRANSITION;
+      panel.style.transform = restingTransform(next);
+    }
+    if (next !== expanded) requestExpanded(next);
+  };
+  const onHandleClick = () => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    requestExpanded(!expanded);
+  };
+
   let body: ReactNode;
   if (isArxiv) {
     body = <ArxivMetaView node={node} territoryName={territoryName} />;
@@ -305,23 +449,54 @@ export function Drawer({
     );
   }
 
+  const sheet = layout === "sheet";
+  const touchTarget = (style: CSSProperties): CSSProperties => (sheet ? { ...style, minHeight: 44 } : style);
   return (
     <>
-      <style>{ANIMATION_STYLE}</style>
+      {sheet ? null : <style>{ANIMATION_STYLE}</style>}
       <div
+        ref={panelReference}
         data-drawer
         data-floating-control
-        className="cm-drawer-panel"
+        {...(sheet ? { "data-sheet-state": expanded ? "expanded" : "collapsed" } : { className: "cm-drawer-panel" })}
         role="dialog"
         aria-modal="false"
         aria-labelledby={titleId}
-        style={{ ...panelStyle, top: topInset }}
+        style={
+          sheet
+            ? {
+                ...sheetStyle,
+                top: topInset,
+                transform: restingTransform(expanded),
+                ...(prefersReducedMotion() ? {} : { transition: SHEET_TRANSITION }),
+              }
+            : { ...panelStyle, top: topInset }
+        }
       >
+        {sheet ? (
+          <button
+            type="button"
+            data-sheet-handle
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse details" : "Expand details"}
+            onClick={onHandleClick}
+            onKeyDown={() => {
+              suppressClick.current = false;
+            }}
+            onPointerDown={onHandlePointerDown}
+            onPointerMove={onHandlePointerMove}
+            onPointerUp={(event) => onHandlePointerEnd(event, false)}
+            onPointerCancel={(event) => onHandlePointerEnd(event, true)}
+            style={handleStyle}
+          >
+            <span aria-hidden="true" style={gripStyle} />
+          </button>
+        ) : null}
         <div style={headerRowStyle}>
           <h2 id={titleId} style={titleStyle}>
             {node.label}
           </h2>
-          <button type="button" ref={closeButtonReference} onClick={close} style={closeButtonStyle}>
+          <button type="button" ref={closeButtonReference} onClick={close} style={touchTarget(closeButtonStyle)}>
             Close
           </button>
         </div>
@@ -332,7 +507,11 @@ export function Drawer({
             <ul style={relatedListStyle}>
               {related.map((item) => (
                 <li key={item.node.id}>
-                  <button type="button" style={relatedButtonStyle} onClick={() => onOpenRelated(item.node.id)}>
+                  <button
+                    type="button"
+                    style={touchTarget(relatedButtonStyle)}
+                    onClick={() => onOpenRelated(item.node.id)}
+                  >
                     <span>{item.node.label}</span>
                     {item.reason ? <span style={relatedReasonStyle}>{item.reason}</span> : null}
                   </button>

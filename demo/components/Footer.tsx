@@ -8,7 +8,8 @@ import {
   FOOTER_MIN_BAND_WIDTH,
   GUTTER,
 } from "./floatingLayout";
-import { BUTTON_WIDTH, useViewportWidth, zoomControlsRight } from "./ZoomControls";
+import { useViewportWidth } from "./narrow";
+import { BUTTON_WIDTH, zoomControlsRight } from "./ZoomControls";
 
 interface FooterProps {
   corpusId: CorpusId;
