@@ -5,14 +5,14 @@
  * every event costs O(1).
  */
 
-/** How far, in box pixels, a press may end from where it went down and still be a tap. */
+/** How far, in box pixels, a mouse or pen press may end from where it went down and still be a tap. */
 export const CLICK_SLOP = 4;
 /**
- * How far, in box pixels, a finger may stray from where it went down and
- * still tap when it comes back within `CLICK_SLOP`: past it the press is a
- * pan for good, the way a touch browser cancels the tap once a scroll
- * starts. Wider than the slop so a finger's jitter still taps; a mouse
- * keeps the click's rule (only the distance at the up decides).
+ * How far, in box pixels, a finger may move from where it went down and
+ * still tap: a finger on glass drifts more than a mouse. Past it the press
+ * is a pan for good, even when the finger comes back, the way a touch
+ * browser cancels the tap once a scroll starts. A mouse keeps the click's
+ * rule: only the distance at the up decides, against `CLICK_SLOP`.
  */
 export const TOUCH_STRAY_DISTANCE = 10;
 /** Two taps within this many milliseconds, up to up, make a double tap (touch only). */
@@ -121,11 +121,16 @@ export function step(
     case "up":
       return up(state, event);
     case "cancel":
-      return {
-        state: owns(state, event.pointerId) ? { ...IDLE } : state,
-        intents: NONE,
-      };
+      return { state: cancel(state, event), intents: NONE };
   }
+}
+
+/** A cancelled finger of a pinch leaves the other one panning, as its up would; any other cancel ends the press. */
+function cancel(state: GestureState, event: GesturePointer): GestureState {
+  if (!owns(state, event.pointerId)) return state;
+  if (state.phase !== "pinch" || state.first === null || state.second === null) return { ...IDLE };
+  const remaining = state.first.pointerId === event.pointerId ? state.second : state.first;
+  return { ...state, phase: "pan", first: remaining, second: null, anchor: null, twoFingerTap: false, lifted: null };
 }
 
 function owns(state: GestureState, pointerId: number): boolean {
@@ -234,7 +239,10 @@ function up(state: GestureState, event: GesturePointer): { state: GestureState; 
           : NONE,
     };
   }
-  if (!withinSlop(released)) return { state: { ...IDLE }, intents: NONE };
+  const tapReach = state.pointerType === "touch" ? TOUCH_STRAY_DISTANCE : CLICK_SLOP;
+  if (Math.hypot(released.x - released.startX, released.y - released.startY) > tapReach) {
+    return { state: { ...IDLE }, intents: NONE };
+  }
   if (state.pointerType !== "touch") {
     return { state: { ...IDLE }, intents: [{ kind: "tap", x: event.x, y: event.y, pointerType: state.pointerType }] };
   }

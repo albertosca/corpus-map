@@ -244,6 +244,22 @@ describe("TopBar on a narrow window (spec mobile §6)", () => {
     }
   });
 
+  it("closes on an Escape with focus outside it, as Safari leaves focus after a click (whole-branch review #8)", () => {
+    const { menu, popover } = narrowBar();
+    const documentEscape = vi.fn();
+    document.addEventListener("keydown", documentEscape);
+    try {
+      fireEvent.click(menu);
+      menu.blur();
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(popover.hidden).toBe(true);
+      expect(document.activeElement).toBe(menu);
+      expect(documentEscape).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("keydown", documentEscape);
+    }
+  });
+
   it("lets an Escape on the closed Menu reach the document, so the drawer still closes", () => {
     const { menu } = narrowBar();
     const documentEscape = vi.fn();

@@ -94,6 +94,16 @@ describe("the gesture recogniser (spec mobile §2)", () => {
       expect(intents[intents.length - 1]).toEqual({ kind: "tap", x: 11, y: 10, pointerType: "touch" });
     });
 
+    it("taps a finger lifted 6 px from where it went down: a finger on glass drifts more than a mouse (whole-branch review #1)", () => {
+      const { intents } = run([touch("down", 1, 0, 0, 0), touch("move", 1, 6, 0, 10), touch("up", 1, 6, 0, 20)]);
+      expect(intents[intents.length - 1]).toEqual({ kind: "tap", x: 6, y: 0, pointerType: "touch" });
+    });
+
+    it("still keeps a mouse press lifted 6 px away from being a click", () => {
+      const { intents } = run([mouse("down", 0, 0, 0), mouse("move", 6, 0, 10), mouse("up", 6, 0, 20)]);
+      expect(kinds(intents)).toEqual(["pan"]);
+    });
+
     it("never lets a strayed finger be the first half of a double tap", () => {
       const { intents } = run([
         touch("down", 1, 10, 10, 0),
@@ -325,14 +335,17 @@ describe("the gesture recogniser (spec mobile §2)", () => {
       expect(step(cancelled.state, touch("up", 1, 20, 10, 30)).intents).toEqual([]);
     });
 
-    it("ends a pinch: the other finger's moves emit nothing, and a fresh down pans", () => {
+    it("keeps the finger left after one finger of a pinch is cancelled panning, never a hover (whole-branch review #3)", () => {
       const cancelled = run([
         touch("down", 1, 100, 100, 0),
         touch("down", 2, 200, 100, 10),
         touch("cancel", 2, 200, 100, 20),
       ]);
-      expect(run([touch("move", 1, 150, 100, 30), touch("up", 1, 150, 100, 40)], cancelled.state).intents).toEqual([]);
-      const fresh = run([touch("down", 5, 0, 0, 50), touch("move", 5, 20, 0, 60)], cancelled.state);
+      expect(isPressed(cancelled.state)).toBe(true);
+      const after = run([touch("move", 1, 150, 100, 30), touch("up", 1, 150, 100, 40)], cancelled.state);
+      expect(after.intents).toEqual([{ kind: "pan", dx: 50, dy: 0 }]);
+      expect(isPressed(after.state)).toBe(false);
+      const fresh = run([touch("down", 5, 0, 0, 50), touch("move", 5, 20, 0, 60)], after.state);
       expect(fresh.intents).toEqual([{ kind: "pan", dx: 20, dy: 0 }]);
     });
 

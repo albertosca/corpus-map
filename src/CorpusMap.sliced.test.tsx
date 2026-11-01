@@ -1,7 +1,8 @@
 import { act, render } from "@testing-library/react";
+import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateCorpus } from "../fixtures/synthetic/generate";
-import { CorpusMap } from "./CorpusMap";
+import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
 import { estimateText } from "./labels/placement";
 import { buildScene } from "./shared/scene";
 import { DEFAULT_THEME } from "./shared/theme";
@@ -92,5 +93,36 @@ describe("CorpusMap with a scene built in slices (spec mobile §7)", () => {
     const scene = buildScene(other, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     const fitted = fitScene(other, scene, 800, 600, 24, { groupNames: true });
     expect(painted[painted.length - 1]?.scale).toBeCloseTo(fitted.scale, 9);
+  });
+
+  it("refits a corpus switched away from and straight back before the other one was built (whole-branch review #4)", () => {
+    const onViewChange = vi.fn();
+    const handle = createRef<CorpusMapHandle>();
+    const mapFor = (spec: typeof large) => (
+      <CorpusMap
+        ref={handle}
+        spec={spec}
+        width={800}
+        height={600}
+        renderCard={() => null}
+        onViewChange={onViewChange}
+      />
+    );
+    const { rerender } = render(mapFor(large));
+    runSlices();
+    act(() => {
+      handle.current?.zoomIn();
+      handle.current?.zoomIn();
+    });
+    runSlices();
+    expect(onViewChange.mock.calls[onViewChange.mock.calls.length - 1]?.[0].ratio).toBeGreaterThan(1.1);
+    const callsBefore = onViewChange.mock.calls.length;
+
+    rerender(mapFor(other));
+    rerender(mapFor(large));
+    runSlices();
+
+    expect(onViewChange.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(onViewChange.mock.calls[onViewChange.mock.calls.length - 1]?.[0].ratio).toBeCloseTo(1, 9);
   });
 });

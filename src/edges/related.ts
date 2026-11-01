@@ -64,7 +64,9 @@ function nodesOf(spec: MapSpec): ReadonlyMap<string, MapNode> {
  * `id`'s related items, heaviest first, absent weights last, then by id (spec
  * slice E §6). The indexes are built once per spec object and kept while
  * the spec lives: rebuilding them for every selection took about 100 ms of a
- * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with.
+ * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with. So a
+ * spec is never mutated in place: after changing its edges or nodes, pass a
+ * new spec object, or this keeps answering from the old index.
  */
 export function relatedItems(spec: MapSpec, id: string): RelatedItem[] {
   const byId = nodesOf(spec);

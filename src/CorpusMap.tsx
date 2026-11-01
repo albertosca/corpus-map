@@ -587,8 +587,16 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const [refits, setRefits] = useState(0);
   // Counts spec swaps after the first, for the `"spec"` proposal below.
   const [specChanges, setSpecChanges] = useState(0);
+  // Every `spec` prop change owes a refit, drawn or not: switching away and
+  // straight back before the other corpus was built finds this corpus's
+  // scene still held (`useSliced`), so `fitBasis` alone would read "same
+  // spec" and keep the zoom of before the switch.
+  const [specSeen, setSpecSeen] = useState({ spec, owesRefit: false });
+  const refitOwed = specSeen.owesRefit || specSeen.spec !== spec;
+  if (ready && refitOwed) setSpecSeen({ spec, owesRefit: false });
+  else if (!ready && specSeen.spec !== spec) setSpecSeen({ spec, owesRefit: true });
   if (ready) {
-    if (fitBasis === null || fitBasis.spec !== spec) {
+    if (fitBasis === null || fitBasis.spec !== spec || refitOwed) {
       setFitBasis({ spec, width, height });
       if (fitBasis !== null) setSpecChanges((count) => count + 1);
       if (!viewportControlled) {
@@ -1674,8 +1682,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     const cardId = cardAt(position.clientX, position.clientY);
     const id = cardId ?? labelNear(position) ?? pointNear(position);
     if (id === null && pointerType === "touch" && selected !== null) {
+      // Clears only the selection the tap was over: one made meanwhile by a
+      // key, `reveal` or the consumer's own `selectedId` stands.
+      const drawnAtHold = requestedSelectionReference.current;
+      const requestAtHold = latestSelectionRequestReference.current;
       heldTap.current = setTimeout(() => {
         heldTap.current = null;
+        if (requestedSelectionReference.current !== drawnAtHold) return;
+        if (latestSelectionRequestReference.current !== requestAtHold) return;
         requestSelection(null);
       }, DOUBLE_TAP_INTERVAL);
     } else {

@@ -473,7 +473,9 @@ export interface RelatedItem {
  * `id`'s related items, heaviest first, absent weights last, then by id (spec
  * slice E §6). The indexes are built once per spec object and kept while
  * the spec lives: rebuilding them for every selection took about 100 ms of a
- * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with.
+ * tap on arXiv at the 4× CPU slowdown spec mobile §7 measures with. So a
+ * spec is never mutated in place: after changing its edges or nodes, pass a
+ * new spec object, or this keeps answering from the old index.
  */
 export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 
@@ -1913,14 +1915,14 @@ export declare function followInto(viewport: Viewport, horizontal: number, verti
  * comes from the event, so a test controls it. Two finger slots at most, so
  * every event costs O(1).
  */
-/** How far, in box pixels, a press may end from where it went down and still be a tap. */
+/** How far, in box pixels, a mouse or pen press may end from where it went down and still be a tap. */
 export declare const CLICK_SLOP = 4;
 /**
- * How far, in box pixels, a finger may stray from where it went down and
- * still tap when it comes back within `CLICK_SLOP`: past it the press is a
- * pan for good, the way a touch browser cancels the tap once a scroll
- * starts. Wider than the slop so a finger's jitter still taps; a mouse
- * keeps the click's rule (only the distance at the up decides).
+ * How far, in box pixels, a finger may move from where it went down and
+ * still tap: a finger on glass drifts more than a mouse. Past it the press
+ * is a pan for good, even when the finger comes back, the way a touch
+ * browser cancels the tap once a scroll starts. A mouse keeps the click's
+ * rule: only the distance at the up decides, against `CLICK_SLOP`.
  */
 export declare const TOUCH_STRAY_DISTANCE = 10;
 /** Two taps within this many milliseconds, up to up, make a double tap (touch only). */

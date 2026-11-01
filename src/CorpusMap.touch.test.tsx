@@ -207,6 +207,27 @@ describe("CorpusMap on a touch screen (spec mobile §2)", () => {
     expect(selections).toEqual([null]);
   });
 
+  it("leaves a selection made another way while a tap on empty map was held (whole-branch review #7)", () => {
+    const properties = { selectedId: "c2" };
+    const { tap, changes, selections, rerender } = renderMap(properties);
+    const [horizontal, vertical] = boxAt(latest(changes), 250, 250);
+    tap(horizontal, vertical);
+    advance(100);
+    // The consumer selects from its own list (the demo's Related) inside the double-tap window.
+    rerender(
+      <CorpusMap
+        spec={gridSpec}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={WIDTH}
+        height={HEIGHT}
+        onSelectedChange={(id) => selections.push(id)}
+        selectedId="d3"
+      />,
+    );
+    advance(300);
+    expect(selections).toEqual([]);
+  });
+
   it("selects an item on a tap at once", () => {
     // Zoomed in: at the fit the points are faded out and take no tap.
     const { tap, selections } = renderMap({ defaultViewport: { centre: [300, 200], zoom: 4 } });

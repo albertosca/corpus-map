@@ -17,7 +17,7 @@ export function spacing(points: readonly Point[], quantile = 0.9): number {
   if (points.length < 2) return 0;
   const cell = Math.max(1e-9, extent(points) / Math.sqrt(points.length));
   const keyOf = numericCellKey(points, cell);
-  const grid = new Map<number, Point[]>();
+  const grid = new Map<number | string, Point[]>();
   for (const point of points) {
     const key = keyOf(Math.floor(point[0] / cell), Math.floor(point[1] / cell));
     const bucket = grid.get(key);
@@ -51,17 +51,23 @@ export function spacing(points: readonly Point[], quantile = 0.9): number {
  * up to `MAXIMUM_REACH` cells away get distinct keys, the same buckets a
  * `"column,row"` string named, without building a string per lookup (the
  * scene's grids run hundreds of thousands of lookups on the arXiv corpus).
+ * A grid with more cells than a float counts exactly (a span some 1e8 times
+ * the cell) falls back to that string, so distinct cells never share a key.
  */
-function numericCellKey(points: readonly Point[], cell: number): (column: number, row: number) => number {
+function numericCellKey(points: readonly Point[], cell: number): (column: number, row: number) => number | string {
   let firstColumn = Number.POSITIVE_INFINITY;
+  let lastColumn = Number.NEGATIVE_INFINITY;
   let firstRow = Number.POSITIVE_INFINITY;
   let lastRow = Number.NEGATIVE_INFINITY;
   for (const [horizontal, vertical] of points) {
     firstColumn = Math.min(firstColumn, Math.floor(horizontal / cell));
+    lastColumn = Math.max(lastColumn, Math.floor(horizontal / cell));
     firstRow = Math.min(firstRow, Math.floor(vertical / cell));
     lastRow = Math.max(lastRow, Math.floor(vertical / cell));
   }
+  const width = lastColumn - firstColumn + 1 + 2 * MAXIMUM_REACH;
   const height = lastRow - firstRow + 1 + 2 * MAXIMUM_REACH;
+  if (!(width * height <= Number.MAX_SAFE_INTEGER)) return (column, row) => `${column},${row}`;
   return (column, row) => (column - firstColumn + MAXIMUM_REACH) * height + (row - firstRow + MAXIMUM_REACH);
 }
 
@@ -128,7 +134,7 @@ export function components(points: readonly Point[], link: number): Point[][] {
   // pair; the groups are the same, since the graph is.
   const cell = link / Math.SQRT2;
   const keyOf = numericCellKey(points, cell);
-  const cells = new Map<number, { column: number; row: number; members: number[] }>();
+  const cells = new Map<number | string, { column: number; row: number; members: number[] }>();
   points.forEach(([horizontal, vertical], index) => {
     const column = Math.floor(horizontal / cell);
     const row = Math.floor(vertical / cell);

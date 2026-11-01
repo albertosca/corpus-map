@@ -250,6 +250,17 @@ describe("shape helpers", () => {
       expect(components(points, link)).toEqual(allPairs(points, link));
     }
   });
+
+  it("components keeps cells apart when the grid is too large for an exact numeric key (whole-branch review #6)", () => {
+    // 1e5 / (1e-6 / √2) cells a side: past 2^53 cells, so `column * height + row` would merge distinct cells.
+    const points: Point[] = [
+      [0, 0],
+      [0, 1e5],
+      [1e5, 0],
+      [1e5, 0.05],
+    ];
+    expect(components(points, 1e-6)).toEqual(points.map((point) => [point]));
+  });
 });
 
 // Inputs found by a search over random point sets (fewer than 1 in 1,000 reach a

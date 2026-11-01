@@ -1,4 +1,4 @@
-import type { ChangeEvent, CSSProperties, KeyboardEvent, ReactElement, Ref } from "react";
+import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
 import type { GalleryEntry } from "../corpora";
 import { token } from "../tokens";
@@ -201,7 +201,10 @@ export function TopBar({
     setMenuOpen(false);
     menuButtonReference.current?.focus();
   };
-  // A press anywhere outside the Menu and its popover closes it.
+  // A press anywhere outside the Menu and its popover closes it, and so does
+  // an Escape wherever focus is (Safari does not focus a button on click).
+  // The Escape is caught on the window's capture phase so it is the menu's
+  // alone: the drawer listens for Escape on the document and must not close too.
   const onOutsidePress = useEffectEvent(closeMenu);
   const listening = narrow && menuOpen;
   useEffect(() => {
@@ -211,20 +214,21 @@ export function TopBar({
       if (popoverReference.current?.contains(target) || menuButtonReference.current?.contains(target)) return;
       onOutsidePress();
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      onOutsidePress();
+    };
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
   }, [listening]);
 
   if (narrow) {
     const statusText = linkStatus === null ? "" : LINK_STATUS_TEXT[linkStatus];
-    // On the Menu and its items (Biome keeps handlers off a static element).
-    // While the menu is open, an Escape is the menu's alone: the drawer listens
-    // for Escape on the document and must not close too.
-    const onMenuKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key !== "Escape" || !menuOpen) return;
-      event.stopPropagation();
-      closeMenu();
-    };
     return (
       <header ref={barReference} data-topbar data-floating-control style={narrowBarStyle}>
         <h1 style={{ ...VISUALLY_HIDDEN, fontSize: 15, margin: 0 }}>corpus-map</h1>
@@ -244,7 +248,6 @@ export function TopBar({
           aria-expanded={menuOpen}
           aria-controls={MENU_ID}
           onClick={() => setMenuOpen((open) => !open)}
-          onKeyDown={onMenuKeyDown}
           style={menuButtonStyle}
         >
           Menu
@@ -261,7 +264,6 @@ export function TopBar({
           <button
             type="button"
             aria-pressed={tuningOpen}
-            onKeyDown={onMenuKeyDown}
             onClick={() => {
               setMenuOpen(false);
               onToggleTuning();
@@ -276,7 +278,6 @@ export function TopBar({
               closeMenu();
               onCopyLink();
             }}
-            onKeyDown={onMenuKeyDown}
             style={menuItemStyle}
           >
             Copy link

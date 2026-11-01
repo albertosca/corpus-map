@@ -43,7 +43,7 @@
   },
   "sizeLimit": {
     "file": "dist/corpus-map.js",
-    "maxGzipBytes": 34689
+    "maxGzipBytes": 34887
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

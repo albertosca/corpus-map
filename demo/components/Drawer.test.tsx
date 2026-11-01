@@ -411,6 +411,22 @@ describe("Drawer sheet layout (spec mobile §6)", () => {
     expect(handle.getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("toggles like a tap when a finger wobbles 6 px on the handle: glass is not a mouse (whole-branch review #2)", () => {
+    const { handle } = sheet();
+    drag(handle, 500, 494);
+    expect(handle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps a mouse press that moved 6 px a drag, which snaps back without toggling", () => {
+    const { handle } = sheet();
+    const mouse = { pointerId: 1, pointerType: "mouse", button: 0 };
+    fireEvent.pointerDown(handle, { ...mouse, clientX: 100, clientY: 500 });
+    fireEvent.pointerMove(handle, { ...mouse, clientX: 100, clientY: 494 });
+    fireEvent.pointerUp(handle, { ...mouse, clientX: 100, clientY: 494 });
+    fireEvent.click(handle);
+    expect(handle.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("follows the finger once per frame and never above the expanded top", () => {
     const { handle, panel } = sheet();
     fireEvent.pointerDown(handle, { ...touch, clientX: 100, clientY: 500 });

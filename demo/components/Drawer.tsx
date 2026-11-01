@@ -117,8 +117,10 @@ const gripStyle: CSSProperties = {
   background: token("borderStrong"),
 };
 
-/** A press that moves less than this is a tap, not a drag. */
+/** A mouse or pen press that moves less than this is a tap, not a drag. */
 const TAP_SLOP = 4;
+/** A finger's: glass drifts more than a mouse, so the library's `TOUCH_STRAY_DISTANCE` (10) applies here too. */
+const TOUCH_TAP_SLOP = 10;
 
 const SHEET_TRANSITION = "transform 200ms ease-out";
 
@@ -362,7 +364,14 @@ export function Drawer({
   // written to the panel once per frame, never through React state, so a
   // drag re-renders nothing. A release snaps to the nearer state, or closes
   // when it ends more than half the collapsed height below it.
-  const drag = useRef<{ pointerId: number; start: number; from: number; offset: number; moved: boolean } | null>(null);
+  const drag = useRef<{
+    pointerId: number;
+    slop: number;
+    start: number;
+    from: number;
+    offset: number;
+    moved: boolean;
+  } | null>(null);
   const framePending = useRef(false);
   const suppressClick = useRef(false);
 
@@ -408,14 +417,15 @@ export function Drawer({
   const onHandlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     suppressClick.current = false;
     const from = expanded ? 0 : collapsedShift;
-    drag.current = { pointerId: event.pointerId, start: event.clientY, from, offset: from, moved: false };
+    const slop = event.pointerType === "touch" ? TOUCH_TAP_SLOP : TAP_SLOP;
+    drag.current = { pointerId: event.pointerId, slop, start: event.clientY, from, offset: from, moved: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const current = drag.current;
     if (!current || current.pointerId !== event.pointerId) return;
     const travel = event.clientY - current.start;
-    if (Math.abs(travel) >= TAP_SLOP) current.moved = true;
+    if (Math.abs(travel) >= current.slop) current.moved = true;
     current.offset = Math.max(0, current.from + travel);
     if (framePending.current) return;
     framePending.current = true;
