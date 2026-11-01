@@ -3,6 +3,7 @@ import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
 import { estimateText } from "./labels/placement";
+import type { Insets } from "./shared/insets";
 import { buildScene } from "./shared/scene";
 import type { MapNode, MapSpec } from "./shared/spec";
 import { DEFAULT_THEME } from "./shared/theme";
@@ -108,5 +109,64 @@ describe("CorpusMap insets (an overlay covering part of the box)", () => {
     );
     act(() => handle.current?.fit());
     expect(changes[changes.length - 1]?.[0].zoom).toBeCloseTo(1, 9);
+  });
+  describe("an overlay growing over the selected item (spec mobile §5)", () => {
+    const scale = fitScale * 20;
+    /** The centre that puts `right` (world x 1000) at screen x `screen` in the 400-wide box. */
+    const centreAt = (screen: number): [number, number] => [1000 - (screen - 200) / scale, 0];
+    /** Renders with `before`, rerenders with `after`, and returns the view changes the rerender caused. */
+    function grow(options: {
+      screen: number;
+      before: Partial<Insets>;
+      after: Partial<Insets>;
+      selected?: string;
+    }): Change[] {
+      const changes: Change[] = [];
+      const element = (insets: Partial<Insets>) => (
+        <CorpusMap
+          renderCard={card}
+          spec={spec}
+          width={400}
+          height={300}
+          thresholds={MID}
+          defaultViewport={{ centre: centreAt(options.screen), zoom: 20 }}
+          {...(options.selected === undefined ? {} : { defaultSelectedId: options.selected })}
+          insets={insets}
+          onViewportChange={(...call) => changes.push(call)}
+        />
+      );
+      const { rerender } = render(element(options.before));
+      changes.length = 0;
+      rerender(element(options.after));
+      return changes;
+    }
+    const screenOf = (change: Change | undefined, worldHorizontal: number) =>
+      200 + (worldHorizontal - (change?.[0].centre[0] ?? Number.NaN)) * scale;
+
+    it("moves the view to bring the item back into the uncovered area", () => {
+      const changes = grow({ screen: 350, before: {}, after: { right: 100 }, selected: "right" });
+      expect(changes).toHaveLength(1);
+      expect(changes[0]?.[1].reason).toBe("interaction");
+      expect(changes[0]?.[0].zoom).toBeCloseTo(20, 9);
+      const screen = screenOf(changes[0], 1000);
+      expect(screen).toBeGreaterThanOrEqual(0);
+      expect(screen).toBeLessThanOrEqual(300);
+    });
+
+    it("moves nothing when the overlay grows on another side", () => {
+      expect(grow({ screen: 350, before: {}, after: { left: 100 }, selected: "right" })).toEqual([]);
+    });
+
+    it("moves nothing when the overlay shrinks", () => {
+      expect(grow({ screen: 250, before: { right: 100 }, after: {}, selected: "right" })).toEqual([]);
+    });
+
+    it("moves nothing without a selection", () => {
+      expect(grow({ screen: 350, before: {}, after: { right: 100 } })).toEqual([]);
+    });
+
+    it("moves nothing when the item was already covered before the growth", () => {
+      expect(grow({ screen: 350, before: { right: 100 }, after: { right: 150 }, selected: "right" })).toEqual([]);
+    });
   });
 });

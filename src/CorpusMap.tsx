@@ -1252,6 +1252,26 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       );
     } else requestViewport((previous) => followInto(previous, node.x, node.y, area), "interaction");
   };
+  // An overlay growing over the selected item (spec mobile §5): when the
+  // insets change and the item was in the uncovered area before but is not
+  // now, the view follows it back in at the same scale. A growth elsewhere,
+  // a shrink, or an item already covered moves nothing.
+  const previousInsets = useRef(insets);
+  useEffect(() => {
+    const before = previousInsets.current;
+    if (before === insets) return;
+    previousInsets.current = insets;
+    if (selected === null || !selectedNode) return;
+    const [screenHorizontal, screenVertical] = toScreen(viewport, selectedNode.x, selectedNode.y);
+    const within = (area: { left: number; top: number; width: number; height: number }) =>
+      screenHorizontal >= area.left &&
+      screenHorizontal <= area.left + area.width &&
+      screenVertical >= area.top &&
+      screenVertical <= area.top + area.height;
+    const area = usableArea(width, height, insets);
+    if (!within(usableArea(width, height, before)) || within(area)) return;
+    requestViewport((previous) => followInto(previous, selectedNode.x, selectedNode.y, area), "interaction");
+  }, [insets, selected, selectedNode, viewport, width, height, requestViewport]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Only the surface's own keys: the tree, legend and minimap inside it keep theirs.
