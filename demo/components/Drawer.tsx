@@ -268,10 +268,12 @@ export function Drawer({
   // Focus moves to Close only when a node opens or changes. The parent
   // passes a fresh `onClose` on every render, and it re-renders on every
   // view change (zoom, wheel, drag), so an effect keyed on `onClose` would
-  // pull focus into the drawer each time the map moved.
+  // pull focus into the drawer each time the map moved. Focus already on
+  // the map surface stays there: the arrows walk the selection from it
+  // (spec spatial keys §2), and each step changes the node.
   useEffect(() => {
-    if (node) closeButtonReference.current?.focus();
-  }, [node]);
+    if (node && document.activeElement !== returnFocusTo.current) closeButtonReference.current?.focus();
+  }, [node, returnFocusTo]);
 
   // The Escape listener reads the latest `onClose` through an effect event,
   // so it neither goes stale nor re-subscribes when the parent re-renders.

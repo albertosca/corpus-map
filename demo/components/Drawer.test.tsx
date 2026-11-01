@@ -117,6 +117,31 @@ describe("Drawer (showcase Task 6)", () => {
     expect(within(dialog).getByText("1")).not.toBeNull();
   });
 
+  it("leaves focus on the map surface when a keyboard walk there changes the node", () => {
+    const { returnFocusTo, rerender, onClose } = renderWithReturnTarget(ARXIV_NODE, {
+      isArxiv: true,
+      territoryName: "Artificial Intelligence",
+    });
+    returnFocusTo.current?.focus();
+    rerender(
+      <>
+        <button type="button" ref={returnFocusTo}>
+          map surface stand-in
+        </button>
+        <Drawer
+          node={ELEMENT_NODE}
+          territoryName={null}
+          isArxiv={false}
+          onClose={onClose}
+          returnFocusTo={returnFocusTo}
+          related={[]}
+          onOpenRelated={vi.fn()}
+        />
+      </>,
+    );
+    expect(document.activeElement).toBe(returnFocusTo.current);
+  });
+
   it("clicking the close button closes and returns focus to the map surface", () => {
     const { onClose, returnFocusTo } = renderWithReturnTarget(ARXIV_NODE, {
       isArxiv: true,
