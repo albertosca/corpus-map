@@ -8,10 +8,10 @@ import { contains } from "../territories/shape";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { fitSpec } from "../viewport/fit";
 import { paint } from "./paint";
-import { buildScene, GROUP_LETTER_SPACING } from "./scene";
+import { buildScene, GROUP_LETTER_SPACING, groupLabelsFor, NARROW_BOX_WIDTH } from "./scene";
 import { type MapSpec, validateSpec } from "./spec";
 import { RecordingSurface } from "./surface";
-import { DARK_THEME, DEFAULT_THEME } from "./theme";
+import { DARK_THEME, DEFAULT_COMPACT_GROUP_FONT, DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
 describe("buildScene", () => {
@@ -192,6 +192,39 @@ describe("buildScene groups", () => {
     expect(first.width).toBe(plain.width + GROUP_LETTER_SPACING * first.name.length);
   });
 
+  it("places a compact twin of every group name, with the same texts and no wider boxes", () => {
+    expect(scene.compactGroupFont).toBe(DEFAULT_COMPACT_GROUP_FONT);
+    expect(scene.compactGroupLabels.map((label) => label.name)).toEqual(scene.groupLabels.map((label) => label.name));
+    scene.compactGroupLabels.forEach((compact, position) => {
+      const wide = scene.groupLabels[position] as PlacedLabel;
+      expect(compact.id).toBe(wide.id);
+      expect(compact.width).toBeLessThan(wide.width);
+      expect(compact.width).toBe(
+        estimateText(compact.name, DEFAULT_COMPACT_GROUP_FONT).width + GROUP_LETTER_SPACING * compact.name.length,
+      );
+    });
+  });
+
+  it("reads the compact font from the theme, falling back to the default", () => {
+    const font = "700 10px system-ui, sans-serif";
+    const themed = buildScene(
+      spec,
+      DEFAULT_TUNING,
+      { ...DEFAULT_THEME, territoryFonts: { ...DEFAULT_THEME.territoryFonts, compact: font } },
+      estimateText,
+    );
+    expect(themed.compactGroupFont).toBe(font);
+    const { compact: _dropped, ...withoutCompact } = DEFAULT_THEME.territoryFonts;
+    const bare = buildScene(spec, DEFAULT_TUNING, { ...DEFAULT_THEME, territoryFonts: withoutCompact }, estimateText);
+    expect(bare.compactGroupFont).toBe(DEFAULT_COMPACT_GROUP_FONT);
+  });
+
+  it("picks the compact names below a 600 px box and today's from 600 up", () => {
+    expect(NARROW_BOX_WIDTH).toBe(600);
+    expect(groupLabelsFor(scene, 599)).toBe(scene.compactGroupLabels);
+    expect(groupLabelsFor(scene, 600)).toBe(scene.groupLabels);
+  });
+
   it("anchors a group name inside one of its members", () => {
     for (const label of scene.groupLabels) {
       const group = scene.groups.find((candidate) => candidate.id === label.id) as TerritoryGroup;
@@ -212,6 +245,7 @@ describe("buildScene groups", () => {
     const smallScene = buildScene(small, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
     expect(smallScene.groups).toEqual([]);
     expect(smallScene.groupLabels).toEqual([]);
+    expect(smallScene.compactGroupLabels).toEqual([]);
   });
 
   it("falls back to the largest member's own name anchor when the weighted mean is outside every member", () => {

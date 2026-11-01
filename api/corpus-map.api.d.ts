@@ -607,6 +607,8 @@ export interface LabelBox {
     groupAlpha?: number | undefined;
     /** Territory ids whose names are drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
     dimmed?: ReadonlySet<string> | undefined;
+    /** Draw the family names compact, as a box narrower than `NARROW_BOX_WIDTH` does (spec mobile §4); absent means false. */
+    compactGroupNames?: boolean | undefined;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
@@ -1123,6 +1125,8 @@ export interface Frame {
     itemLabels?: readonly PlacedItemLabel[] | undefined;
     /** The item labels' fade this frame (`cardOpacity`); absent means 0. */
     itemLabelAlpha?: number | undefined;
+    /** The family names are the compact ones, for a box narrower than `NARROW_BOX_WIDTH` (spec mobile §4); absent means false. */
+    compactGroupNames?: boolean | undefined;
 }
 /**
  * The single place that decides paint order: the territory fill layer
@@ -1162,7 +1166,7 @@ import { type TerritoryGroup } from "../territories/groups";
 import { type Ring } from "../territories/shape";
 import { type Bounds } from "../viewport/fit";
 import { type MapNode, type MapSpec } from "./spec";
-import type { Theme } from "./theme";
+import { type Theme } from "./theme";
 import type { Tuning } from "./tuning";
 /** Everything about a corpus that does not change with the viewport: computed once per spec. */
 export interface Scene {
@@ -1177,6 +1181,10 @@ export interface Scene {
     groups: readonly TerritoryGroup[];
     /** One placed name per group, measured in the large font plus its letter spacing; `id` is the group's id. */
     groupLabels: readonly PlacedLabel[];
+    /** The same names placed in `compactGroupFont`, drawn below a `NARROW_BOX_WIDTH` box (spec mobile §4); empty without groups. */
+    compactGroupLabels: readonly PlacedLabel[];
+    /** The theme's `territoryFonts.compact`, or `DEFAULT_COMPACT_GROUP_FONT`. */
+    compactGroupFont: string;
     /** Each territory's world-space bounding box; a territory without rings is absent. */
     bounds: ReadonlyMap<string, Bounds>;
     /**
@@ -1194,6 +1202,10 @@ export interface Scene {
     /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
     maximumEdgeWeight: number;
 }
+/** Below this box width, in CSS pixels, the family names are the compact ones (spec mobile §4). */
+export declare const NARROW_BOX_WIDTH = 600;
+/** The family names a box `width` pixels wide fits and draws. */
+export declare function groupLabelsFor(scene: Pick<Scene, "groupLabels" | "compactGroupLabels">, width: number): readonly PlacedLabel[];
 /** Extra space between a group name's letters, in CSS pixels; the painter draws with the same value. */
 export declare const GROUP_LETTER_SPACING = 1;
 /**
@@ -1379,7 +1391,14 @@ export declare function canvasSurface(context: CanvasRenderingContext2D): Surfac
 import type { LabelClass } from "../labels/placement";
 export interface Theme {
     territoryLabel: string;
-    territoryFonts: Record<LabelClass, string>;
+    /**
+     * Fonts of the territory names by class; the family names use `large`, and
+     * `compact` below a 600 px box (spec mobile §4). Absent `compact` is
+     * `DEFAULT_COMPACT_GROUP_FONT`.
+     */
+    territoryFonts: Record<LabelClass, string> & {
+        compact?: string | undefined;
+    };
     cardBackground: string;
     cardBorder: string;
     hoverBackground: string;
@@ -1416,6 +1435,8 @@ export interface Theme {
     /** Alpha at which the single territory fill layer is composited (guided presentation). */
     territoryFillAlpha: number;
 }
+/** The family names' font below a 600 px box when the theme names none. */
+export declare const DEFAULT_COMPACT_GROUP_FONT = "700 14px system-ui, sans-serif";
 export declare const DEFAULT_THEME: Theme;
 /** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
 export declare const DARK_THEME: Theme;

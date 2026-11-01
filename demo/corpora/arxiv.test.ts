@@ -6,7 +6,7 @@ import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
 import { paint } from "../../src/shared/paint";
-import { buildScene, GROUP_LETTER_SPACING, type Scene } from "../../src/shared/scene";
+import { buildScene, GROUP_LETTER_SPACING, groupLabelsFor, NARROW_BOX_WIDTH, type Scene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
 import { SpecError, validateSpec } from "../../src/shared/spec";
 import { RecordingSurface } from "../../src/shared/surface";
@@ -243,6 +243,11 @@ interface DrawnBox {
   height: number;
 }
 
+/** The fitted view `CorpusMap` opens on: the family names it counts are the ones a box this wide draws. */
+function fitAt(spec: MapSpec, scene: Scene, width: number, height: number): Viewport {
+  return fitScene(spec, { ...scene, groupLabels: groupLabelsFor(scene, width) }, width, height, 24);
+}
+
 /** Every name `paint` draws for `viewport` into a `width` x `height` canvas, with its `estimateText` box. */
 function drawnBoxes(
   spec: MapSpec,
@@ -256,7 +261,8 @@ function drawnBoxes(
   // The group alpha `CorpusMap` computes for this ratio in far.
   const groupAlpha = 1 - fade(ratio, DEFAULT_TUNING.groupNamesUntil, DEFAULT_TUNING.fadeBand);
   const surface = new RecordingSurface();
-  paint(surface, scene, spec, viewport, { regime, pointAlpha: 0, width, height, groupAlpha }, DEFAULT_THEME);
+  const frame = { regime, pointAlpha: 0, width, height, groupAlpha, compactGroupNames: width < NARROW_BOX_WIDTH };
+  paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
   return surface.texts.map((drawn) => {
     const measured = estimateText(drawn.text, drawn.font);
     const spacing = drawn.letterSpacing === undefined ? 0 : Number.parseFloat(drawn.letterSpacing) * drawn.text.length;
@@ -345,7 +351,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
   });
 
   it("at 1440x900 every family name is drawn at the fitted view (acceptance 3)", () => {
-    const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, 1440, 900, 24), 1440, 900, 1);
+    const boxes = drawnBoxes(spec, scene, fitAt(spec, scene, 1440, 900), 1440, 900, 1);
     const drawn = new Set(boxes.map((box) => box.text));
     expect(
       familiesOf(spec)
@@ -354,12 +360,31 @@ describe("acceptance 2: the fitted arXiv view", () => {
     ).toEqual([]);
   });
 
+  // Spec mobile §4: below a 600 px box the family names are drawn compact, so
+  // a phone shows every family at the fitted view, a small phone all but one.
+  for (const [width, height, allowedMissing] of [
+    [1440, 900, 0],
+    [375, 812, 0],
+    [320, 568, 1],
+  ] as const) {
+    it(`at ${width}x${height} at most ${allowedMissing} family name is missing at the fitted view`, () => {
+      const drawn = new Set(
+        drawnBoxes(spec, scene, fitAt(spec, scene, width, height), width, height, 1).map((box) => box.text),
+      );
+      const missing = familiesOf(spec)
+        .filter((family) => !drawn.has(family.name))
+        .map((family) => family.name);
+      expect(missing.length).toBeLessThanOrEqual(allowedMissing);
+    });
+  }
+
   for (const [width, height] of [
     [1440, 900],
     [375, 812],
+    [320, 568],
   ] as const) {
     it(`at ${width}x${height}: names drawn, none overlapping, none crossing the canvas edge`, () => {
-      const boxes = drawnBoxes(spec, scene, fitScene(spec, scene, width, height, 24), width, height, 1);
+      const boxes = drawnBoxes(spec, scene, fitAt(spec, scene, width, height), width, height, 1);
       expect(boxes.length).toBeGreaterThan(0);
       // The fitted view names groups.
       expect(boxes.some((box) => scene.groupLabels.some((label) => label.name === box.text))).toBe(true);
@@ -400,9 +425,10 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
   for (const [width, height] of [
     [1440, 900],
     [375, 812],
+    [320, 568],
   ] as const) {
     it(`at ${width}x${height}: 0 pops over the pan and zoom sweeps`, () => {
-      const fit = fitScene(spec, scene, width, height, 24);
+      const fit = fitAt(spec, scene, width, height);
       const pops: string[] = [];
       let compared = 0;
       let crossedEdge = 0;
@@ -434,7 +460,7 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
         for (let offset = 2; offset <= width; offset += 2) {
           before = step(`pan r${ratio} dx${offset}`, before, { ...base, tx: base.tx + offset }, ratio, [
             ...scene.labels,
-            ...scene.groupLabels,
+            ...groupLabelsFor(scene, width),
           ]);
         }
       }
@@ -479,7 +505,7 @@ describe("metric 18: no pop at the family swap (arXiv, painted)", () => {
     [375, 812],
   ] as const) {
     it(`metric 18: no pop at the family swap at ${width}x${height}`, () => {
-      const fit = fitScene(spec, scene, width, height, 24);
+      const fit = fitAt(spec, scene, width, height);
       let regime = regimeAt(1, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis);
       let previous: number[] | null = null;
       const jumps: string[] = [];
@@ -547,7 +573,7 @@ describe("item labels on the arXiv corpus (painted model)", () => {
   ] as const)
     for (const ratio of [4, 8, 16])
       it(`at ${width}x${height}, ratio ${ratio}: no two drawn labels overlap, none overlaps a drawn name`, () => {
-        const fit = fitScene(spec, scene, width, height, 24);
+        const fit = fitAt(spec, scene, width, height);
         const viewport = aboutCentre(fit, width, height, ratio);
         const box = { width, height, dimmed: new Set<string>() };
         const plates = drawnItemLabels(labels, viewport, box)
@@ -573,7 +599,7 @@ describe("item labels on the arXiv corpus (painted model)", () => {
     [375, 812],
   ] as const)
     it(`at ${width}x${height}: over a pan at near, the painted plates are the drawn set clipped only by the canvas`, () => {
-      const fit = fitScene(spec, scene, width, height, 24);
+      const fit = fitAt(spec, scene, width, height);
       const base = aboutCentre(fit, width, height, 8);
       const box = { width, height, dimmed: new Set<string>() };
       const reference = drawnItemLabels(labels, base, box)

@@ -2,7 +2,12 @@ import type { LabelClass } from "../labels/placement";
 
 export interface Theme {
   territoryLabel: string;
-  territoryFonts: Record<LabelClass, string>;
+  /**
+   * Fonts of the territory names by class; the family names use `large`, and
+   * `compact` below a 600 px box (spec mobile §4). Absent `compact` is
+   * `DEFAULT_COMPACT_GROUP_FONT`.
+   */
+  territoryFonts: Record<LabelClass, string> & { compact?: string | undefined };
   cardBackground: string;
   cardBorder: string;
   hoverBackground: string;
@@ -40,12 +45,16 @@ export interface Theme {
   territoryFillAlpha: number;
 }
 
+/** The family names' font below a 600 px box when the theme names none. */
+export const DEFAULT_COMPACT_GROUP_FONT = "700 14px system-ui, sans-serif";
+
 export const DEFAULT_THEME: Theme = {
   territoryLabel: "#23232d",
   territoryFonts: {
     large: "700 20px system-ui, sans-serif",
     medium: "600 15px system-ui, sans-serif",
     small: "500 12px system-ui, sans-serif",
+    compact: DEFAULT_COMPACT_GROUP_FONT,
   },
   cardBackground: "#ffffff",
   cardBorder: "rgba(120,120,140,0.45)",

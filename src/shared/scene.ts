@@ -7,7 +7,7 @@ import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/group
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import { type Bounds, ringBounds } from "../viewport/fit";
 import { leafTerritories, type MapNode, type MapSpec, parentIds, type Territory } from "./spec";
-import type { Theme } from "./theme";
+import { DEFAULT_COMPACT_GROUP_FONT, type Theme } from "./theme";
 import type { Tuning } from "./tuning";
 
 /** Everything about a corpus that does not change with the viewport: computed once per spec. */
@@ -23,6 +23,10 @@ export interface Scene {
   groups: readonly TerritoryGroup[];
   /** One placed name per group, measured in the large font plus its letter spacing; `id` is the group's id. */
   groupLabels: readonly PlacedLabel[];
+  /** The same names placed in `compactGroupFont`, drawn below a `NARROW_BOX_WIDTH` box (spec mobile §4); empty without groups. */
+  compactGroupLabels: readonly PlacedLabel[];
+  /** The theme's `territoryFonts.compact`, or `DEFAULT_COMPACT_GROUP_FONT`. */
+  compactGroupFont: string;
   /** Each territory's world-space bounding box; a territory without rings is absent. */
   bounds: ReadonlyMap<string, Bounds>;
   /**
@@ -45,6 +49,17 @@ function largestRing(rings: readonly Ring[]): Ring | undefined {
   let best: Ring | undefined;
   for (const ring of rings) if (!best || ringArea(ring) > ringArea(best)) best = ring;
   return best;
+}
+
+/** Below this box width, in CSS pixels, the family names are the compact ones (spec mobile §4). */
+export const NARROW_BOX_WIDTH = 600;
+
+/** The family names a box `width` pixels wide fits and draws. */
+export function groupLabelsFor(
+  scene: Pick<Scene, "groupLabels" | "compactGroupLabels">,
+  width: number,
+): readonly PlacedLabel[] {
+  return width < NARROW_BOX_WIDTH ? scene.compactGroupLabels : scene.groupLabels;
 }
 
 /** Extra space between a group name's letters, in CSS pixels; the painter draws with the same value. */
@@ -129,6 +144,7 @@ export function buildScene(
   const territoriesById = new Map(spec.territories.map((territory) => [territory.id, territory]));
   const groups = deriveTerritoryGroups(spec);
   const groupFont = theme.territoryFonts.large;
+  const compactGroupFont = theme.territoryFonts.compact ?? DEFAULT_COMPACT_GROUP_FONT;
   const spaced: Measure = (text, font) => {
     const measured = measure(text, font);
     return { width: measured.width + GROUP_LETTER_SPACING * text.length, height: measured.height };
@@ -175,6 +191,13 @@ export function buildScene(
       tuning.labelClasses,
       spaced,
     ),
+    compactGroupLabels: placeLabels(
+      groupInputs,
+      { large: compactGroupFont, medium: compactGroupFont, small: compactGroupFont },
+      tuning.labelClasses,
+      spaced,
+    ),
+    compactGroupFont,
     bounds: boxes(shapes),
     groupShapes,
     groupBounds: boxes(groupShapes),

@@ -50,6 +50,8 @@ export interface Frame {
   itemLabels?: readonly PlacedItemLabel[] | undefined;
   /** The item labels' fade this frame (`cardOpacity`); absent means 0. */
   itemLabelAlpha?: number | undefined;
+  /** The family names are the compact ones, for a box narrower than `NARROW_BOX_WIDTH` (spec mobile §4); absent means false. */
+  compactGroupNames?: boolean | undefined;
 }
 
 /**

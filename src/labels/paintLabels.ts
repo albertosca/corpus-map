@@ -16,6 +16,8 @@ export interface LabelBox {
   groupAlpha?: number | undefined;
   /** Territory ids whose names are drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
   dimmed?: ReadonlySet<string> | undefined;
+  /** Draw the family names compact, as a box narrower than `NARROW_BOX_WIDTH` does (spec mobile §4); absent means false. */
+  compactGroupNames?: boolean | undefined;
 }
 
 interface Item {
@@ -66,13 +68,16 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
             fadeOf(dimmed.has(label.id)),
         });
   const groupsById = new Map(scene.groups.map((group) => [group.id, group]));
+  const [groupLabels, groupFont] = box.compactGroupNames
+    ? [scene.compactGroupLabels, scene.compactGroupFont]
+    : [scene.groupLabels, theme.territoryFonts.large];
   if (groupAlpha > 0)
-    for (const label of scene.groupLabels)
+    for (const label of groupLabels)
       if (fits(label))
         items.push({
           name: label.name,
           anchor: label.anchor,
-          font: theme.territoryFonts.large,
+          font: groupFont,
           alpha: groupAlpha * fadeOf(isWhollyDimmed(groupsById.get(label.id)?.members ?? [])),
           letterSpacing: `${GROUP_LETTER_SPACING}px`,
         });

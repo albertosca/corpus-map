@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimateText } from "../../src/labels/placement";
-import { buildScene } from "../../src/shared/scene";
+import { buildScene, groupLabelsFor } from "../../src/shared/scene";
 import { type MapSpec, validateSpec } from "../../src/shared/spec";
 import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
@@ -25,8 +25,10 @@ const BOXES: Array<[number, number]> = [
  */
 function cutNames(spec: MapSpec, width: number, height: number): string[] {
   const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
-  const viewport = fitScene(spec, scene, width, height, 24);
-  const drawn = scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
+  // Below a 600 px box the family names are the compact ones (spec mobile §4), fitted and drawn alike.
+  const groupLabels = groupLabelsFor(scene, width);
+  const viewport = fitScene(spec, { ...scene, groupLabels }, width, height, 24);
+  const drawn = groupLabels.length > 0 ? groupLabels : scene.labels;
   return drawn
     .filter((label) => viewport.scale >= label.activeFromScale && label.width <= width && label.height <= height)
     .filter((label) => {

@@ -37,7 +37,7 @@ import { NO_DIMMED } from "./shared/dimmed";
 import { type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
-import { buildScene } from "./shared/scene";
+import { buildScene, groupLabelsFor, NARROW_BOX_WIDTH } from "./shared/scene";
 import { leafTerritories, type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
@@ -437,6 +437,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             large: theme.territoryFonts.large,
             medium: theme.territoryFonts.medium,
             small: theme.territoryFonts.small,
+            compact: theme.territoryFonts.compact,
           },
           palette: paletteKey === "" ? [] : paletteKey.split("|"),
           territoryLabel: theme.territoryLabel,
@@ -452,6 +453,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       theme.territoryFonts.large,
       theme.territoryFonts.medium,
       theme.territoryFonts.small,
+      theme.territoryFonts.compact,
       paletteKey,
       theme.territoryLabel,
     ],
@@ -488,10 +490,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
 
   // The fitted view is ratio 1; it shows group names only when that is far.
   const groupNamesAtFit = regimeAt(1, thresholds, "far", tuning.hysteresis) === "far";
+  // A box narrower than `NARROW_BOX_WIDTH` draws the compact family names, so it fits those (spec mobile §4).
+  const compactGroupNames = width < NARROW_BOX_WIDTH;
   const [ownViewport, setOwnViewport] = useState<Viewport>(() =>
     startingView(
       properties.defaultViewport,
-      fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+      fitScene(spec, { ...scene, groupLabels: groupLabelsFor(scene, width) }, width, height, FIT_PADDING, {
+        groupNames: groupNamesAtFit,
+      }),
       width,
       height,
     ),
@@ -499,7 +505,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // A theme or font change rebuilds the scene and so moves `fitted` (and
   // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
   const fitted = useMemo(
-    () => fitScene(spec, scene, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }),
+    () =>
+      fitScene(spec, { ...scene, groupLabels: groupLabelsFor(scene, width) }, width, height, FIT_PADDING, {
+        groupNames: groupNamesAtFit,
+      }),
     [spec, scene, width, height, groupNamesAtFit],
   );
   const fitScale = fitted.scale;
@@ -1030,6 +1039,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         edgesPerNode: tuning.edgesPerNode,
         itemLabels,
         itemLabelAlpha: cardOpacity,
+        compactGroupNames,
       },
       theme,
     );
@@ -1052,6 +1062,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     tuning.edgesPerNode,
     itemLabels,
     cardOpacity,
+    compactGroupNames,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the

@@ -50,6 +50,29 @@ describe("paintLabels with groups", () => {
     expect(surface.alphas).toEqual([]);
   });
 
+  it("with compactGroupNames draws the group names in the compact font at the compact positions", () => {
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1, compactGroupNames: true });
+    const expected = scene.compactGroupLabels.map((label) => ({
+      text: label.name,
+      x: label.anchor[0] * VIEWPORT.scale,
+      y: label.anchor[1] * VIEWPORT.scale,
+      font: scene.compactGroupFont,
+    }));
+    expect(surface.texts.map((drawn) => ({ text: drawn.text, x: drawn.x, y: drawn.y, font: drawn.font }))).toEqual(
+      expected,
+    );
+    for (const drawn of surface.texts) expect(drawn.letterSpacing).toBe(`${GROUP_LETTER_SPACING}px`);
+  });
+
+  it("with compactGroupNames false draws exactly what an absent flag draws", () => {
+    const absent = new RecordingSurface();
+    paintLabels(absent, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0.75 });
+    const off = new RecordingSurface();
+    paintLabels(off, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0.75, compactGroupNames: false });
+    expect(off.calls).toEqual(absent.calls);
+  });
+
   it("with groupAlpha absent draws only territory names (groupAlpha means 0)", () => {
     const surface = new RecordingSurface();
     paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, BOX);

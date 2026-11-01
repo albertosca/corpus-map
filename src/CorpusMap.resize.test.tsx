@@ -1,9 +1,34 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler, type ProfilerOnRenderCallback } from "react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nestedSpec } from "../test/specs";
 import { CorpusMap, type CorpusMapView } from "./CorpusMap";
 import type { MapNode, MapSpec } from "./shared/spec";
 import { DEFAULT_TUNING } from "./shared/tuning";
+
+// Spies for the compact-names test: `buildScene` passes through and is
+// counted; `paint` records which family names each frame asked for. Under
+// the jsdom `getContext` stub (`test/setup.ts`) no other test here paints.
+const recorded = vi.hoisted(() => ({ scenes: 0, compactFlags: [] as Array<boolean | undefined> }));
+vi.mock("./shared/scene", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./shared/scene")>();
+  return {
+    ...original,
+    buildScene: (...parameters: Parameters<typeof original.buildScene>) => {
+      recorded.scenes += 1;
+      return original.buildScene(...parameters);
+    },
+  };
+});
+vi.mock("./shared/paint", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./shared/paint")>();
+  return {
+    ...original,
+    paint: (...parameters: Parameters<typeof original.paint>) => {
+      recorded.compactFlags.push(parameters[4].compactGroupNames);
+    },
+  };
+});
 
 /**
  * jsdom has no `ResizeObserver`. A fake that records every instance and lets
@@ -613,5 +638,39 @@ describe("CorpusMap ignores a zero-area box (whole-branch review I3)", () => {
     rerender(<CorpusMap {...properties} width={1280} height={0} />);
     rerender(<CorpusMap {...properties} width={1280} height={800} />);
     expect(views[views.length - 1]?.ratio).toBeCloseTo(1, 9);
+  });
+});
+
+describe("CorpusMap compact family names (spec mobile §4)", () => {
+  it("a width change across 600 swaps the names without rebuilding the scene", () => {
+    const views: CorpusMapView[] = [];
+    const draw = (width: number) => (
+      <CorpusMap
+        spec={spec}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={width}
+        height={700}
+        onViewChange={(view) => views.push(view)}
+      />
+    );
+    const spec = nestedSpec();
+    const context = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      setTransform: () => {},
+      // `useMeasure`'s offscreen canvas gets this fake context too.
+      font: "",
+      measureText: (text: string) => ({ width: text.length * 6 }),
+    } as unknown as CanvasRenderingContext2D);
+    recorded.scenes = 0;
+    recorded.compactFlags.length = 0;
+    const { rerender } = render(draw(800));
+    const fitted = views[views.length - 1] as CorpusMapView;
+    expect(recorded.compactFlags[recorded.compactFlags.length - 1]).toBe(false);
+    rerender(draw(375));
+    expect(recorded.compactFlags[recorded.compactFlags.length - 1]).toBe(true);
+    rerender(draw(800));
+    expect(recorded.compactFlags[recorded.compactFlags.length - 1]).toBe(false);
+    expect(recorded.scenes).toBe(1);
+    expect((views[views.length - 1] as CorpusMapView).ratio).toBe(fitted.ratio);
+    context.mockRestore();
   });
 });
