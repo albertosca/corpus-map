@@ -94,6 +94,10 @@ describe("keyboardCommand with a selection (spec spatial keys §2)", () => {
       expect(keyboardCommand({ ...plain, ...modifiers, key: "Enter" })).toBeNull();
     }
   });
+
+  it.each(["Enter", " "])("leaves Shift+%j to the browser (Shift+Space scrolls the page up)", (key) => {
+    expect(keyboardCommand({ ...plain, shiftKey: true, key })).toBeNull();
+  });
 });
 
 describe("regimeOutRatio", () => {

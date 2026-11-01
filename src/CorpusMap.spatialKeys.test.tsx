@@ -165,6 +165,53 @@ describe("walking the map with the keyboard (spec spatial keys)", () => {
     expect(selections).toEqual(["c2", "a1"]);
   });
 
+  it("advances one item per press when a controlled consumer commits each request late, in order", () => {
+    const selections: Array<string | null> = [];
+    const properties = { onSelectedChange: (id: string | null) => selections.push(id) };
+    const { root, rerender } = renderMap({ selectedId: "b2", ...properties });
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    rerender(
+      <CorpusMap
+        spec={gridSpec}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={400}
+        height={300}
+        selectedId="c2"
+        {...properties}
+      />,
+    );
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    expect(selections).toEqual(["c2", "d2", "e2"]);
+  });
+
+  it("walks from the drawn selection when a new spec drops the item last requested", () => {
+    const selections: Array<string | null> = [];
+    const properties = { onSelectedChange: (id: string | null) => selections.push(id) };
+    const { root, rerender } = renderMap({ selectedId: "b2", ...properties });
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    const withoutC2: MapSpec = {
+      ...gridSpec,
+      territories: gridSpec.territories.map((territory) => ({
+        ...territory,
+        members: territory.members.filter((id) => id !== "c2"),
+      })),
+      nodes: gridSpec.nodes.filter((node) => node.id !== "c2"),
+    };
+    rerender(
+      <CorpusMap
+        spec={withoutC2}
+        renderCard={(node) => <div>{node.label}</div>}
+        width={400}
+        height={300}
+        selectedId="b2"
+        {...properties}
+      />,
+    );
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    expect(selections).toEqual(["c2", "d2"]);
+  });
+
   it.each([
     ["ArrowRight", "e2", "No item to the right"],
     ["ArrowLeft", "a2", "No item to the left"],
@@ -280,13 +327,21 @@ describe("walking the map with the keyboard (spec spatial keys)", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it("handles no Enter on an empty corpus", () => {
-    const { root } = renderMap({ spec: { version: "1", territories: [], nodes: [] } });
-    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  const emptyCorpus: MapSpec = { version: "1", territories: [], nodes: [] };
+  it.each<[string, string, Partial<Parameters<typeof CorpusMap>[0]>]>([
+    ["Enter", "an empty corpus", { spec: emptyCorpus }],
+    [" ", "an empty corpus", { spec: emptyCorpus }],
+    ["Enter", "a corpus with every territory dimmed", { hiddenTerritories: ["west", "east"] }],
+    [" ", "a corpus with every territory dimmed", { hiddenTerritories: ["west", "east"] }],
+  ])("handles no %j on %s", (key, _description, properties) => {
+    const selections: Array<string | null> = [];
+    const { root } = renderMap({ ...properties, onSelectedChange: (id) => selections.push(id) });
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
     act(() => {
       root.dispatchEvent(event);
     });
     expect(event.defaultPrevented).toBe(false);
+    expect(selections).toEqual([]);
   });
 
   it("leaves Enter alone while an item is selected", () => {

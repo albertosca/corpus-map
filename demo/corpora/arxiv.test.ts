@@ -630,4 +630,23 @@ describe("walking the arXiv corpus with the arrows (spec spatial keys acceptance
     }
     expect(reached.size).toBeGreaterThan(100);
   });
+
+  it("never selects an item of a dimmed territory, even from its live neighbours", () => {
+    const hidden = leavesOf(shippedSpec)[0];
+    if (hidden === undefined) throw new Error("expected a leaf territory");
+    // The surface walks `liveSpec.nodes`: the spec with the dimmed territories' nodes removed.
+    const nodes = shippedSpec.nodes.filter((node) => node.territory !== hidden.id);
+    const ids = new Set(nodes.map((node) => node.id));
+    // Start beside the hidden items, where a walk over every node would step into them.
+    const hiddenNodes = shippedSpec.nodes.filter((node) => node.territory === hidden.id).slice(0, 50);
+    expect(hiddenNodes.length).toBeGreaterThan(0);
+    for (const hiddenNode of hiddenNodes) {
+      const origin = nearestTo(nodes, hiddenNode.x, hiddenNode.y);
+      if (origin === null) throw new Error("expected a node");
+      for (const direction of ["right", "down", "left", "up"] as const) {
+        const next = neighbourInDirection(origin, nodes, direction);
+        if (next !== null) expect(ids.has(next.id)).toBe(true);
+      }
+    }
+  });
 });

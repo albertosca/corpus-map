@@ -59,7 +59,7 @@ export function keyboardCommand(input: KeyInput, selecting = false): KeyboardCom
   }
   if (input.key === "0" || input.key === "Home") return { kind: "fit" };
   if (input.key === "Escape") return { kind: "regimeOut" };
-  if ((input.key === "Enter" || input.key === " ") && !selecting) return { kind: "start" };
+  if ((input.key === "Enter" || input.key === " ") && !selecting && !input.shiftKey) return { kind: "start" };
   return null;
 }
 

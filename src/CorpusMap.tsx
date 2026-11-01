@@ -251,6 +251,14 @@ const NO_NEIGHBOUR: Readonly<Record<Direction, string>> = {
 /** Below this point fade, Enter's selection would be undrawn, so it lands at near (spec spatial keys §4). */
 const DRAWN_POINT_ALPHA = 0.1;
 
+/** Whether the drawn selection is still the one a chain of requests began from, or one of its own requests. */
+function continuesChain(
+  latest: { drawnAtStart: string | null; chain: ReadonlySet<string | null> },
+  drawn: string | null,
+): boolean {
+  return drawn === latest.drawnAtStart || latest.chain.has(drawn);
+}
+
 /** A press released within this many pixels of where it started is a click, not a drag. */
 const CLICK_SLOP = 4;
 
@@ -809,10 +817,15 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // asked again by the next press or Escape.
   const requestedSelectionReference = useRef(requestedSelection);
   const pendingSelectionReference = useRef<{ id: string | null } | null>(null);
-  // The latest request and the selection drawn when it was made; unlike the
-  // pending one it survives commits, so a key press can start from it while
-  // the drawn selection has not moved yet (spec spatial keys §6).
-  const latestSelectionRequestReference = useRef<{ id: string | null; drawn: string | null } | null>(null);
+  // The latest request, the selection drawn when its chain of requests began
+  // and every id in that chain; unlike the pending one it survives commits, so
+  // a key press starts from it while the drawn selection is the chain's start
+  // or one of its own requests committed late (spec spatial keys §6).
+  const latestSelectionRequestReference = useRef<{
+    id: string | null;
+    drawnAtStart: string | null;
+    chain: ReadonlySet<string | null>;
+  } | null>(null);
   const selectionControlledReference = useRef(selectionControlled);
   const onSelectedChangeReference = useRef(properties.onSelectedChange);
   useLayoutEffect(() => {
@@ -824,7 +837,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const requestSelection = useCallback((id: string | null) => {
     const current = pendingSelectionReference.current ?? { id: requestedSelectionReference.current };
     if (id === current.id) return;
-    latestSelectionRequestReference.current = { id, drawn: requestedSelectionReference.current };
+    const drawn = requestedSelectionReference.current;
+    const latest = latestSelectionRequestReference.current;
+    latestSelectionRequestReference.current =
+      latest !== null && continuesChain(latest, drawn)
+        ? { id, drawnAtStart: latest.drawnAtStart, chain: new Set([...latest.chain, id]) }
+        : { id, drawnAtStart: drawn, chain: new Set([id]) };
     const pending = { id };
     pendingSelectionReference.current = pending;
     window.requestAnimationFrame(() => {
@@ -908,6 +926,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       "interaction",
     );
   };
+  // The scale a territory button and Enter land at: a full fade band above
+  // `nearAt`, so the cards are fully drawn, clamped to the wheel band.
+  const nearLandingScale = () =>
+    Math.min(
+      fitScale * MAXIMUM_ZOOM_IN,
+      Math.max(fitScale / MAXIMUM_ZOOM_OUT, fitScale * thresholds.nearAt * (1 + tuning.fadeBand)),
+    );
   // Lands in near by construction (spec slice B §5, amended): the loose
   // nodes' box at no less than the scale a territory button zooms to. A box
   // too wide for that scale would centre on its middle, which may hold no
@@ -1188,8 +1213,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     announce(territoryName === undefined ? node.label : `${node.label}, ${territoryName}`);
     const area = usableArea(width, height, insets);
     if (land) {
-      const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
-      const scale = Math.min(fitScale * MAXIMUM_ZOOM_IN, Math.max(fitScale / MAXIMUM_ZOOM_OUT, target));
+      const scale = nearLandingScale();
       requestViewport(
         {
           scale,
@@ -1204,12 +1228,16 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Only the surface's own keys: the tree, legend and minimap inside it keep theirs.
     if (event.target !== event.currentTarget) return;
-    // A move starts from the latest request while the drawn selection is the
-    // one it was made over, so held arrows under a controlled selection that
-    // commits late advance one item per press; once the drawn one moves, from it.
+    // A move starts from the latest request while the drawn selection is where
+    // its chain began or one of the chain's own requests, so held arrows under
+    // a controlled selection that commits late advance one item per press;
+    // once the consumer draws something else, or the request left the live
+    // spec, from the drawn one.
     const latest = latestSelectionRequestReference.current;
-    const originId = latest !== null && latest.drawn === requestedSelection ? latest.id : selected;
-    const origin = originId === null ? undefined : liveNodesById.get(originId);
+    const continuing = latest !== null && continuesChain(latest, requestedSelection);
+    const latestOrigin = continuing && latest.id !== null ? liveNodesById.get(latest.id) : undefined;
+    const drawnOrigin = selected === null ? undefined : liveNodesById.get(selected);
+    const origin = continuing && latest.id === null ? undefined : (latestOrigin ?? drawnOrigin);
     const command = keyboardCommand(event, origin !== undefined);
     if (command === null) return;
     if (command.kind === "start" || command.kind === "neighbour") {
@@ -1825,8 +1853,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               // wheel band a manual zoom is clamped to, so this can never land
               // outside what the user could otherwise reach.
               const [centreHorizontal, centreVertical] = territory.centroid;
-              const target = fitScale * thresholds.nearAt * (1 + tuning.fadeBand);
-              const scale = Math.min(fitScale * MAXIMUM_ZOOM_IN, Math.max(fitScale / MAXIMUM_ZOOM_OUT, target));
+              const scale = nearLandingScale();
               requestViewport(
                 { scale, tx: width / 2 - centreHorizontal * scale, ty: height / 2 - centreVertical * scale },
                 "interaction",
