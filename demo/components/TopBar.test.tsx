@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { auditAccessibility, violationIds } from "../../test/audit";
 import { gallery } from "../corpora";
 import { TopBar } from "./TopBar";
 
@@ -167,5 +169,203 @@ describe("TopBar (showcase Task 5)", () => {
       expect(status.style.marginLeft).toBe("auto");
       expect(label.style.marginLeft).toBe("");
     });
+  });
+});
+
+describe("TopBar on a narrow window (spec mobile §6)", () => {
+  function narrowBar(extra: Partial<Parameters<typeof TopBar>[0]> = {}) {
+    const properties = {
+      corpora: gallery,
+      activeId: "arxiv" as const,
+      onChange: () => {},
+      tuningOpen: false,
+      onToggleTuning: () => {},
+      onCopyLink: () => {},
+      linkStatus: null,
+      narrow: true,
+      ...extra,
+    };
+    const view = render(<TopBar {...properties} />);
+    const menu = screen.getByRole("button", { name: "Menu" });
+    const popover = view.container.querySelector<HTMLElement>("#top-bar-menu");
+    if (!popover) throw new Error("no popover");
+    return { ...view, menu, popover };
+  }
+
+  it("fits one row: the title and the Corpus label hidden but present, the select stretching", () => {
+    const { container } = narrowBar();
+    const bar = container.querySelector<HTMLElement>("[data-topbar]");
+    expect(bar?.style.flexWrap).toBe("nowrap");
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("corpus-map");
+    expect(heading.style.position).toBe("absolute");
+    // jsdom normalises the clip's spelling; a clip rect is what hides it.
+    expect(heading.style.clip).toMatch(/^rect\(/);
+    const label = container.querySelector<HTMLElement>("label[for='corpus-select']");
+    expect(label?.style.clip).toMatch(/^rect\(/);
+    expect(label?.style.position).toBe("absolute");
+    const select = screen.getByLabelText("Corpus") as HTMLSelectElement;
+    expect(select.style.flex).toContain("1");
+    expect(select.style.minHeight).toBe("44px");
+  });
+
+  it("shows a 44 × 44 Menu button that discloses Tuning and Copy link, each 44 px tall", () => {
+    const { menu, popover } = narrowBar();
+    expect(menu.style.minWidth).toBe("44px");
+    expect(menu.style.minHeight).toBe("44px");
+    expect(menu.getAttribute("aria-controls")).toBe("top-bar-menu");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    expect(popover.hidden).toBe(true);
+    fireEvent.click(menu);
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    expect(popover.hidden).toBe(false);
+    for (const name of ["Tuning", "Copy link"]) {
+      expect(screen.getByRole("button", { name }).style.minHeight).toBe("44px");
+    }
+  });
+
+  it("closes on Escape, focusing Menu, without letting the Escape reach the document", () => {
+    const { menu, popover } = narrowBar();
+    const documentEscape = vi.fn();
+    document.addEventListener("keydown", documentEscape);
+    try {
+      fireEvent.click(menu);
+      const tuning = screen.getByRole("button", { name: "Tuning" });
+      tuning.focus();
+      fireEvent.keyDown(tuning, { key: "Escape" });
+      expect(popover.hidden).toBe(true);
+      expect(document.activeElement).toBe(menu);
+      expect(documentEscape).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("keydown", documentEscape);
+    }
+  });
+
+  it("lets an Escape on the closed Menu reach the document, so the drawer still closes", () => {
+    const { menu } = narrowBar();
+    const documentEscape = vi.fn();
+    document.addEventListener("keydown", documentEscape);
+    try {
+      fireEvent.keyDown(menu, { key: "Escape" });
+      expect(documentEscape).toHaveBeenCalledTimes(1);
+      fireEvent.click(menu);
+      fireEvent.keyDown(menu, { key: "Escape" });
+      expect(documentEscape).toHaveBeenCalledTimes(1);
+      expect(menu.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      document.removeEventListener("keydown", documentEscape);
+    }
+  });
+
+  it("closes on a press outside, focusing Menu; a press inside keeps it open", () => {
+    const { menu, popover } = narrowBar();
+    fireEvent.click(menu);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Tuning" }));
+    expect(popover.hidden).toBe(false);
+    fireEvent.pointerDown(document.body);
+    expect(popover.hidden).toBe(true);
+    expect(document.activeElement).toBe(menu);
+  });
+
+  it("closes and calls onToggleTuning when Tuning is chosen, reflecting tuningOpen", () => {
+    const onToggleTuning = vi.fn();
+    const { menu, popover } = narrowBar({ onToggleTuning, tuningOpen: true });
+    fireEvent.click(menu);
+    const tuning = screen.getByRole("button", { name: "Tuning" });
+    expect(tuning.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(tuning);
+    expect(onToggleTuning).toHaveBeenCalledTimes(1);
+    expect(popover.hidden).toBe(true);
+  });
+
+  it("closes, focusing Menu, and calls onCopyLink when Copy link is chosen; the status stays announced", () => {
+    const onCopyLink = vi.fn();
+    const { menu, popover, rerender } = narrowBar({ onCopyLink });
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(onCopyLink).toHaveBeenCalledTimes(1);
+    expect(popover.hidden).toBe(true);
+    expect(document.activeElement).toBe(menu);
+    rerender(
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={onCopyLink}
+        linkStatus="copied"
+        narrow
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toBe("Link copied");
+  });
+
+  it("points gearButtonRef at the Menu button, so closing the tuning panel returns focus there", () => {
+    const gearButtonReference = createRef<HTMLButtonElement>();
+    const { menu } = narrowBar({ gearButtonRef: gearButtonReference });
+    expect(gearButtonReference.current).toBe(menu);
+  });
+
+  it("moves gearButtonRef to the Tuning button when the window widens, and back to Menu when it narrows", () => {
+    const gearButtonReference = createRef<HTMLButtonElement>();
+    const base = {
+      corpora: gallery,
+      activeId: "arxiv" as const,
+      onChange: () => {},
+      tuningOpen: false,
+      onToggleTuning: () => {},
+      onCopyLink: () => {},
+      linkStatus: null,
+      gearButtonRef: gearButtonReference,
+    };
+    const { rerender } = render(<TopBar {...base} narrow />);
+    rerender(<TopBar {...base} />);
+    expect(gearButtonReference.current).toBe(screen.getByRole("button", { name: "Tuning" }));
+    rerender(<TopBar {...base} narrow />);
+    expect(gearButtonReference.current).toBe(screen.getByRole("button", { name: "Menu" }));
+  });
+
+  it("keeps the wide bar as it was: no Menu, wrapping, Tuning and Copy link in the row", () => {
+    const { container } = render(
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkStatus={null}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+    expect(container.querySelector("#top-bar-menu")).toBeNull();
+    expect(container.querySelector<HTMLElement>("[data-topbar]")?.style.flexWrap).toBe("wrap");
+    expect(screen.getByRole("heading", { level: 1 }).style.position).toBe("");
+  });
+
+  it("comes back closed when the window narrows again after widening with the menu open", () => {
+    const { menu, rerender, container } = narrowBar();
+    fireEvent.click(menu);
+    const wide = {
+      corpora: gallery,
+      activeId: "arxiv" as const,
+      onChange: () => {},
+      tuningOpen: false,
+      onToggleTuning: () => {},
+      onCopyLink: () => {},
+      linkStatus: null,
+    };
+    rerender(<TopBar {...wide} />);
+    rerender(<TopBar {...wide} narrow />);
+    expect(container.querySelector<HTMLElement>("#top-bar-menu")?.hidden).toBe(true);
+    expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("passes the accessibility audit, closed and open", async () => {
+    const { container, menu } = narrowBar();
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
+    fireEvent.click(menu);
+    expect(violationIds(await auditAccessibility(container))).toEqual([]);
   });
 });

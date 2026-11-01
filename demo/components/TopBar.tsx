@@ -1,4 +1,5 @@
-import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
+import type { ChangeEvent, CSSProperties, KeyboardEvent, ReactElement, Ref } from "react";
+import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
 import type { GalleryEntry } from "../corpora";
 import { token } from "../tokens";
 
@@ -17,7 +18,22 @@ interface TopBarProps {
   onCopyLink: () => void;
   /** What the last Copy link did, announced in a status region; null says nothing. */
   linkStatus: LinkStatus;
+  /** A narrow window (spec mobile §6): one row, the corpus select stretching, Tuning and Copy link behind a Menu. */
+  narrow?: boolean | undefined;
 }
+
+/** The popover's id, which the Menu button's `aria-controls` names. */
+const MENU_ID = "top-bar-menu";
+
+/** Off screen but read: the narrow bar keeps the page's h1 and the select's label for assistive technology. */
+const VISUALLY_HIDDEN: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+};
 
 export type LinkStatus = "copied" | "failed" | null;
 
@@ -82,6 +98,58 @@ const gearButtonStyle: CSSProperties = {
   maxWidth: "100%",
 };
 
+const narrowBarStyle: CSSProperties = { ...barStyle, flexWrap: "nowrap", padding: "6px 12px" };
+
+const narrowSelectStyle: CSSProperties = {
+  ...selectStyle,
+  flex: "1 1 auto",
+  minWidth: 0,
+  maxWidth: "100%",
+  minHeight: 44,
+};
+
+const menuButtonStyle: CSSProperties = { ...gearButtonStyle, flexShrink: 0, minWidth: 44, minHeight: 44 };
+
+/** Below the bar on the right, under the Menu button that opens it. */
+const popoverStyle: CSSProperties = {
+  position: "absolute",
+  top: "100%",
+  right: 12,
+  marginTop: 4,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  padding: 8,
+  maxWidth: "calc(100vw - 24px)",
+  background: token("surfaceSolid"),
+  border: `1px solid ${token("border")}`,
+  borderRadius: 6,
+  boxShadow: `0 2px 10px ${token("shadow")}`,
+};
+
+const menuItemStyle: CSSProperties = { ...gearButtonStyle, minHeight: 44, textAlign: "left" };
+
+/**
+ * The narrow bar has no room for the status in its row, so it shows under the
+ * bar on the right, where the Menu that copied the link sits; empty, it is
+ * an empty, unpadded box that draws nothing.
+ */
+const narrowStatusStyle = (filled: boolean): CSSProperties => ({
+  position: "absolute",
+  top: "100%",
+  right: 12,
+  marginTop: 4,
+  fontSize: 13,
+  ...(filled
+    ? {
+        padding: "6px 10px",
+        background: token("surfaceSolid"),
+        border: `1px solid ${token("border")}`,
+        borderRadius: 6,
+      }
+    : {}),
+});
+
 /**
  * The demo's full-window top bar (spec 4 §2): the library name, a native
  * `<select>` that switches the active corpus, and the "Tuning" gear button
@@ -105,10 +173,107 @@ export function TopBar({
   barRef: barReference,
   onCopyLink,
   linkStatus,
+  narrow = false,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange(event.target.value as GalleryEntry["id"]);
   };
+  const [menuOpen, setMenuOpen] = useState(false);
+  // A menu left open when the window widens does not come back open when it narrows again.
+  if (!narrow && menuOpen) setMenuOpen(false);
+  const menuButtonReference = useRef<HTMLButtonElement>(null);
+  const popoverReference = useRef<HTMLDivElement>(null);
+  // On a narrow window the Menu stands in for the Tuning button, so `App`'s
+  // ref (focus returns there when the tuning panel closes) points at it. The
+  // handle is set again whenever the ref argument changes, so no deps are needed.
+  useImperativeHandle(
+    narrow ? gearButtonReference : undefined,
+    () => menuButtonReference.current as HTMLButtonElement,
+    [],
+  );
+  const closeMenu = () => {
+    setMenuOpen(false);
+    menuButtonReference.current?.focus();
+  };
+  // A press anywhere outside the Menu and its popover closes it.
+  const onOutsidePress = useEffectEvent(closeMenu);
+  const listening = narrow && menuOpen;
+  useEffect(() => {
+    if (!listening) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (popoverReference.current?.contains(target) || menuButtonReference.current?.contains(target)) return;
+      onOutsidePress();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [listening]);
+
+  if (narrow) {
+    const statusText = linkStatus === null ? "" : LINK_STATUS_TEXT[linkStatus];
+    // On the Menu and its items (Biome keeps handlers off a static element).
+    // While the menu is open, an Escape is the menu's alone: the drawer listens
+    // for Escape on the document and must not close too.
+    const onMenuKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key !== "Escape" || !menuOpen) return;
+      event.stopPropagation();
+      closeMenu();
+    };
+    return (
+      <header ref={barReference} data-topbar data-floating-control style={narrowBarStyle}>
+        <h1 style={{ ...VISUALLY_HIDDEN, fontSize: 15, margin: 0 }}>corpus-map</h1>
+        <label htmlFor="corpus-select" style={{ ...labelStyle, ...VISUALLY_HIDDEN }}>
+          Corpus
+        </label>
+        <select id="corpus-select" value={activeId} onChange={handleChange} style={narrowSelectStyle}>
+          {corpora.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          ref={menuButtonReference}
+          aria-expanded={menuOpen}
+          aria-controls={MENU_ID}
+          onClick={() => setMenuOpen((open) => !open)}
+          onKeyDown={onMenuKeyDown}
+          style={menuButtonStyle}
+        >
+          Menu
+        </button>
+        <span role="status" style={narrowStatusStyle(statusText !== "")}>
+          {statusText}
+        </span>
+        <div id={MENU_ID} ref={popoverReference} hidden={!menuOpen} style={popoverStyle}>
+          <button
+            type="button"
+            aria-pressed={tuningOpen}
+            onKeyDown={onMenuKeyDown}
+            onClick={() => {
+              setMenuOpen(false);
+              onToggleTuning();
+            }}
+            style={menuItemStyle}
+          >
+            Tuning
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              onCopyLink();
+            }}
+            onKeyDown={onMenuKeyDown}
+            style={menuItemStyle}
+          >
+            Copy link
+          </button>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header ref={barReference} data-topbar data-floating-control style={barStyle}>
