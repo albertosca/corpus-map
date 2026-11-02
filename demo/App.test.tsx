@@ -2249,4 +2249,69 @@ describe("App (showcase Task 5)", () => {
       expect(button.style.maxWidth).not.toBe("");
     });
   });
+
+  describe("search beside the map (spec search §6)", () => {
+    // Two items close together between two fillers, like the drawer tests' spec: zooming in reaches the near regime, where items are buttons.
+    const SEARCH_SPEC: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2", "west", "east"], centroid: [0, 0] },
+      ],
+      nodes: [
+        { id: "p1", label: "Graph colouring", x: -0.0001, y: 0, territory: "cs.AI" },
+        { id: "p2", label: "Graph matching", x: 0.0001, y: 0, territory: "cs.AI" },
+        { id: "west", label: "West filler", x: -1, y: 0, territory: "cs.AI" },
+        { id: "east", label: "East filler", x: 1, y: 0, territory: "cs.AI" },
+      ],
+    };
+    const searchBox = () => screen.getByRole("textbox", { name: "Search" });
+    const typeQuery = (text: string) => fireEvent.change(searchBox(), { target: { value: text } });
+    function zoomToNear(): void {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      }
+    }
+
+    it("marks the found items as matches on the map and leaves the others alone", async () => {
+      await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      zoomToNear();
+      typeQuery("matching");
+      await screen.findByText("1 result");
+      const found = await screen.findByRole("button", { name: "Graph matching" });
+      const other = await screen.findByRole("button", { name: "Graph colouring" });
+      expect(found.getAttribute("aria-description")).toBe("match");
+      expect(other.getAttribute("aria-description")).toBeNull();
+    });
+
+    it("fits the view around the matches with Show on map", async () => {
+      await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      typeQuery("graph");
+      await screen.findByText("2 results");
+      const before = screen.getByText(/\d+\.\d×/).textContent;
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Show on map" }));
+      });
+      expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before);
+    });
+
+    it("clears the search when the corpus changes", async () => {
+      await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      typeQuery("graph");
+      await screen.findByText("2 results");
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await waitFor(() => expect((searchBox() as HTMLInputElement).value).toBe(""));
+      expect(screen.queryByText("2 results")).toBeNull();
+    });
+
+    it("keeps the search in the floating-control overflow check", async () => {
+      const { container } = await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      typeQuery("graph");
+      await screen.findByText("2 results");
+      checkAllFloatingControls(container);
+    });
+  });
 });

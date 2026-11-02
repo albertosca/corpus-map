@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { MapSpec } from "corpus-map";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { auditAccessibility, violationIds } from "../../test/audit";
@@ -386,5 +387,56 @@ describe("TopBar on a narrow window (spec mobile §6)", () => {
     expect(violationIds(await auditAccessibility(container))).toEqual([]);
     fireEvent.click(menu);
     expect(violationIds(await auditAccessibility(container))).toEqual([]);
+  });
+});
+
+describe("TopBar search (spec search §6)", () => {
+  const spec: MapSpec = { version: "1", territories: [], nodes: [] };
+  const bar = (extra: Partial<Parameters<typeof TopBar>[0]> = {}) =>
+    render(
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkStatus={null}
+        search={{ spec, onMatches: () => {}, onShow: () => {} }}
+        {...extra}
+      />,
+    );
+
+  it("shows no search without the prop", () => {
+    bar({ search: undefined });
+    expect(document.querySelector("search")).toBeNull();
+  });
+
+  it("puts the search after the corpus select on a wide bar, described by where it runs", () => {
+    const { container } = bar();
+    const select = screen.getByLabelText("Corpus");
+    const search = container.querySelector("search") as HTMLElement;
+    expect(select.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const input = screen.getByRole("textbox", { name: "Search" });
+    const hint = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toBe("Searches titles in your browser");
+    expect((input as HTMLElement).style.minHeight).toBe("");
+  });
+
+  it("puts the search in the one-row narrow bar before Menu, with 44 px targets", () => {
+    const { container } = bar({ narrow: true });
+    const search = container.querySelector("search") as HTMLElement;
+    const menu = screen.getByRole("button", { name: "Menu" });
+    expect(search.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Search" }).style.minHeight).toBe("44px");
+    expect(container.querySelector<HTMLElement>("[data-topbar]")?.style.flexWrap).toBe("nowrap");
+  });
+
+  it("passes the accessibility audit with the search, wide and narrow", async () => {
+    const wide = bar();
+    expect(violationIds(await auditAccessibility(wide.container))).toEqual([]);
+    wide.unmount();
+    const narrow = bar({ narrow: true });
+    expect(violationIds(await auditAccessibility(narrow.container))).toEqual([]);
   });
 });

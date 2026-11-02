@@ -137,6 +137,9 @@ const DEFAULT_SYNTHETIC_SEED = 1;
 // One empty list, so the related memo does not recompute on every render.
 const NOTHING_HIDDEN: readonly string[] = [];
 
+/** What the search box holds while no corpus is on screen; one object, so the box is not reset by a new spec every render. */
+const NOTHING_TO_SEARCH: MapSpec = { version: "1", territories: [], nodes: [] };
+
 /**
  * The one async corpus's (arXiv's) most recently settled load.
  *
@@ -198,6 +201,8 @@ export function App({ loadArxiv }: AppProps = {}) {
   const [viewStore] = useState(createViewStore);
   const scheme = useColourScheme();
   const mapReference = useRef<CorpusMapHandle>(null);
+  // The ids the search found (spec search §6); null while no search is active. It belongs to the corpus it was made in.
+  const [matches, setMatches] = useState<readonly string[] | null>(null);
   // Wraps `CorpusMap` (or the loading/error state); programmatically
   // focusable (`tabIndex={-1}`: never in the Tab order) as the fallback
   // focus target when no map is mounted.
@@ -409,6 +414,7 @@ export function App({ loadArxiv }: AppProps = {}) {
     setCorpusId(id);
     viewStore.set(null);
     setSelectedId(null);
+    setMatches(null);
     setLinkApplies(false);
     linkReference.current = { corpus: id, view: null, selected: null };
     hashWriter.schedule(linkReference.current);
@@ -525,6 +531,12 @@ export function App({ loadArxiv }: AppProps = {}) {
         onCopyLink={handleCopyLink}
         linkStatus={linkStatus}
         narrow={narrow}
+        search={{
+          // While the corpus loads there is nothing to search: an empty spec keeps the box (and the bar's height) in place.
+          spec: current?.spec ?? NOTHING_TO_SEARCH,
+          onMatches: setMatches,
+          onShow: () => mapReference.current?.revealAll(matches ?? []),
+        }}
       />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
@@ -546,6 +558,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             onViewChange={viewStore.set}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
             selectedId={selectedId}
+            matches={matches}
             onViewportChange={(view) => updateLink({ view })}
             onSelectedChange={handleSelectedChange}
             onHiddenTerritoriesChange={(ids) => setHiddenOnMap({ mapKey, ids })}

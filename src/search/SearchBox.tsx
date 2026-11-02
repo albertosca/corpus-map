@@ -134,11 +134,16 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     border: "1px solid color-mix(in srgb, currentColor 45%, transparent)",
     borderRadius: 6,
     padding: "4px 8px",
+    // A control never grows past its container, so a narrow bar cannot be pushed wider by one.
+    maxWidth: "100%",
     ...target,
   };
 
   return (
-    <search aria-label={label} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", ...style }}>
+    <search
+      aria-label={label}
+      style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", maxWidth: "100%", ...style }}
+    >
       <input
         ref={inputReference}
         type="text"

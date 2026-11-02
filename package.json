@@ -51,7 +51,7 @@
     "maximumGzipBytes": 35252,
     "search": {
       "file": "dist/search.js",
-      "maximumGzipBytes": 2060
+      "maximumGzipBytes": 2080
     }
   },
   "devDependencies": {

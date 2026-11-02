@@ -1,3 +1,5 @@
+import type { MapSpec } from "corpus-map";
+import { SearchBox } from "corpus-map/search";
 import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
 import type { GalleryEntry } from "../corpora";
@@ -21,7 +23,18 @@ interface TopBarProps {
   linkStatus: LinkStatus;
   /** A narrow window (spec mobile §6): one row, the corpus select stretching, Tuning and Copy link behind a Menu. */
   narrow?: boolean | undefined;
+  /** The search beside the corpus select (spec search §6); absent draws none. `spec` is what it searches, `onMatches` takes the found ids, `onShow` fits the view around them. */
+  search?:
+    | {
+        spec: MapSpec;
+        onMatches: (ids: readonly string[] | null) => void;
+        onShow: () => void;
+      }
+    | undefined;
 }
+
+/** Where the search runs, read by the input as its description. */
+const SEARCH_HINT = "Searches titles in your browser";
 
 /** The popover's id, which the Menu button's `aria-controls` names. */
 const MENU_ID = "top-bar-menu";
@@ -98,6 +111,10 @@ const gearButtonStyle: CSSProperties = {
   // the top bar's, unlike the false claim fix round 1 made.
   maxWidth: "100%",
 };
+
+const searchStyle: CSSProperties = { flex: "1 1 220px", maxWidth: 360 };
+
+const narrowSearchStyle: CSSProperties = { flex: "2 1 0", minWidth: 0 };
 
 const narrowBarStyle: CSSProperties = { ...barStyle, flexWrap: "nowrap", padding: "6px 12px" };
 
@@ -180,6 +197,7 @@ export function TopBar({
   onCopyLink,
   linkStatus,
   narrow = false,
+  search,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange(event.target.value as GalleryEntry["id"]);
@@ -242,6 +260,16 @@ export function TopBar({
             </option>
           ))}
         </select>
+        {search ? (
+          <SearchBox
+            spec={search.spec}
+            onMatches={search.onMatches}
+            onShow={search.onShow}
+            hint={SEARCH_HINT}
+            touchTargets
+            style={narrowSearchStyle}
+          />
+        ) : null}
         <button
           type="button"
           ref={menuButtonReference}
@@ -303,6 +331,15 @@ export function TopBar({
           </option>
         ))}
       </select>
+      {search ? (
+        <SearchBox
+          spec={search.spec}
+          onMatches={search.onMatches}
+          onShow={search.onShow}
+          hint={SEARCH_HINT}
+          style={searchStyle}
+        />
+      ) : null}
       <button
         type="button"
         ref={gearButtonReference}

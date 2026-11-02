@@ -231,6 +231,24 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(landmark().style.maxWidth).toBe("321px");
   });
 
+  it("caps every control at its container's width, so a narrow bar never overflows", async () => {
+    mount({ onShow: () => {} });
+    type("graphs");
+    await settle();
+    for (const control of [
+      input(),
+      screen.getByRole("button", { name: "Clear search" }),
+      screen.getByRole("button", { name: "Show on map" }),
+    ])
+      expect((control as HTMLElement).style.maxWidth).toBe("100%");
+    expect(landmark().style.maxWidth).toBe("100%");
+  });
+
+  it("lets the consumer's style override the container's width cap", () => {
+    mount({ style: { maxWidth: 321 } });
+    expect(landmark().style.maxWidth).toBe("321px");
+  });
+
   it("gives every control a 44 px target with touchTargets", async () => {
     mount({ touchTargets: true, onShow: () => {} });
     type("graphs");
