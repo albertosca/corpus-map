@@ -9,7 +9,13 @@ export default defineConfig({
   // to the bundle (and can silently run against a stale build). Only demo
   // code that imports a value, not a type, from "corpus-map" is affected;
   // nothing under src/ or test/ ever imports the package by its own name.
-  resolve: { alias: { "corpus-map": fileURLToPath(new URL("./src/index.ts", import.meta.url)) } },
+  // The regex form keeps "corpus-map/search" from matching the bare name as a prefix.
+  resolve: {
+    alias: [
+      { find: /^corpus-map\/search$/, replacement: fileURLToPath(new URL("./src/search/index.ts", import.meta.url)) },
+      { find: /^corpus-map$/, replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
+    ],
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],

@@ -21,6 +21,8 @@ export interface CorpusMapHandle {
     focus(): void;
     /** Centres the view on an item at the current zoom, without selecting it (reason `"interaction"`); an unknown id does nothing (spec slice E §6). */
     reveal(id: string): void;
+    /** Fits the view around the live items in `ids` inside the area `insets` leaves uncovered, at most once per call (reason `"interaction"`); unknown ids and ids of dimmed territories are ignored, and none left does nothing (spec search §3). */
+    revealAll(ids: Iterable<string>): void;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
@@ -151,6 +153,15 @@ export interface CorpusMapProps {
      * insets, so an overlay opening or closing never moves the zoom ratio.
      */
     insets?: Partial<Insets> | undefined;
+    /**
+     * The ids a search found (spec search §2). Absent or `null`: no search is
+     * active and nothing changes. A set or an array: every other item is drawn
+     * dimmed, each match is ringed and keeps its item label, and the accessible
+     * tree describes it as a match. An empty one means "no match", so all is
+     * dimmed. Ids the spec lacks are ignored. The view never moves by itself;
+     * `revealAll` fits the matches when the consumer asks.
+     */
+    matches?: ReadonlySet<string> | readonly string[] | null | undefined;
 }
 /**
  * Renders `spec` as a canvas map with a card overlay and an accessible
@@ -196,6 +207,8 @@ export interface AccessibleTreeProps {
     onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
     /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
     onNodeFocusChange?: ((id: string | null) => void) | undefined;
+    /** The ids a search found; an item's button in it is described as a match (spec search §5). */
+    matches?: ReadonlySet<string> | undefined;
     /** The selected item's live related items, listed at mid and near (spec slice E §6). */
     related?: readonly RelatedItem[] | undefined;
     /** Called when a related item's button is pressed. */
@@ -588,6 +601,8 @@ export interface ItemLabelBox {
     width: number;
     height: number;
     dimmed: ReadonlySet<string>;
+    /** With a search active, only the labels of these items are drawn (spec search §2); absent means all. */
+    matches?: ReadonlySet<string> | undefined;
 }
 /**
  * The labels drawn at this scale, wherever they sit: position never enters
@@ -1038,6 +1053,25 @@ export interface ScreenPoint {
 /** The point nearest to (horizontal, vertical) within `radius` pixels, or null. Ties go to the earlier point. */
 export declare function nearestWithin(points: readonly ScreenPoint[], horizontal: number, vertical: number, radius: number): ScreenPoint | null;
 
+// points/paintMatches.d.ts
+import type { Scene } from "../shared/scene";
+import type { Surface } from "../shared/surface";
+import type { Theme } from "../shared/theme";
+import { type Viewport } from "../viewport/viewport";
+/** Stroke width of a search match's ring, thinner than the selection ring so a selected match stays distinct. */
+export declare const MATCH_RING_WIDTH = 1.5;
+/** Clear space between a point's edge and a match's ring. */
+export declare const MATCH_RING_GAP = 2.5;
+/**
+ * A ring round each matched item that is on screen (spec search §2), in the
+ * selection colour. An id the scene does not know is ignored, and an item
+ * whose ring lies wholly outside the box is skipped.
+ */
+export declare function paintMatches(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel">, matches: ReadonlySet<string>, box: {
+    width: number;
+    height: number;
+}): void;
+
 // points/paintPoints.d.ts
 import type { Scene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
@@ -1053,7 +1087,8 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  * the same `pointRadius`, so both marks have the same footprint. A dimmed
  * territory's points are drawn first, underneath, at `alpha` times
  * `DIMMED_ALPHA`; the surface is left at `alpha`. A point with no territory
- * is never dimmed. Each pass draws its points of one kind and colour as one
+ * is never dimmed by its territory. With `matches`, a point it does not list
+ * is dimmed the same way (spec search §2). Each pass draws its points of one kind and colour as one
  * batch (one path, one fill or stroke). Given the canvas `box`, a point
  * whose mark lies wholly outside it is skipped (spec mobile §7: at near a
  * phone frame would otherwise stroke every point of the corpus to show a
@@ -1062,7 +1097,7 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
 export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number, box?: {
     width: number;
     height: number;
-}): void;
+}, matches?: ReadonlySet<string>): void;
 
 // points/paintSelection.d.ts
 import type { Scene } from "../shared/scene";
@@ -1079,6 +1114,64 @@ export declare const SELECTION_RING_WIDTH = 2;
  * point layer, so it fades with the points and is absent at far.
  */
 export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel">, id: string): void;
+
+// search/SearchBox.d.ts
+import { type CSSProperties, type ReactElement } from "react";
+import type { MapSpec } from "../shared/spec";
+/** How long the query must rest before it is searched (spec search §4). */
+export declare const SEARCH_DEBOUNCE_MILLISECONDS = 200;
+export interface SearchBoxProps {
+    /** The corpus the local search runs over; a new spec object clears the box. */
+    spec: MapSpec;
+    /** Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it. */
+    search?: ((query: string) => readonly string[] | Promise<readonly string[]>) | undefined;
+    /** The matches to draw: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
+    onMatches: (ids: readonly string[] | null) => void;
+    /** When given, a "Show on map" button appears beside a non-empty result; pair it with `CorpusMapHandle.revealAll`. */
+    onShow?: (() => void) | undefined;
+    /** The accessible name of the search landmark and the input; "Search" by default. */
+    label?: string | undefined;
+    /** A line of help the input is described by, for example where the search runs. */
+    hint?: string | undefined;
+    /** Gives every control a 44 px target, for a narrow box. */
+    touchTargets?: boolean | undefined;
+    /** Extra inline styles for the container. */
+    style?: CSSProperties | undefined;
+}
+/**
+ * A search box for `CorpusMap`'s `matches` (spec search §4): debounced, the
+ * local search over labels and `meta` unless a `search` is given, one answer
+ * at a time (a slow older answer is dropped), cleared by Escape, the clear
+ * button or a new spec. Neutral inline styles that inherit the colour and the
+ * font, so it follows the page's theme.
+ */
+export declare function SearchBox(properties: SearchBoxProps): ReactElement;
+
+// search/index.d.ts
+export { SearchBox, type SearchBoxProps } from "./SearchBox";
+
+// search/localSearch.d.ts
+import type { MapSpec } from "../shared/spec";
+import { type Steps } from "../shared/steps";
+/** What the local search matches against: each item's id and its folded label and `meta` text, in spec order. */
+export interface SearchIndex {
+    ids: readonly string[];
+    texts: readonly string[];
+}
+/** Lower case with accents stripped: "Ação" and "acao" fold to the same text (spec search §4). */
+export declare function foldText(text: string): string;
+/** Builds the index in steps of `ITEMS_PER_STEP` items, so the caller can hand the main thread back between them. */
+export declare function buildSearchIndex(spec: MapSpec): Steps<SearchIndex>;
+/** The index of `spec`, built once per spec object. */
+export declare function searchIndexOf(spec: MapSpec): SearchIndex;
+/**
+ * The index of `spec` built a few steps per task (spec search §4: no long
+ * task while indexing), once per spec object; a finished index is shared with
+ * `searchIndexOf`.
+ */
+export declare function searchIndexAsync(spec: MapSpec): Promise<SearchIndex>;
+/** Ids of the items whose label or `meta` contains every word of `query`, in spec order; no words, no ids. */
+export declare function localSearch(index: SearchIndex, query: string): string[];
 
 // shared/compareIds.d.ts
 /** Orders ids by code unit, the tie-break every sorted list in the map uses so the order never depends on the input's. */
@@ -1133,6 +1226,14 @@ export declare function usableArea(width: number, height: number, insets: Insets
     height: number;
 };
 
+// shared/matchSet.d.ts
+/**
+ * The set of ids a search found, from the `matches` prop: `undefined` and
+ * `null` mean no search is active (spec search §2); an array becomes a set,
+ * which collapses its duplicates; a set is used as it is.
+ */
+export declare function toMatchSet(matches: ReadonlySet<string> | readonly string[] | null | undefined): ReadonlySet<string> | undefined;
+
 // shared/paint.d.ts
 import type { PlacedItemLabel } from "../labels/itemLabels";
 import type { Regime } from "../lod/lod";
@@ -1167,6 +1268,8 @@ export interface Frame {
     groupAlpha?: number | undefined;
     /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
     dimmed?: ReadonlySet<string> | undefined;
+    /** The ids a search found (spec search §2): the rest are dimmed, these ringed; absent means no search is active. */
+    matches?: ReadonlySet<string> | undefined;
     /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
     selected?: string | null | undefined;
     /** The hovered item's id, whose edges are previewed at half the point alpha (spec slice E §6); absent or `null` means none. */
@@ -1868,6 +1971,24 @@ export declare function fitClamped(bounds: Bounds, width: number, height: number
  */
 export declare function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport;
 export declare function fitSpec(spec: MapSpec, width: number, height: number, padding: number): Viewport;
+
+// viewport/fitIds.d.ts
+import type { MapNode } from "../shared/spec";
+import type { Viewport } from "./viewport";
+/** The part of the box a view may use: what `usableArea` returns. */
+export interface FitArea {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+/**
+ * The view that shows every node in `ids` inside `area`, padded and with the
+ * scale clamped to [minimumScale, maximumScale] (spec search §3). Ids that are
+ * not in `nodesById` are ignored; `null` when none resolves, so the caller
+ * leaves the view alone.
+ */
+export declare function fitIds(nodesById: ReadonlyMap<string, MapNode>, ids: Iterable<string>, area: FitArea, padding: number, minimumScale: number, maximumScale: number): Viewport | null;
 
 // viewport/fitScene.d.ts
 import type { Scene } from "../shared/scene";

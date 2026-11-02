@@ -17,6 +17,7 @@ jobs:
       # `test -f` is what proves the published package resolves its types.
       - run: npm run build
       - run: test -f dist/index.d.ts
+      - run: test -f dist/search.js && test -f dist/search/index.d.ts
       - run: npm run api:check
       - run: npm run size
       - uses: actions/upload-artifact@v7
