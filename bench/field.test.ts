@@ -55,6 +55,34 @@ describe("point field", () => {
     expect(medianMs).toBeLessThan(BUDGET_MS);
   });
 
+  it(`paints a far frame with a search active within ${BUDGET_MS}ms (median of ${SAMPLES})`, () => {
+    // Where a corpus opens and a search now shows: every point dimmed but the matches, ringed.
+    const spec = generateCorpus({ seed: 1, size: 10_000 });
+    const viewport = { scale: 0.05, tx: 200, ty: 150 };
+    const frame = {
+      regime: "far" as const,
+      pointAlpha: 0,
+      width: 1280,
+      height: 800,
+      matches: new Set(spec.nodes.filter((_node, position) => position % 20 === 0).map((node) => node.id)),
+    };
+    const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+
+    for (let index = 0; index < WARM_UPS; index += 1)
+      paint(new RecordingSurface(), scene, spec, viewport, frame, DEFAULT_THEME);
+    const samples: number[] = [];
+    for (let index = 0; index < SAMPLES; index += 1) {
+      const surface = new RecordingSurface();
+      const start = performance.now();
+      paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
+      samples.push(performance.now() - start);
+      expect(surface.circles.length + surface.hollowCircles.length).toBeGreaterThan(10_000);
+    }
+    const medianMs = median(samples);
+    console.log(`far search paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples`);
+    expect(medianMs).toBeLessThan(BUDGET_MS);
+  });
+
   it(`paints a near frame with item labels within ${BUDGET_MS}ms (median of ${SAMPLES})`, () => {
     const spec = generateCorpus({ seed: 1, size: 10_000 });
     // Eight times the mid frame's scale, about the same corner: a near view.
