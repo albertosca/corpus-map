@@ -137,3 +137,72 @@ describe("paintLabels with dimmed territories", () => {
     expect(wholly.texts[wholly.texts.length - 1]?.text).toBe(group.name);
   });
 });
+
+describe("paintLabels with a one-member family (backlog 2026-10-26)", () => {
+  function familied(soloFamilyName: string): Scene {
+    const leaf = (id: string, name: string, parent: string, horizontal: number) => ({
+      id,
+      name,
+      parent,
+      members: [`${id}-a`, `${id}-b`, `${id}-c`],
+      centroid: [horizontal, 0] as [number, number],
+    });
+    const territories = [
+      leaf("solo", "Solo", "family-solo", 0),
+      leaf("left", "Left", "family-pair", 100),
+      leaf("right", "Right", "family-pair", 200),
+      { id: "family-solo", name: soloFamilyName, members: [], centroid: [0, 0] as [number, number] },
+      { id: "family-pair", name: "Pair", members: [], centroid: [150, 0] as [number, number] },
+    ];
+    const nodes = territories
+      .filter((territory) => territory.members.length > 0)
+      .flatMap((territory) =>
+        territory.members.map((id, index) => ({
+          id,
+          label: id,
+          x: territory.centroid[0] + index,
+          y: index,
+          territory: territory.id,
+        })),
+      );
+    return buildScene(validateSpec({ version: "1", territories, nodes }), DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  }
+
+  const namesDrawn = (scene: Scene, groupAlpha: number, name: string) => {
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha });
+    return surface.texts.filter((drawn) => drawn.text === name).length;
+  };
+
+  it("draws a family named like its only territory once, whatever the fade", () => {
+    const scene = familied("Solo");
+    for (const groupAlpha of [0, 0.25, 0.5, 0.75, 1]) expect(namesDrawn(scene, groupAlpha, "Solo")).toBe(1);
+  });
+
+  it("draws that one name at full alpha through the fade, so it neither dims nor pops", () => {
+    const scene = familied("Solo");
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0.5 });
+    // Brightest first, and no alpha call before the first draw means alpha 1.
+    expect(surface.texts[0]?.text).toBe("Solo");
+    expect(surface.alphas).toEqual([0.5, 1]);
+  });
+
+  it("keeps both names when the family's differs from its territory's", () => {
+    const scene = familied("Loner");
+    expect(namesDrawn(scene, 0.5, "Solo")).toBe(1);
+    expect(namesDrawn(scene, 0.5, "Loner")).toBe(1);
+  });
+
+  it("keeps the family's name where its territory's name is not drawn yet", () => {
+    const scene = familied("Solo");
+    const inactive: Scene = {
+      ...scene,
+      labels: scene.labels.map((label) => (label.id === "solo" ? { ...label, activeFromScale: 1e9 } : label)),
+    };
+    const surface = new RecordingSurface();
+    paintLabels(surface, inactive, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1 });
+    expect(surface.texts.filter((drawn) => drawn.text === "Solo")).toHaveLength(1);
+    expect(surface.alphas).toEqual([]);
+  });
+});

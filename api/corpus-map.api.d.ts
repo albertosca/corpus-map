@@ -633,7 +633,9 @@ export interface LabelBox {
  *
  * With groups, group names are drawn at `groupAlpha` and territory names at
  * the rest, so the two levels cross-fade; without groups `groupAlpha` is
- * ignored. In dense, medium and small territory names are drawn at
+ * ignored. A family of one territory named like it draws that name once, as
+ * the territory's, at full alpha through the fade (while the territory's name
+ * is not drawn yet, the family's stays). In dense, medium and small territory names are drawn at
  * `DENSE_NAME_ALPHA`. Names are drawn brightest first (a stable sort keeps
  * the placement order within an alpha), `globalAlpha` is set only when it
  * changes and is left at 1, and a name at alpha 0 is not drawn at all. A

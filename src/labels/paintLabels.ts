@@ -37,7 +37,9 @@ interface Item {
  *
  * With groups, group names are drawn at `groupAlpha` and territory names at
  * the rest, so the two levels cross-fade; without groups `groupAlpha` is
- * ignored. In dense, medium and small territory names are drawn at
+ * ignored. A family of one territory named like it draws that name once, as
+ * the territory's, at full alpha through the fade (while the territory's name
+ * is not drawn yet, the family's stays). In dense, medium and small territory names are drawn at
  * `DENSE_NAME_ALPHA`. Names are drawn brightest first (a stable sort keeps
  * the placement order within an alpha), `globalAlpha` is set only when it
  * changes and is left at 1, and a name at alpha 0 is not drawn at all. A
@@ -55,25 +57,38 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
   const fits = (label: PlacedLabel) =>
     viewport.scale >= label.activeFromScale && label.width <= box.width && label.height <= box.height;
   const items: Item[] = [];
-  if (territoryAlpha > 0)
+  const groupsById = new Map(scene.groups.map((group) => [group.id, group]));
+  // A family of one territory named like it shows that name once: the family
+  // hands it to the territory, drawn at full alpha through the fade, while the
+  // territory's own name is drawn (backlog 2026-10-26).
+  // One set holds both ids: the family's and the territory's (ids are unique across all territories).
+  const handedOver = new Set<string>();
+  if (groupAlpha > 0) {
+    const labelsById = new Map(scene.labels.map((label) => [label.id, label]));
+    for (const group of scene.groups) {
+      const label = group.members.length === 1 ? labelsById.get(group.members[0] as string) : undefined;
+      if (label && label.id !== group.id && label.name === group.name && fits(label))
+        handedOver.add(group.id).add(label.id);
+    }
+  }
+  if (territoryAlpha > 0 || handedOver.size > 0)
     for (const label of scene.labels)
-      if (fits(label))
+      if (fits(label) && (territoryAlpha > 0 || handedOver.has(label.id)))
         items.push({
           name: label.name,
           anchor: label.anchor,
           font: theme.territoryFonts[label.labelClass],
           alpha:
-            territoryAlpha *
+            (handedOver.has(label.id) ? 1 : territoryAlpha) *
             (box.presentation === "dense" && label.labelClass !== "large" ? DENSE_NAME_ALPHA : 1) *
             fadeOf(dimmed.has(label.id)),
         });
-  const groupsById = new Map(scene.groups.map((group) => [group.id, group]));
   const [groupLabels, groupFont] = box.compactGroupNames
     ? [scene.compactGroupLabels, scene.compactGroupFont]
     : [scene.groupLabels, theme.territoryFonts.large];
   if (groupAlpha > 0)
     for (const label of groupLabels)
-      if (fits(label))
+      if (fits(label) && !handedOver.has(label.id))
         items.push({
           name: label.name,
           anchor: label.anchor,
