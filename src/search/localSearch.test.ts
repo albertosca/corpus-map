@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapNode, MapSpec } from "../shared/spec";
 import { advance } from "../shared/steps";
-import { buildSearchIndex, foldText, localSearch, searchIndexOf } from "./localSearch";
+import { buildSearchIndex, foldText, localSearch, searchIndexAsync, searchIndexOf } from "./localSearch";
 
 const node = (id: string, label: string, meta?: unknown): MapNode => ({
   id,
@@ -68,6 +68,23 @@ describe("localSearch", () => {
   it("builds the index once per spec object", () => {
     expect(searchIndexOf(spec)).toBe(index);
     expect(searchIndexOf(specOf(spec.nodes))).not.toBe(index);
+  });
+});
+
+describe("searchIndexAsync", () => {
+  it("resolves to the same index a synchronous build gives, once per spec object", async () => {
+    const big = specOf(Array.from({ length: 1000 }, (_, count) => node(`n${count}`, `Item ${count}`)));
+    const first = searchIndexAsync(big);
+    expect(searchIndexAsync(big)).toBe(first);
+    const index = await first;
+    expect(index.ids).toHaveLength(1000);
+    expect(localSearch(index, "item 999")).toEqual(["n999"]);
+    expect(searchIndexOf(big)).toBe(index);
+  });
+
+  it("resolves a small spec with the index the synchronous call would give", async () => {
+    const small = specOf([node("only", "Solo")]);
+    expect(await searchIndexAsync(small)).toEqual(searchIndexOf(small));
   });
 });
 

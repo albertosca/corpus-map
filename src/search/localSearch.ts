@@ -1,5 +1,5 @@
 import type { MapSpec } from "../shared/spec";
-import { finish, type Steps } from "../shared/steps";
+import { advance, finish, type Steps } from "../shared/steps";
 
 /** What the local search matches against: each item's id and its folded label and `meta` text, in spec order. */
 export interface SearchIndex {
@@ -53,6 +53,35 @@ export function searchIndexOf(spec: MapSpec): SearchIndex {
   const index = finish(buildSearchIndex(spec));
   indexes.set(spec, index);
   return index;
+}
+
+/** Steps run per task while indexing in the background: 500 items, so a corpus of thousands never holds the main thread. */
+const STEPS_PER_TASK = 5;
+const pending = new WeakMap<MapSpec, Promise<SearchIndex>>();
+
+/**
+ * The index of `spec` built a few steps per task (spec search §4: no long
+ * task while indexing), once per spec object; a finished index is shared with
+ * `searchIndexOf`.
+ */
+export function searchIndexAsync(spec: MapSpec): Promise<SearchIndex> {
+  const cached = indexes.get(spec);
+  if (cached) return Promise.resolve(cached);
+  const started = pending.get(spec);
+  if (started) return started;
+  const steps = buildSearchIndex(spec);
+  const promise = new Promise<SearchIndex>((resolve) => {
+    const run = () => {
+      const progress = advance(steps, STEPS_PER_TASK);
+      if (progress.done) {
+        indexes.set(spec, progress.value);
+        resolve(progress.value);
+      } else setTimeout(run, 0);
+    };
+    run();
+  });
+  pending.set(spec, promise);
+  return promise;
 }
 
 /** Ids of the items whose label or `meta` contains every word of `query`, in spec order; no words, no ids. */
