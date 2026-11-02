@@ -244,6 +244,11 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(landmark().style.maxWidth).toBe("100%");
   });
 
+  it("lets the input shrink to 4rem, so the clear button shares its row in a narrow bar", () => {
+    mount();
+    expect(input().style.flex).toBe("1 1 4rem");
+  });
+
   it("lets the consumer's style override the container's width cap", () => {
     mount({ style: { maxWidth: 321 } });
     expect(landmark().style.maxWidth).toBe("321px");

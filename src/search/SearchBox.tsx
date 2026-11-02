@@ -136,6 +136,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     padding: "4px 8px",
     // A control never grows past its container, so a narrow bar cannot be pushed wider by one.
     maxWidth: "100%",
+    whiteSpace: "nowrap",
     ...target,
   };
 
@@ -160,7 +161,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
           event.stopPropagation();
           changeQuery("");
         }}
-        style={{ ...control, flex: "1 1 8rem", minWidth: 0 }}
+        style={{ ...control, flex: "1 1 4rem", minWidth: 0 }}
       />
       {hint === undefined ? null : (
         <span id={hintIdentifier} style={VISUALLY_HIDDEN}>
@@ -180,7 +181,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
           ×
         </button>
       )}
-      <span role="status" style={{ font: "inherit", opacity: 0.8 }}>
+      <span role="status" style={{ font: "inherit", opacity: 0.8, whiteSpace: "nowrap" }}>
         {statusText(status)}
       </span>
       {onShow !== undefined && status.kind === "found" && status.count > 0 ? (

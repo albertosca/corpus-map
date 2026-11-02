@@ -432,6 +432,20 @@ describe("TopBar search (spec search §6)", () => {
     expect(container.querySelector<HTMLElement>("[data-topbar]")?.style.flexWrap).toBe("nowrap");
   });
 
+  it("keeps the wide search on one row, so its results never make the bar taller", () => {
+    const { container } = bar();
+    expect((container.querySelector("search") as HTMLElement).style.flexWrap).toBe("nowrap");
+  });
+
+  it("lets the narrow search take more of the row than the corpus select, which may shrink to nothing", () => {
+    const { container } = bar({ narrow: true });
+    const search = container.querySelector("search") as HTMLElement;
+    const select = screen.getByLabelText("Corpus");
+    expect(Number(search.style.flexGrow)).toBeGreaterThan(Number(select.style.flexGrow));
+    expect(select.style.flexBasis).toMatch(/^0/);
+    expect(select.style.minWidth).toBe("0px");
+  });
+
   it("passes the accessibility audit with the search, wide and narrow", async () => {
     const wide = bar();
     expect(violationIds(await auditAccessibility(wide.container))).toEqual([]);

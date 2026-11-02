@@ -112,15 +112,16 @@ const gearButtonStyle: CSSProperties = {
   maxWidth: "100%",
 };
 
-const searchStyle: CSSProperties = { flex: "1 1 220px", maxWidth: 360 };
+// One row, so a result never makes the bar taller (the map below would move).
+const searchStyle: CSSProperties = { flex: "1 1 320px", maxWidth: 480, flexWrap: "nowrap" };
 
-const narrowSearchStyle: CSSProperties = { flex: "2 1 0", minWidth: 0 };
+const narrowSearchStyle: CSSProperties = { flex: "2 1 0%", minWidth: 0 };
 
 const narrowBarStyle: CSSProperties = { ...barStyle, flexWrap: "nowrap", padding: "6px 12px" };
 
 const narrowSelectStyle: CSSProperties = {
   ...selectStyle,
-  flex: "1 1 auto",
+  flex: "1 1 0%",
   minWidth: 0,
   maxWidth: "100%",
   minHeight: TOUCH_TARGET_SIZE,
