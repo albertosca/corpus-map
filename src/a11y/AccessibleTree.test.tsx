@@ -28,6 +28,29 @@ const viewport = { scale: 10, tx: 0, ty: 0 };
 const regimeAnnouncement = () =>
   screen.getAllByRole("status").find((status) => status.getAttribute("data-announcement") === "regime")?.textContent;
 
+describe("AccessibleTree search matches (spec search §5)", () => {
+  it("describes a matched item's button as a match, and no other", () => {
+    render(
+      <AccessibleTree
+        spec={spec}
+        regime="near"
+        viewport={viewport}
+        width={400}
+        height={300}
+        cap={200}
+        matches={new Set(["b"])}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Beta/ }).getAttribute("aria-description")).toBe("match");
+    expect(screen.getByRole("button", { name: /Alpha/ }).getAttribute("aria-description")).toBeNull();
+  });
+
+  it("describes nothing when no search is active", () => {
+    render(<AccessibleTree spec={spec} regime="near" viewport={viewport} width={400} height={300} cap={200} />);
+    expect(screen.getByRole("button", { name: /Beta/ }).getAttribute("aria-description")).toBeNull();
+  });
+});
+
 describe("AccessibleTree", () => {
   it("lists territories, not items, at the far regime", () => {
     render(<AccessibleTree spec={spec} regime="far" viewport={viewport} width={400} height={300} cap={200} />);

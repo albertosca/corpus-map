@@ -36,6 +36,7 @@ import { MINIMAP_SIZE, Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { NO_DIMMED } from "./shared/dimmed";
 import { type Insets, normaliseInsets, usableArea } from "./shared/insets";
+import { toMatchSet } from "./shared/matchSet";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildingScene, EMPTY_SCENE, groupLabelsFor, NARROW_BOX_WIDTH, SCENE_STEPS_PER_SLICE } from "./shared/scene";
@@ -213,6 +214,15 @@ export interface CorpusMapProps {
    * insets, so an overlay opening or closing never moves the zoom ratio.
    */
   insets?: Partial<Insets> | undefined;
+  /**
+   * The ids a search found (spec search §2). Absent or `null`: no search is
+   * active and nothing changes. A set or an array: every other item is drawn
+   * dimmed, each match is ringed and keeps its item label, and the accessible
+   * tree describes it as a match. An empty one means "no match", so all is
+   * dimmed. Ids the spec lacks are ignored. The view never moves by itself;
+   * `revealAll` fits the matches when the consumer asks.
+   */
+  matches?: ReadonlySet<string> | readonly string[] | null | undefined;
 }
 
 const FIT_PADDING = 24;
@@ -820,6 +830,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     () => (hiddenKey === "[]" ? NO_DIMMED : new Set(JSON.parse(hiddenKey) as string[])),
     [hiddenKey],
   );
+  // The search's matches (spec search §2): per frame like `dimmed`, never in the scene.
+  const matchSet = useMemo(() => toMatchSet(properties.matches), [properties.matches]);
   // A territory dimmed while it is named, from the legend or by a controlled
   // consumer, drops the name in this same render (spec categories §5): no
   // pointer move is coming to re-resolve it while the pointer is elsewhere.
@@ -1055,6 +1067,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         presentation,
         groupAlpha,
         dimmed,
+        matches: matchSet,
         selected,
         hovered: hoveredItem,
         edgesPerNode: tuning.edgesPerNode,
@@ -1078,6 +1091,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     presentation,
     groupAlpha,
     dimmed,
+    matchSet,
     selected,
     hoveredItem,
     tuning.edgesPerNode,
@@ -1440,7 +1454,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // opacity 0.1 is invisible (the fade band paints it at that alpha), so it
   // neither takes a click on what the user sees as empty map (C2) nor names
   // an item there.
-  const itemLabelBox = { width, height, dimmed };
+  const itemLabelBox = { width, height, dimmed, matches: matchSet };
   const labelNear = (position: { x: number; y: number }): string | null =>
     next === "near" && itemLabelOpacity >= 0.1 && !insideSelectedCard(position.x, position.y)
       ? itemLabelAt(itemLabels, viewport, itemLabelBox, position.x, position.y)
@@ -1806,7 +1820,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const pointTooltip = useMemo(() => {
     if (hoveredPointId === null) return false;
     if (next !== "near" || itemLabelOpacity < 0.1) return true;
-    const label = drawnItemLabels(itemLabels, viewport, { width, height, dimmed }).find(
+    const label = drawnItemLabels(itemLabels, viewport, { width, height, dimmed, matches: matchSet }).find(
       (each) => each.id === hoveredPointId,
     );
     if (!label) return true;
@@ -1820,7 +1834,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       plate.left + plate.width <= cardRect.left + cardRect.width &&
       plate.top + plate.height <= cardRect.top + cardRect.height;
     return offCanvas || underCard;
-  }, [hoveredPointId, next, itemLabelOpacity, itemLabels, viewport, width, height, dimmed, cardRect]);
+  }, [hoveredPointId, next, itemLabelOpacity, itemLabels, viewport, width, height, dimmed, matchSet, cardRect]);
   const pointTerritory = pointNode?.territory ? territoriesById.get(pointNode.territory) : undefined;
 
   return (
@@ -2009,6 +2023,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
               onSelect?.(node);
             }}
             selectedId={selected}
+            matches={matchSet}
             related={relatedOfSelected}
             onRelated={(node) => {
               requestSelection(node.id);

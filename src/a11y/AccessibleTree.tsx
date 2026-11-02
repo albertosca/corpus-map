@@ -34,6 +34,8 @@ export interface AccessibleTreeProps {
   onTerritoryFocusChange?: ((id: string | null) => void) | undefined;
   /** Reports the id of the item whose button gains keyboard focus (near regime), and `null` when it loses it. */
   onNodeFocusChange?: ((id: string | null) => void) | undefined;
+  /** The ids a search found; an item's button in it is described as a match (spec search §5). */
+  matches?: ReadonlySet<string> | undefined;
   /** The selected item's live related items, listed at mid and near (spec slice E §6). */
   related?: readonly RelatedItem[] | undefined;
   /** Called when a related item's button is pressed. */
@@ -203,6 +205,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
       <button
         type="button"
         aria-current={node.id === selectedId ? "true" : undefined}
+        aria-description={properties.matches?.has(node.id) ? "match" : undefined}
         onClick={() => onSelect?.(node)}
         onFocus={(event) => {
           remember(event.currentTarget);
