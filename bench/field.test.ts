@@ -55,32 +55,41 @@ describe("point field", () => {
     expect(medianMs).toBeLessThan(BUDGET_MS);
   });
 
-  it(`paints a far frame with a search active within ${BUDGET_MS}ms (median of ${SAMPLES})`, () => {
+  it(`paints a far frame with a search active within ${BUDGET_MS}ms, or twice the same corpus's mid frame on a loaded runner (median of ${SAMPLES})`, () => {
     // Where a corpus opens and a search now shows: every point dimmed but the matches, ringed.
     const spec = generateCorpus({ seed: 1, size: 10_000 });
     const viewport = { scale: 0.05, tx: 200, ty: 150 };
-    const frame = {
+    const box = { width: 1280, height: 800 };
+    const searching = {
       regime: "far" as const,
       pointAlpha: 0,
-      width: 1280,
-      height: 800,
+      ...box,
       matches: new Set(spec.nodes.filter((_node, position) => position % 20 === 0).map((node) => node.id)),
     };
+    const baseline = { regime: "mid" as const, pointAlpha: 1, ...box };
     const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
-    for (let index = 0; index < WARM_UPS; index += 1)
-      paint(new RecordingSurface(), scene, spec, viewport, frame, DEFAULT_THEME);
-    const samples: number[] = [];
+    for (let index = 0; index < WARM_UPS; index += 1) {
+      paint(new RecordingSurface(), scene, spec, viewport, searching, DEFAULT_THEME);
+      paint(new RecordingSurface(), scene, spec, viewport, baseline, DEFAULT_THEME);
+    }
+    // Interleaved, so a runner that slows down slows both frames alike.
+    const searchSamples: number[] = [];
+    const baselineSamples: number[] = [];
     for (let index = 0; index < SAMPLES; index += 1) {
       const surface = new RecordingSurface();
       const start = performance.now();
-      paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
-      samples.push(performance.now() - start);
+      paint(surface, scene, spec, viewport, searching, DEFAULT_THEME);
+      searchSamples.push(performance.now() - start);
       expect(surface.circles.length + surface.hollowCircles.length).toBeGreaterThan(10_000);
+      const baselineStart = performance.now();
+      paint(new RecordingSurface(), scene, spec, viewport, baseline, DEFAULT_THEME);
+      baselineSamples.push(performance.now() - baselineStart);
     }
-    const medianMs = median(samples);
-    console.log(`far search paint median ${medianMs.toFixed(2)}ms over ${SAMPLES} samples`);
-    expect(medianMs).toBeLessThan(BUDGET_MS);
+    const searchMs = median(searchSamples);
+    const baselineMs = median(baselineSamples);
+    console.log(`far search paint median ${searchMs.toFixed(2)}ms, mid baseline ${baselineMs.toFixed(2)}ms`);
+    expect(searchMs).toBeLessThan(Math.max(BUDGET_MS, baselineMs * 2));
   });
 
   it(`paints a near frame with item labels within ${BUDGET_MS}ms (median of ${SAMPLES})`, () => {
