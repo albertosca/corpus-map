@@ -1065,12 +1065,13 @@ export declare const MATCH_RING_GAP = 2.5;
 /**
  * A ring round each matched item that is on screen (spec search §2), in the
  * selection colour. An id the scene does not know is ignored, and an item
- * whose ring lies wholly outside the box is skipped.
+ * whose ring lies wholly outside the box, or whose territory is dimmed (a
+ * hidden item is not a result), is skipped.
  */
 export declare function paintMatches(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel">, matches: ReadonlySet<string>, box: {
     width: number;
     height: number;
-}): void;
+}, dimmed?: ReadonlySet<string>): void;
 
 // points/paintPoints.d.ts
 import type { Scene } from "../shared/scene";

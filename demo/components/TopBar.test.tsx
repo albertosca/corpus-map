@@ -419,7 +419,7 @@ describe("TopBar search (spec search §6)", () => {
     expect(select.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const input = screen.getByRole("textbox", { name: "Search" });
     const hint = document.getElementById(input.getAttribute("aria-describedby") ?? "");
-    expect(hint?.textContent).toBe("Searches titles in your browser");
+    expect(hint?.textContent).toBe("Searches titles and details in your browser");
     expect((input as HTMLElement).style.minHeight).toBe("");
   });
 

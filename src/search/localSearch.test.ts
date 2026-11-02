@@ -86,6 +86,44 @@ describe("searchIndexAsync", () => {
     const small = specOf([node("only", "Solo")]);
     expect(await searchIndexAsync(small)).toEqual(searchIndexOf(small));
   });
+
+  const poisoned = () => {
+    const meta = {
+      get broken(): string {
+        throw new Error("unreadable meta");
+      },
+    };
+    return meta;
+  };
+
+  it("rejects when indexing throws after the first task, instead of staying pending forever", async () => {
+    const nodes = Array.from({ length: 1000 }, (_, count) => node(`n${count}`, `Item ${count}`));
+    nodes[800] = node("n800", "Item 800", poisoned());
+    await expect(searchIndexAsync(specOf(nodes))).rejects.toThrow("unreadable meta");
+  });
+
+  it("rejects when indexing throws inside the first task, and does not keep that failure either", async () => {
+    const spec = specOf([node("first", "First", poisoned())]);
+    const first = searchIndexAsync(spec);
+    await expect(first).rejects.toThrow("unreadable meta");
+    expect(searchIndexAsync(spec)).not.toBe(first);
+    await expect(searchIndexAsync(spec)).rejects.toThrow("unreadable meta");
+  });
+
+  it("does not cache a failure: the next call tries again", async () => {
+    const nodes = Array.from({ length: 1000 }, (_, count) => node(`n${count}`, `Item ${count}`));
+    const meta = { shouldThrow: true } as { shouldThrow: boolean };
+    Object.defineProperty(nodes[800] as MapNode, "meta", {
+      get() {
+        if (meta.shouldThrow) throw new Error("flaky meta");
+        return undefined;
+      },
+    });
+    const flaky = specOf(nodes);
+    await expect(searchIndexAsync(flaky)).rejects.toThrow("flaky meta");
+    meta.shouldThrow = false;
+    expect((await searchIndexAsync(flaky)).ids).toHaveLength(1000);
+  });
 });
 
 describe("buildSearchIndex (sliced)", () => {

@@ -29,26 +29,35 @@ function ringsFor(matches: ReadonlySet<string>): RecordingSurface {
 describe("paintMatches", () => {
   it("rings each matched item that is on screen, outside the point, in the selection colour", () => {
     const surface = ringsFor(new Set(["inside"]));
-    expect(surface.rings).toEqual([
+    expect(surface.hollowCircles).toEqual([
       {
+        id: "inside",
         x: 50,
         y: 40,
         r: DEFAULT_THEME.pointRadius + MATCH_RING_GAP,
-        color: DEFAULT_THEME.selectionRing ?? DEFAULT_THEME.territoryLabel,
+        colour: DEFAULT_THEME.selectionRing ?? DEFAULT_THEME.territoryLabel,
         width: MATCH_RING_WIDTH,
       },
     ]);
   });
 
   it("skips an id the spec does not have, and an item wholly outside the box", () => {
-    expect(ringsFor(new Set(["ghost", "farRight"])).rings).toEqual([]);
+    expect(ringsFor(new Set(["ghost", "farRight"])).hollowCircles).toEqual([]);
   });
 
   it("draws nothing for an empty set", () => {
     expect(ringsFor(new Set()).calls).toEqual([]);
   });
 
-  it("rings every matched item once", () => {
-    expect(ringsFor(new Set(["inside", "other"])).rings.map((ring) => ring.x)).toEqual([50, 60]);
+  it("rings every matched item once, all in one batched stroke", () => {
+    const surface = ringsFor(new Set(["inside", "other"]));
+    expect(surface.hollowCircles.map((ring) => ring.x)).toEqual([50, 60]);
+    expect(surface.pointBatches.filter((batch) => batch.kind === "stroke")).toHaveLength(1);
+  });
+
+  it("skips an item whose territory is dimmed, keeping the others", () => {
+    const surface = new RecordingSurface();
+    paintMatches(surface, scene, viewport, DEFAULT_THEME, new Set(["inside"]), box, new Set(["t1"]));
+    expect(surface.calls).toEqual([]);
   });
 });

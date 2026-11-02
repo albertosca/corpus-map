@@ -70,17 +70,23 @@ export function searchIndexAsync(spec: MapSpec): Promise<SearchIndex> {
   const started = pending.get(spec);
   if (started) return started;
   const steps = buildSearchIndex(spec);
-  const promise = new Promise<SearchIndex>((resolve) => {
+  const promise = new Promise<SearchIndex>((resolve, reject) => {
     const run = () => {
-      const progress = advance(steps, STEPS_PER_TASK);
-      if (progress.done) {
-        indexes.set(spec, progress.value);
-        resolve(progress.value);
-      } else setTimeout(run, 0);
+      try {
+        const progress = advance(steps, STEPS_PER_TASK);
+        if (progress.done) {
+          indexes.set(spec, progress.value);
+          resolve(progress.value);
+        } else setTimeout(run, 0);
+      } catch (failure) {
+        reject(failure);
+      }
     };
     run();
   });
   pending.set(spec, promise);
+  // A failure is not cached, whichever task it came from: the next call starts over.
+  promise.catch(() => pending.delete(spec));
   return promise;
 }
 

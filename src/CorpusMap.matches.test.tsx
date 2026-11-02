@@ -63,6 +63,12 @@ const lastFrame = (): Frame => {
 };
 
 describe("the matches prop (spec search §2)", () => {
+  it("hands the matches to paint at the far regime a corpus opens in, so the result shows without zooming", () => {
+    render(<CorpusMap {...properties} defaultViewport={undefined} matches={["a"]} />);
+    expect(lastFrame().regime).toBe("far");
+    expect([...(lastFrame().matches ?? [])]).toEqual(["a"]);
+  });
+
   it("passes no matches to paint while the prop is unset or null", () => {
     const { rerender } = render(<CorpusMap {...properties} />);
     expect(lastFrame().matches).toBeUndefined();

@@ -77,23 +77,26 @@ export function paint(
   const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
   const dimmed = frame.dimmed ?? NO_DIMMED;
   paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0);
-  if (frame.regime !== "far" && frame.pointAlpha > 0) {
-    surface.globalAlpha(frame.pointAlpha);
+  // A search shows its result at every regime, far included (where a corpus opens): the points are drawn at full strength then.
+  const searching = frame.matches !== undefined;
+  const pointAlpha = searching ? 1 : frame.pointAlpha;
+  if ((frame.regime !== "far" || searching) && pointAlpha > 0) {
+    surface.globalAlpha(pointAlpha);
     const pointBox = { width: frame.width, height: frame.height };
-    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha, pointBox, frame.matches);
-    if (frame.matches) paintMatches(surface, scene, viewport, theme, frame.matches, pointBox);
+    paintPoints(surface, scene, spec, viewport, theme, dimmed, pointAlpha, pointBox, frame.matches);
+    if (frame.matches) paintMatches(surface, scene, viewport, theme, frame.matches, pointBox, dimmed);
     const itemLabelAlpha = frame.itemLabelAlpha ?? 0;
     if (frame.regime === "near" && itemLabelAlpha > 0 && frame.itemLabels) {
-      surface.globalAlpha(frame.pointAlpha * itemLabelAlpha);
+      surface.globalAlpha(pointAlpha * itemLabelAlpha);
       paintItemLabels(surface, frame.itemLabels, viewport, theme, { ...pointBox, dimmed, matches: frame.matches });
-      surface.globalAlpha(frame.pointAlpha);
+      surface.globalAlpha(pointAlpha);
     }
     const cap = frame.edgesPerNode ?? 0;
-    const edgeBox = { width: frame.width, height: frame.height, cap, dimmed, restoreAlpha: frame.pointAlpha };
+    const edgeBox = { width: frame.width, height: frame.height, cap, dimmed, restoreAlpha: pointAlpha };
     if (cap > 0 && typeof frame.hovered === "string" && frame.hovered !== frame.selected)
-      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.hovered, alpha: frame.pointAlpha * 0.5 });
+      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.hovered, alpha: pointAlpha * 0.5 });
     if (cap > 0 && typeof frame.selected === "string")
-      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.selected, alpha: frame.pointAlpha });
+      paintEdges(surface, scene, viewport, theme, { ...edgeBox, id: frame.selected, alpha: pointAlpha });
     if (typeof frame.selected === "string") paintSelection(surface, scene, viewport, theme, frame.selected);
     surface.globalAlpha(1);
   }

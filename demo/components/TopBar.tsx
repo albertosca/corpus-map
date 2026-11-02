@@ -34,7 +34,7 @@ interface TopBarProps {
 }
 
 /** Where the search runs, read by the input as its description. */
-const SEARCH_HINT = "Searches titles in your browser";
+const SEARCH_HINT = "Searches titles and details in your browser";
 
 /** The popover's id, which the Menu button's `aria-controls` names. */
 const MENU_ID = "top-bar-menu";

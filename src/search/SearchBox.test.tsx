@@ -142,6 +142,79 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(screen.getByRole("status").textContent).toBe("1 result");
   });
 
+  it("re-announces a repeated answer by alternating a trailing no-break space", async () => {
+    mount();
+    type("graphs");
+    await settle();
+    const first = screen.getByRole("status").textContent;
+    expect(first).toBe("2 results");
+    type("graph");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("2 results ");
+    type("graphs");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("2 results");
+    type("beta");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("1 result");
+  });
+
+  it("re-announces a repeated 'No results' and a repeated failure the same way", async () => {
+    mount();
+    type("zzz");
+    await settle();
+    type("yyy");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("No results ");
+    const failing = mount({ search: () => Promise.reject(new Error("offline")) });
+    const [, secondInput] = screen.getAllByRole("textbox");
+    fireEvent.change(secondInput as HTMLElement, { target: { value: "a" } });
+    await settle();
+    fireEvent.change(secondInput as HTMLElement, { target: { value: "b" } });
+    await settle();
+    expect(screen.getAllByRole("status")[1]?.textContent).toBe("Search failed ");
+    failing.unmount();
+  });
+
+  it("treats a consumer search that returns something that is not a list as a failure", async () => {
+    const search = vi.fn(() => 5 as unknown as readonly string[]);
+    const { onMatches } = mount({ search });
+    type("anything");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("Search failed");
+    expect(lastCall(onMatches)).toBeNull();
+  });
+
+  it("treats a consumer search that returns nothing at all as a failure, not as 'No results'", async () => {
+    const search = vi.fn(() => undefined as unknown as readonly string[]);
+    const { onMatches } = mount({ search });
+    type("anything");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("Search failed");
+    expect(lastCall(onMatches)).toBeNull();
+  });
+
+  it("moves the focus to the input when 'Show on map' disappears while it holds the focus", async () => {
+    mount({ onShow: vi.fn() });
+    type("graphs");
+    await settle();
+    screen.getByRole("button", { name: "Show on map" }).focus();
+    type("zzz");
+    await settle();
+    expect(screen.queryByRole("button", { name: "Show on map" })).toBeNull();
+    expect(document.activeElement).toBe(input());
+  });
+
+  it("does not take the focus when it was elsewhere", async () => {
+    mount({ onShow: vi.fn() });
+    type("graphs");
+    await settle();
+    (document.activeElement as HTMLElement | null)?.blur();
+    type("zzz");
+    await settle();
+    expect(document.activeElement).not.toBe(input());
+  });
+
   it("passes a consumer's ids through de-duplicated, unknown ids included (the map ignores them)", async () => {
     const { onMatches } = mount({ search: () => ["beta", "ghost", "beta"] });
     type("anything");

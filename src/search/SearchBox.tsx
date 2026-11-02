@@ -33,7 +33,8 @@ export interface SearchBoxProps {
   style?: CSSProperties | undefined;
 }
 
-type Status = { kind: "idle" } | { kind: "found"; count: number } | { kind: "failed" };
+/** `pad` alternates a trailing no-break space when an answer repeats the previous text, so a live region speaks it again. */
+type Status = { kind: "idle" } | { kind: "found"; count: number; pad?: boolean } | { kind: "failed"; pad?: boolean };
 const IDLE: Status = { kind: "idle" };
 const TOUCH_TARGET = 44;
 
@@ -46,11 +47,22 @@ const VISUALLY_HIDDEN: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-function statusText(status: Status): string {
+function baseText(status: Status): string {
   if (status.kind === "failed") return "Search failed";
   if (status.kind === "idle") return "";
   if (status.count === 0) return "No results";
   return status.count === 1 ? "1 result" : `${status.count} results`;
+}
+
+function statusText(status: Status): string {
+  return status.kind !== "idle" && status.pad ? `${baseText(status)}\u00a0` : baseText(status);
+}
+
+/** The status to show for an answer: the same text as the one before it is padded, so it is announced again. */
+function announced(previous: Status, next: Exclude<Status, { kind: "idle" }>): Status {
+  return previous.kind !== "idle" && !previous.pad && baseText(previous) === baseText(next)
+    ? { ...next, pad: true }
+    : next;
 }
 
 /**
@@ -73,6 +85,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     setStatus(IDLE);
   }
   const inputReference = useRef<HTMLInputElement>(null);
+  const showReference = useRef<HTMLButtonElement>(null);
   const hintIdentifier = useId();
   // The newest props for the timer and the answer, which outlive the render that scheduled them.
   const latest = useRef({ spec, search, onMatches });
@@ -103,20 +116,29 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     const mine = generation.current;
     const timer = setTimeout(async () => {
       const current = latest.current;
-      let found: readonly string[];
+      // The button that is about to go away hands its focus to the input, so a keyboard user is not dropped on the page.
+      const releaseFocus = () => {
+        if (showReference.current !== null && document.activeElement === showReference.current)
+          inputReference.current?.focus();
+      };
+      let ids: string[];
       try {
-        found = await (current.search
+        const found = await (current.search
           ? current.search(trimmed)
           : searchIndexAsync(current.spec).then((index) => localSearch(index, trimmed)));
+        // Nothing at all is a broken search, not an empty result; a value that is not a list throws in the spread.
+        if (found === undefined || found === null) throw new TypeError("search returned nothing");
+        ids = [...new Set(found)];
       } catch {
         if (generation.current !== mine) return;
-        setStatus({ kind: "failed" });
+        releaseFocus();
+        setStatus((previous) => announced(previous, { kind: "failed" }));
         latest.current.onMatches(null);
         return;
       }
       if (generation.current !== mine) return;
-      const ids = [...new Set(found)];
-      setStatus({ kind: "found", count: ids.length });
+      if (ids.length === 0) releaseFocus();
+      setStatus((previous) => announced(previous, { kind: "found", count: ids.length }));
       latest.current.onMatches(ids);
     }, SEARCH_DEBOUNCE_MILLISECONDS);
     return () => clearTimeout(timer);
@@ -185,7 +207,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         {statusText(status)}
       </span>
       {onShow !== undefined && status.kind === "found" && status.count > 0 ? (
-        <button type="button" onClick={onShow} style={{ ...control, cursor: "pointer" }}>
+        <button ref={showReference} type="button" onClick={onShow} style={{ ...control, cursor: "pointer" }}>
           Show on map
         </button>
       ) : null}

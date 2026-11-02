@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PlacedItemLabel } from "../labels/itemLabels";
 import { estimateText } from "../labels/placement";
+import { MATCH_RING_GAP } from "../points/paintMatches";
 import { paint } from "./paint";
 import { buildScene } from "./scene";
 import { validateSpec } from "./spec";
@@ -266,18 +267,37 @@ describe("search matches in the point layer (spec search §2)", () => {
     return surface;
   };
 
+  // Unvisited points are hollow circles too: a match ring is told by its radius.
+  const matchRings = (surface: RecordingSurface) =>
+    surface.hollowCircles.filter((circle) => circle.r === DEFAULT_THEME.pointRadius + MATCH_RING_GAP);
+
   it("issues exactly the same calls with matches undefined as without the field", () => {
     expect(run({ matches: undefined }).calls).toEqual(run({}).calls);
   });
 
   it("rings the matches after the points and before the selection ring", () => {
     const surface = run({ matches: new Set(["b"]), selected: "c" });
-    expect(surface.rings.map((ring) => ring.width)).toEqual([1.5, 2]);
+    expect(matchRings(surface).map((ring) => ring.width)).toEqual([1.5]);
+    expect(surface.rings.map((ring) => ring.width)).toEqual([2]);
     const calls = surface.calls;
-    expect(calls.indexOf("ring")).toBeGreaterThan(calls.lastIndexOf("circle"));
+    expect(calls.indexOf("hollowCircle")).toBeGreaterThan(calls.lastIndexOf("circle"));
+    expect(calls.indexOf("ring")).toBeGreaterThan(calls.lastIndexOf("hollowCircle"));
   });
 
-  it("paints no match ring at far", () => {
-    expect(run({ matches: new Set(["b"]), regime: "far" }).rings).toEqual([]);
+  it("shows the matches at far too, where a corpus opens: points drawn at full strength, a ring on the match", () => {
+    const surface = run({ matches: new Set(["b"]), regime: "far", pointAlpha: 0 });
+    expect(matchRings(surface)).toHaveLength(1);
+    expect(surface.calls).toContain("circle");
+  });
+
+  it("draws nothing extra at far when there is no search", () => {
+    expect(matchRings(run({ regime: "far", pointAlpha: 0 }))).toEqual([]);
+    expect(run({ regime: "far", pointAlpha: 0 }).calls).not.toContain("circle");
+  });
+
+  it("rings no match inside a dimmed territory", () => {
+    const hidden = new Set(["small"]);
+    expect(matchRings(run({ matches: new Set(["a"]), dimmed: hidden }))).toEqual([]);
+    expect(matchRings(run({ matches: new Set(["a", "b"]), dimmed: hidden }))).toHaveLength(1);
   });
 });
