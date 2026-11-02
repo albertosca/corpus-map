@@ -48,6 +48,7 @@ import { startSlices, useSliced } from "./shared/useSliced";
 import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
+import { fitIds } from "./viewport/fitIds";
 import { fitScene } from "./viewport/fitScene";
 import { followInto } from "./viewport/follow";
 import {
@@ -91,6 +92,8 @@ export interface CorpusMapHandle {
   focus(): void;
   /** Centres the view on an item at the current zoom, without selecting it (reason `"interaction"`); an unknown id does nothing (spec slice E §6). */
   reveal(id: string): void;
+  /** Fits the view around the live items in `ids` inside the area `insets` leaves uncovered, at most once per call (reason `"interaction"`); unknown ids and ids of dimmed territories are ignored, and none left does nothing (spec search §3). */
+  revealAll(ids: Iterable<string>): void;
 }
 
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
@@ -1186,6 +1189,20 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     );
   };
 
+  // Fits the live items in `ids` inside the uncovered area; the handle's `revealAll`.
+  const goToAll = (ids: Iterable<string>) => {
+    const view = fitIds(
+      liveNodesById,
+      ids,
+      usableArea(width, height, insets),
+      FIT_PADDING,
+      fitScale / MAXIMUM_ZOOM_OUT,
+      fitScale * MAXIMUM_ZOOM_IN,
+    );
+    if (view === null) return;
+    requestViewport((previous) => ({ ...previous, ...view }), "interaction");
+  };
+
   // One zoom step (the wheel's notch) anchored at a box point: the box centre
   // for the handle and the keys, the tap for a double tap or a two-finger tap.
   const zoomStepAbout = (horizontal: number, vertical: number, direction: "in" | "out") => {
@@ -1226,6 +1243,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     fit: () => fitView("fit"),
     focus: () => rootReference.current?.focus(),
     reveal: goTo,
+    revealAll: goToAll,
   }));
 
   // Spoken once keyboard movement settles, so a held arrow key does not

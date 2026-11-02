@@ -7,7 +7,14 @@ import { BOTTOM_LEFT_COLUMN_WIDTH, GUTTER, STRIP_HEIGHT_ESTIMATE } from "./float
 import { BUTTON_WIDTH, ZoomControls } from "./ZoomControls";
 
 function fakeHandleRef(): { reference: RefObject<CorpusMapHandle | null>; handle: CorpusMapHandle } {
-  const handle: CorpusMapHandle = { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn(), focus: vi.fn(), reveal: vi.fn() };
+  const handle: CorpusMapHandle = {
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    fit: vi.fn(),
+    focus: vi.fn(),
+    reveal: vi.fn(),
+    revealAll: vi.fn(),
+  };
   return { reference: { current: handle }, handle };
 }
 
