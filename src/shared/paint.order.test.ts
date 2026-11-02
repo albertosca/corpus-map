@@ -257,3 +257,27 @@ describe("item labels in the point layer (spec item labels §7)", () => {
     expect(painted("near", 0).plates).toEqual([]);
   });
 });
+
+describe("search matches in the point layer (spec search §2)", () => {
+  const frame = { regime: "mid" as const, pointAlpha: 1, width: 400, height: 400 };
+  const run = (extra: object) => {
+    const surface = new RecordingSurface();
+    paint(surface, scene, spec, { scale: 40, tx: 0, ty: 0 }, { ...frame, ...extra }, DEFAULT_THEME);
+    return surface;
+  };
+
+  it("issues exactly the same calls with matches undefined as without the field", () => {
+    expect(run({ matches: undefined }).calls).toEqual(run({}).calls);
+  });
+
+  it("rings the matches after the points and before the selection ring", () => {
+    const surface = run({ matches: new Set(["b"]), selected: "c" });
+    expect(surface.rings.map((ring) => ring.width)).toEqual([1.5, 2]);
+    const calls = surface.calls;
+    expect(calls.indexOf("ring")).toBeGreaterThan(calls.lastIndexOf("circle"));
+  });
+
+  it("paints no match ring at far", () => {
+    expect(run({ matches: new Set(["b"]), regime: "far" }).rings).toEqual([]);
+  });
+});

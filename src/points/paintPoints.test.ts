@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimateText } from "../labels/placement";
+import { DIMMED_ALPHA } from "../shared/dimmed";
 import { buildScene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
 import { RecordingSurface } from "../shared/surface";
@@ -75,5 +76,47 @@ describe("paintPoints culling (spec mobile §7: a frame draws what is on screen)
     paintPoints(surface, scene, twoTerritories, viewport, DEFAULT_THEME, new Set(["t1"]));
     expect(surface.pointBatches.map((batch) => batch.ids)).toEqual([["inside"], ["insideRing"], ["other"]]);
     expect(surface.calls).toEqual(["alpha", "circle", "hollowCircle", "alpha", "circle"]);
+  });
+});
+
+describe("paintPoints with search matches", () => {
+  const searched: MapSpec = {
+    version: "1",
+    territories: [{ id: "t1", name: "North", members: ["first", "second", "third"], centroid: [5, 4] }],
+    nodes: [
+      nodeAt("first", 50, 40, "visited"),
+      nodeAt("second", 60, 40, "unvisited"),
+      nodeAt("third", 70, 40, "visited"),
+    ],
+  };
+  const painted = (matches: ReadonlySet<string> | undefined, dimmed: ReadonlySet<string> = new Set()) => {
+    const surface = new RecordingSurface();
+    const scene = buildScene(searched, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    paintPoints(surface, scene, searched, viewport, DEFAULT_THEME, dimmed, 1, undefined, matches);
+    return surface;
+  };
+
+  it("draws the non-matches first at the dimmed alpha, then the matches at the full alpha", () => {
+    const surface = painted(new Set(["second"]));
+    expect(surface.pointBatches.map((batch) => batch.ids)).toEqual([["first", "third"], ["second"]]);
+    expect(surface.alphas).toEqual([DIMMED_ALPHA, 1]);
+  });
+
+  it("dims every point for an empty set of matches", () => {
+    const surface = painted(new Set());
+    expect(surface.pointBatches.flatMap((batch) => batch.ids).sort()).toEqual(["first", "second", "third"]);
+    expect(surface.alphas).toEqual([DIMMED_ALPHA, 1]);
+  });
+
+  it("draws exactly what an absent set draws when matches is undefined", () => {
+    const surface = painted(undefined);
+    expect(surface.alphas).toEqual([]);
+    expect(surface.pointBatches.map((batch) => batch.ids)).toEqual([["first", "third"], ["second"]]);
+  });
+
+  it("keeps a match of a dimmed territory dimmed", () => {
+    const surface = painted(new Set(["second"]), new Set(["t1"]));
+    expect(surface.pointBatches.flatMap((batch) => batch.ids).sort()).toEqual(["first", "second", "third"]);
+    expect(surface.alphas).toEqual([DIMMED_ALPHA, 1]);
   });
 });

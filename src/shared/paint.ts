@@ -4,6 +4,7 @@ import type { PlacedItemLabel } from "../labels/itemLabels";
 import { paintItemLabels } from "../labels/paintItemLabels";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
+import { paintMatches } from "../points/paintMatches";
 import { paintPoints } from "../points/paintPoints";
 import { paintSelection } from "../points/paintSelection";
 import { paintTerritories } from "../territories/paintTerritories";
@@ -40,6 +41,8 @@ export interface Frame {
   groupAlpha?: number | undefined;
   /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
   dimmed?: ReadonlySet<string> | undefined;
+  /** The ids a search found (spec search §2): the rest are dimmed, these ringed; absent means no search is active. */
+  matches?: ReadonlySet<string> | undefined;
   /** The selected item's id, ringed inside the point layer (spec slice C §5); absent or `null` means none. */
   selected?: string | null | undefined;
   /** The hovered item's id, whose edges are previewed at half the point alpha (spec slice E §6); absent or `null` means none. */
@@ -76,14 +79,13 @@ export function paint(
   paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0);
   if (frame.regime !== "far" && frame.pointAlpha > 0) {
     surface.globalAlpha(frame.pointAlpha);
-    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha, {
-      width: frame.width,
-      height: frame.height,
-    });
+    const pointBox = { width: frame.width, height: frame.height };
+    paintPoints(surface, scene, spec, viewport, theme, dimmed, frame.pointAlpha, pointBox, frame.matches);
+    if (frame.matches) paintMatches(surface, scene, viewport, theme, frame.matches, pointBox);
     const itemLabelAlpha = frame.itemLabelAlpha ?? 0;
     if (frame.regime === "near" && itemLabelAlpha > 0 && frame.itemLabels) {
       surface.globalAlpha(frame.pointAlpha * itemLabelAlpha);
-      paintItemLabels(surface, frame.itemLabels, viewport, theme, { width: frame.width, height: frame.height, dimmed });
+      paintItemLabels(surface, frame.itemLabels, viewport, theme, { ...pointBox, dimmed, matches: frame.matches });
       surface.globalAlpha(frame.pointAlpha);
     }
     const cap = frame.edgesPerNode ?? 0;

@@ -22,6 +22,23 @@ const label = (
 const BOX = { width: 400, height: 300, dimmed: new Set<string>() };
 const VIEW = { scale: 2, tx: 100, ty: 150 };
 
+describe("drawnItemLabels with search matches", () => {
+  const labels = [label("a", 0, 0), label("b", 10, 0), label("c", 20, 0)];
+
+  it("keeps only the labels of matched items", () => {
+    const drawn = drawnItemLabels(labels, VIEW, { ...BOX, matches: new Set(["b", "unknown"]) });
+    expect(drawn.map((each) => each.id)).toEqual(["b"]);
+  });
+
+  it("keeps none for an empty set of matches", () => {
+    expect(drawnItemLabels(labels, VIEW, { ...BOX, matches: new Set() })).toEqual([]);
+  });
+
+  it("keeps all when matches is undefined", () => {
+    expect(drawnItemLabels(labels, VIEW, { ...BOX, matches: undefined })).toHaveLength(3);
+  });
+});
+
 describe("paintItemLabels", () => {
   it("draws exactly the labels whose scale is reached, plates crossing the edge included", () => {
     const labels = [label("a", 0, 1), label("b", 10, 3), label("edge", 148, 0)];

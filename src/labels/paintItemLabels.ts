@@ -14,6 +14,8 @@ export interface ItemLabelBox {
   width: number;
   height: number;
   dimmed: ReadonlySet<string>;
+  /** With a search active, only the labels of these items are drawn (spec search §2); absent means all. */
+  matches?: ReadonlySet<string> | undefined;
 }
 
 /**
@@ -31,7 +33,8 @@ export function drawnItemLabels(
       viewport.scale >= label.activeFromScale &&
       label.width <= box.width &&
       label.height <= box.height &&
-      (label.territory === null || !box.dimmed.has(label.territory)),
+      (label.territory === null || !box.dimmed.has(label.territory)) &&
+      (box.matches === undefined || box.matches.has(label.id)),
   );
 }
 

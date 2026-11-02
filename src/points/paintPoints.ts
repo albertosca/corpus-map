@@ -15,7 +15,8 @@ export const UNVISITED_RING_WIDTH = 1.5;
  * the same `pointRadius`, so both marks have the same footprint. A dimmed
  * territory's points are drawn first, underneath, at `alpha` times
  * `DIMMED_ALPHA`; the surface is left at `alpha`. A point with no territory
- * is never dimmed. Each pass draws its points of one kind and colour as one
+ * is never dimmed by its territory. With `matches`, a point it does not list
+ * is dimmed the same way (spec search §2). Each pass draws its points of one kind and colour as one
  * batch (one path, one fill or stroke). Given the canvas `box`, a point
  * whose mark lies wholly outside it is skipped (spec mobile §7: at near a
  * phone frame would otherwise stroke every point of the corpus to show a
@@ -30,6 +31,7 @@ export function paintPoints(
   dimmed: ReadonlySet<string> = NO_DIMMED,
   alpha = 1,
   box?: { width: number; height: number },
+  matches?: ReadonlySet<string>,
 ): void {
   const reach = theme.pointRadius;
   // One batch per kind and colour, in first-seen order, so a pass costs one
@@ -65,8 +67,10 @@ export function paintPoints(
         );
     }
   };
-  const isDimmed = (node: MapNode) => node.territory !== null && dimmed.has(node.territory);
-  if (dimmed.size > 0) {
+  // Dimmed by its territory, or by a search that does not list it.
+  const isDimmed = (node: MapNode) =>
+    (node.territory !== null && dimmed.has(node.territory)) || (matches !== undefined && !matches.has(node.id));
+  if (dimmed.size > 0 || matches !== undefined) {
     surface.globalAlpha(alpha * DIMMED_ALPHA);
     drawPass(isDimmed);
     surface.globalAlpha(alpha);
