@@ -23,6 +23,8 @@ interface TopBarProps {
   linkStatus: LinkStatus;
   /** A narrow window (spec mobile §6): one row, the corpus select stretching, Tuning and Copy link behind a Menu. */
   narrow?: boolean | undefined;
+  /** The dialogue's toggle (spec assistant §7); absent draws none. */
+  assistant?: { open: boolean; onToggle: () => void } | undefined;
   /** The search beside the corpus select (spec search §6); absent draws none. `spec` is what it searches, `onMatches` takes the found ids, `onShow` fits the view around them. */
   search?:
     | {
@@ -199,6 +201,7 @@ export function TopBar({
   linkStatus,
   narrow = false,
   search,
+  assistant,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange(event.target.value as GalleryEntry["id"]);
@@ -290,6 +293,19 @@ export function TopBar({
           hidden={!menuOpen}
           style={menuOpen ? popoverStyle : { ...popoverStyle, display: "none" }}
         >
+          {assistant ? (
+            <button
+              type="button"
+              aria-pressed={assistant.open}
+              onClick={() => {
+                setMenuOpen(false);
+                assistant.onToggle();
+              }}
+              style={menuItemStyle}
+            >
+              Ask AI
+            </button>
+          ) : null}
           <button
             type="button"
             aria-pressed={tuningOpen}
@@ -340,6 +356,11 @@ export function TopBar({
           hint={SEARCH_HINT}
           style={searchStyle}
         />
+      ) : null}
+      {assistant ? (
+        <button type="button" aria-pressed={assistant.open} onClick={assistant.onToggle} style={gearButtonStyle}>
+          Ask AI
+        </button>
       ) : null}
       <button
         type="button"

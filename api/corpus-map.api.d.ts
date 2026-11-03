@@ -25,6 +25,8 @@ export interface CorpusMapHandle {
     revealAll(ids: Iterable<string>): void;
     /** Jumps to a public `MapViewport` (the shape `onViewportChange` reports), clamped to the zoom band (reason `"interaction"`); a view that cannot be drawn does nothing (spec assistant §2). */
     setView(view: MapViewport): void;
+    /** The view drawn now, in the shape `onViewportChange` reports; `undefined` while the map has no box to draw in. It exists because the first spec's fit is never reported (spec assistant §2). */
+    getView(): MapViewport | undefined;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {

@@ -460,6 +460,30 @@ function minimapBox(): Box {
   };
 }
 
+/**
+ * `[data-assistant-panel]`'s box, present only while open: wide, a column at `left` above the bottom row (`bottom` +
+ * `maxHeight`); narrow, a sheet under the top bar (`top` + `maxHeight`), spanning `left`/`right`.
+ */
+function assistantPanelBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const element = container.querySelector<HTMLElement>("[data-assistant-panel]");
+  if (!element || element.hidden) return null;
+  const height = toPx(element.style.maxHeight, viewportWidth);
+  const left = toPx(element.style.left, viewportWidth);
+  if (element.style.top) {
+    const top = toPx(element.style.top, viewportWidth);
+    return {
+      label: "assistant-panel (sheet)",
+      x0: left,
+      x1: viewportWidth - toPx(element.style.right, viewportWidth),
+      yFromBottom0: VIEWPORT_HEIGHT_PX - top - height,
+      yFromBottom1: VIEWPORT_HEIGHT_PX - top,
+    };
+  }
+  const bottom = toPx(element.style.bottom, viewportWidth);
+  const width = Math.min(toPx(element.style.width, viewportWidth), toPx(element.style.maxWidth, viewportWidth));
+  return { label: "assistant-panel", x0: left, x1: left + width, yFromBottom0: bottom, yFromBottom1: bottom + height };
+}
+
 function boxesIntersect(first: Box, second: Box): boolean {
   const horizontalOverlap = first.x0 < second.x1 && second.x0 < first.x1;
   const verticalOverlap = first.yFromBottom0 < second.yFromBottom1 && second.yFromBottom0 < first.yFromBottom1;
@@ -511,6 +535,7 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
     narrow ? null : minimapBox(),
     footerBox(container, viewportWidth),
     stripBox(container, viewportWidth),
+    assistantPanelBox(container, viewportWidth),
   ].filter((box): box is Box => box !== null);
   const pairs: Array<[Box, Box]> = [];
   for (let index = 0; index < boxes.length; index += 1) {
@@ -528,6 +553,9 @@ function checkNoFloatingBoxIntersections(container: HTMLElement, viewportWidth: 
   const zoom = zoomControlsBox(container, viewportWidth);
   const drawer = drawerBox(container, viewportWidth);
   if (narrow && zoom && drawer?.label === "drawer (collapsed sheet)") pairs.push([zoom, drawer]);
+  // The dialogue sheet and the item sheet must not share the narrow screen while the item sheet is collapsed.
+  const dialogue = assistantPanelBox(container, viewportWidth);
+  if (narrow && dialogue && drawer?.label === "drawer (collapsed sheet)") pairs.push([dialogue, drawer]);
 
   for (const [first, second] of pairs) {
     expect(
@@ -1324,6 +1352,25 @@ describe("App (showcase Task 5)", () => {
         return container;
       }
 
+      it("opens the dialogue from the Menu as a sheet that fits 375 px, and a pressed citation hands the screen to the item", async () => {
+        const container = await renderNarrow();
+        fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+        fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+        const region = screen.getByRole("region", { name: "Assistant" });
+        checkAllFloatingControls(container);
+        checkTouchTargets(container);
+        fireEvent.change(within(region).getByRole("textbox", { name: "Assistant" }), { target: { value: "testing" } });
+        fireEvent.submit(within(region).getByRole("textbox", { name: "Assistant" }).closest("form") as HTMLFormElement);
+        const citation = await within(region).findByRole(
+          "button",
+          { name: "A Tiny Paper About Testing" },
+          { timeout: 3000 },
+        );
+        fireEvent.click(citation);
+        expect(container.querySelector<HTMLElement>("[data-assistant-panel]")?.hidden).toBe(true);
+        expect(await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeTruthy();
+      });
+
       it("folds the top bar into a Menu and keeps only Fit, 44 × 44, with no minimap", async () => {
         const container = await renderNarrow();
         expect(screen.getByRole("button", { name: "Menu" })).not.toBeNull();
@@ -1488,6 +1535,40 @@ describe("App (showcase Task 5)", () => {
 
           fireEvent.keyDown(document, { key: "Escape" });
           expect(screen.queryByRole("dialog")).toBeNull();
+        }
+      });
+
+      it("the open dialogue panel clears every other floating box at every swept width, with the drawer open or closed", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        zoomToNear();
+        const nodeButton = await screen.findByRole("button", { name: "A Tiny Paper About Testing" });
+
+        for (const width of SWEEP_WIDTHS) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+          act(() => FakeResizeObserver.fireAll());
+
+          // Below 600 px Ask AI sits behind the top bar's Menu (spec mobile §6).
+          if (width < NARROW_WINDOW_WIDTH) fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+          fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+          expect(container.querySelector<HTMLElement>("[data-assistant-panel]")?.hidden).toBe(false);
+          expect(assistantPanelBox(container, width), `no panel box at ${width}`).not.toBeNull();
+          checkNoFloatingBoxIntersections(container, width);
+
+          fireEvent.click(nodeButton);
+          if (width < NARROW_WINDOW_WIDTH) {
+            // The dialogue sheet and the item sheet take turns on a narrow window.
+            expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull();
+          } else {
+            await screen.findByRole("dialog", { name: "A Tiny Paper About Testing" });
+          }
+          checkNoFloatingBoxIntersections(container, width);
+          fireEvent.keyDown(document, { key: "Escape" });
+
+          if (width < NARROW_WINDOW_WIDTH) fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+          fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+          expect(container.querySelector<HTMLElement>("[data-assistant-panel]")?.hidden).toBe(true);
         }
       });
 
@@ -2311,6 +2392,96 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText(/1\.0×/);
       typeQuery("graph");
       await screen.findByText("2 results");
+      checkAllFloatingControls(container);
+    });
+  });
+
+  describe("the dialogue beside the map (spec assistant §7)", () => {
+    const ASSISTANT_SPEC: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2", "west", "east"], centroid: [0, 0] },
+      ],
+      nodes: [
+        { id: "p1", label: "Graph colouring", x: -0.0001, y: 0, territory: "cs.AI" },
+        { id: "p2", label: "Graph matching", x: 0.0001, y: 0, territory: "cs.AI" },
+        { id: "west", label: "West filler", x: -1, y: 0, territory: "cs.AI" },
+        { id: "east", label: "East filler", x: 1, y: 0, territory: "cs.AI" },
+      ],
+    };
+    const askButton = () => screen.getByRole("button", { name: "Ask AI" });
+    const dialogue = () => screen.getByRole("region", { name: "Assistant" });
+    const question = () => screen.getByRole("textbox", { name: "Assistant" });
+
+    async function openAndAsk(text: string) {
+      fireEvent.click(askButton());
+      fireEvent.change(question(), { target: { value: text } });
+      fireEvent.submit(question().closest("form") as HTMLFormElement);
+    }
+
+    it("starts collapsed: only the Ask AI button, nothing asked", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      expect(askButton().getAttribute("aria-pressed")).toBe("false");
+      expect(screen.queryByRole("region", { name: "Assistant" })).toBeNull();
+      expect(document.querySelector<HTMLElement>("[data-assistant-panel]")?.hidden).toBe(true);
+    });
+
+    it("opens the dialogue with the stand-in notice when Ask AI is pressed", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(askButton());
+      expect(askButton().getAttribute("aria-pressed")).toBe("true");
+      expect(within(dialogue()).getByText("Stand-in answers from your browser's search, not an AI.")).toBeTruthy();
+      fireEvent.click(askButton());
+      expect(screen.queryByRole("region", { name: "Assistant" })).toBeNull();
+    });
+
+    it("answers with the local search, highlights the cited items and frames them once", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      const before = screen.getByText(/\d+\.\d×/).textContent;
+      await openAndAsk("graph");
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before));
+      expect(within(dialogue()).getByRole("button", { name: "Back to previous view" })).toBeTruthy();
+      expect(within(dialogue()).getByRole("button", { name: "Graph matching" })).toBeTruthy();
+    });
+
+    it("Back to previous view restores the view the reader asked from", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      const before = screen.getByText(/\d+\.\d×/).textContent;
+      await openAndAsk("graph");
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before));
+      fireEvent.click(within(dialogue()).getByRole("button", { name: "Back to previous view" }));
+      await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(before));
+      expect(within(dialogue()).queryByRole("button", { name: "Back to previous view" })).toBeNull();
+    });
+
+    it("selects a cited item when its button is pressed", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      await openAndAsk("graph");
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      fireEvent.click(within(dialogue()).getByRole("button", { name: "Graph matching" }));
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+    });
+
+    it("clears the dialogue when the corpus changes", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      await openAndAsk("graph");
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await waitFor(() => expect(screen.queryByText(/Found 2 items/)).toBeNull());
+    });
+
+    it("keeps the open dialogue in the floating-control overflow check", async () => {
+      const { container } = await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(askButton());
       checkAllFloatingControls(container);
     });
   });

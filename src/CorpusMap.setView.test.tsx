@@ -76,3 +76,26 @@ describe("CorpusMap setView (spec assistant §2)", () => {
     expect(sameView(changes[0]?.[0] as MapViewport, { centre: [10, 10], zoom: 4 })).toBe(true);
   });
 });
+
+describe("CorpusMap getView (spec assistant §2)", () => {
+  it("reports the fit before anything was reported, the same view setView accepts back", () => {
+    const { changes, handle } = mount();
+    const fitted = handle.current?.getView() as MapViewport;
+    expect(fitted.zoom).toBeCloseTo(1, 9);
+    act(() => handle.current?.setView({ centre: [10, 10], zoom: 4 }));
+    act(() => handle.current?.setView(fitted));
+    expect(sameView(changes[changes.length - 1]?.[0] as MapViewport, fitted)).toBe(true);
+  });
+
+  it("follows the drawn view", () => {
+    const { handle } = mount();
+    act(() => handle.current?.setView({ centre: [30, 20], zoom: 2 }));
+    expect(sameView(handle.current?.getView() as MapViewport, { centre: [30, 20], zoom: 2 })).toBe(true);
+  });
+
+  it("is undefined while the map has no box to draw in", () => {
+    const handle = createRef<CorpusMapHandle>();
+    render(<CorpusMap renderCard={card} ref={handle} spec={spec} width={0} height={0} />);
+    expect(handle.current?.getView()).toBeUndefined();
+  });
+});
