@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MapSpec } from "../shared/spec";
+import type { MapViewport } from "../viewport/publicViewport";
 import { AssistantBox, type AssistantBoxProps } from "./AssistantBox";
 
 const spec: MapSpec = {
@@ -228,5 +229,143 @@ describe("AssistantBox asking (spec assistant §4, §5)", () => {
     mount({ touchTargets: true });
     expect(input().style.minHeight).toBe("44px");
     expect(screen.getByRole("button", { name: "Ask" }).style.minHeight).toBe("44px");
+  });
+});
+
+const overview: MapViewport = { centre: [10, 20], zoom: 1 };
+
+function framed(properties: Partial<AssistantBoxProps> = {}) {
+  const onReveal = vi.fn();
+  const onRestore = vi.fn();
+  const onSelect = vi.fn();
+  const shared = { onReveal, onRestore, onSelect, ...properties };
+  const result = mount({ view: overview, ...shared });
+  const again = (extra: Partial<AssistantBoxProps>) =>
+    result.rerender(
+      <AssistantBox
+        spec={spec}
+        ask={result.ask}
+        selectedId={null}
+        view={overview}
+        onMatches={result.onMatches}
+        onReveal={onReveal}
+        onRestore={onRestore}
+        onSelect={onSelect}
+        {...extra}
+      />,
+    );
+  return { ...result, onReveal, onRestore, onSelect, again };
+}
+
+describe("AssistantBox citing, framing once and going back (spec assistant §4)", () => {
+  it("renders each cited id as a button with the item's label, in the answer's order, and selects on press", async () => {
+    const { onSelect, ask } = framed();
+    ask.mockResolvedValueOnce({ text: "see these", ids: ["gamma", "alpha"] });
+    await submit("q");
+    const buttons = screen.getAllByRole("button").filter((button) => /graphs$/.test(button.textContent ?? ""));
+    expect(buttons.map((button) => button.textContent)).toEqual(["Gamma graphs", "Alpha graphs"]);
+    fireEvent.click(buttons[0] as HTMLElement);
+    expect(onSelect).toHaveBeenCalledWith("gamma");
+  });
+
+  it("falls back to the id for a label that is empty", async () => {
+    const blank: MapSpec = { ...spec, nodes: [{ id: "nameless", label: "", x: 0, y: 0, territory: null }] };
+    const { ask } = framed({ spec: blank });
+    ask.mockResolvedValueOnce({ text: "one", ids: ["nameless"] });
+    await submit("q");
+    expect(screen.getByRole("button", { name: "nameless" })).toBeTruthy();
+  });
+
+  it("frames the cited items once, after highlighting them, and offers Back", async () => {
+    const calls: string[] = [];
+    const { onReveal, onMatches } = framed();
+    onMatches.mockImplementation(() => calls.push("matches"));
+    onReveal.mockImplementation(() => calls.push("reveal"));
+    await submit("q");
+    expect(onReveal).toHaveBeenCalledTimes(1);
+    expect(onReveal).toHaveBeenCalledWith(["alpha", "beta"]);
+    expect(calls).toEqual(["matches", "reveal"]);
+    expect(screen.getByRole("button", { name: "Back to previous view" })).toBeTruthy();
+  });
+
+  it("Back restores the view captured when asking, disappears and returns focus to the input", async () => {
+    const { onRestore } = framed();
+    await submit("q");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Back to previous view" }));
+    });
+    expect(onRestore).toHaveBeenCalledTimes(1);
+    expect(onRestore).toHaveBeenCalledWith(overview);
+    expect(screen.queryByRole("button", { name: "Back to previous view" })).toBeNull();
+    expect(document.activeElement).toBe(input());
+  });
+
+  it("neither frames nor offers Back when the reader moved the view while waiting", async () => {
+    const pending = deferred<Answer>();
+    const { ask, onMatches, onReveal, again } = framed();
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("q");
+    again({ view: { centre: [99, 20], zoom: 1 } });
+    await act(async () => pending.resolve({ text: "x", ids: ["alpha"] }));
+    expect(onMatches).toHaveBeenLastCalledWith(["alpha"]);
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Back to previous view" })).toBeNull();
+  });
+
+  it("frames without Back when the consumer tracks no view", async () => {
+    const { onReveal } = framed({ view: undefined });
+    await submit("q");
+    expect(onReveal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Back to previous view" })).toBeNull();
+  });
+
+  it("counts float noise as the same view and a different zoom as moved", async () => {
+    const noisy = deferred<Answer>();
+    const first = framed();
+    first.ask.mockReturnValueOnce(noisy.promise);
+    await submit("q");
+    first.again({ view: { centre: [10 + 1e-12, 20], zoom: 1 } });
+    await act(async () => noisy.resolve({ text: "x", ids: ["alpha"] }));
+    expect(first.onReveal).toHaveBeenCalledTimes(1);
+    first.unmount();
+    const zoomed = deferred<Answer>();
+    const second = framed();
+    second.ask.mockReturnValueOnce(zoomed.promise);
+    await submit("q");
+    second.again({ view: { centre: [10, 20], zoom: 1.5 } });
+    await act(async () => zoomed.resolve({ text: "x", ids: ["alpha"] }));
+    expect(second.onReveal).not.toHaveBeenCalled();
+  });
+
+  it("never frames an answer without ids or with only unknown ids", async () => {
+    const { ask, onReveal, onMatches } = framed();
+    ask.mockResolvedValueOnce({ text: "none", ids: [] });
+    await submit("q");
+    ask.mockResolvedValueOnce({ text: "unknown", ids: ["ghost"] });
+    await submit("q2");
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(onMatches).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByRole("button", { name: "Back to previous view" })).toBeNull();
+  });
+
+  it("removes a stale Back when the reader asks again", async () => {
+    const pending = deferred<Answer>();
+    const { ask } = framed();
+    await submit("q");
+    expect(screen.getByRole("button", { name: "Back to previous view" })).toBeTruthy();
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("again");
+    expect(screen.queryByRole("button", { name: "Back to previous view" })).toBeNull();
+  });
+
+  it("Back after the selection changed restores the view and leaves the selection alone", async () => {
+    const { onRestore, onSelect, again } = framed();
+    await submit("q");
+    again({ selectedId: "gamma" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Back to previous view" }));
+    });
+    expect(onRestore).toHaveBeenCalledWith(overview);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

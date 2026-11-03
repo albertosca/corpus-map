@@ -73,6 +73,12 @@ type Status =
   | { kind: "answered"; count: number; pad: boolean }
   | { kind: "failed"; pad: boolean };
 const IDLE: Status = { kind: "idle" };
+
+const close = (left: number, right: number) =>
+  Math.abs(left - right) <= 1e-9 * Math.max(1, Math.abs(left), Math.abs(right));
+/** Equal within a relative 1e-9, like the map's own comparison; kept here so this entry carries no map code. */
+const sameView = (left: MapViewport, right: MapViewport) =>
+  close(left.zoom, right.zoom) && close(left.centre[0], right.centre[0]) && close(left.centre[1], right.centre[1]);
 const TOUCH_TARGET = 44;
 
 function baseText(status: Status): string {
@@ -97,11 +103,14 @@ function statusText(status: Status): string {
  * colour and the font, so it follows the page's theme.
  */
 export function AssistantBox(properties: AssistantBoxProps): ReactElement {
-  const { spec, ask, selectedId, view, onMatches, onReveal, onRestore, notice, touchTargets, style } = properties;
+  const { spec, ask, selectedId, view, onMatches, onReveal, onRestore, onSelect, notice, touchTargets, style } =
+    properties;
   const label = properties.label ?? "Assistant";
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<readonly AssistantTurn[]>([]);
   const [status, setStatus] = useState<Status>(IDLE);
+  // The view the reader had when the last framed answer was asked.
+  const [back, setBack] = useState<MapViewport | null>(null);
   const turnsReference = useRef<readonly AssistantTurn[]>([]);
   // The last status that was settled (an answer or a failure): "Asking…" in between must not hide a repeat.
   const settled = useRef<{ text: string; pad: boolean } | null>(null);
@@ -116,6 +125,7 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
     setQuestion("");
     setTurns([]);
     setStatus(IDLE);
+    setBack(null);
   };
   const resetReferences = () => {
     turnsReference.current = [];
@@ -162,10 +172,12 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
     if (text === "") return;
     cancel();
     const current = latest.current;
+    const asked = current.view;
     const mine = generation.current;
     const abort = new AbortController();
     controller.current = abort;
     setStatus({ kind: "asking" });
+    setBack(null);
     const selected = selectedId !== null && current.knownLabels.has(selectedId) ? selectedId : null;
     let answer: AssistantAnswer;
     try {
@@ -193,6 +205,19 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
     setQuestion("");
     setStatus(settle({ kind: "answered", count: ids.length }));
     latest.current.onMatches(ids.length > 0 ? ids : null);
+    if (ids.length === 0) return;
+    // Frame only if the reader has not moved the view since asking (nothing tracked means nothing to protect).
+    const now = latest.current.view;
+    if (asked !== undefined && (now === undefined || !sameView(now, asked))) return;
+    latest.current.onReveal(ids);
+    if (asked !== undefined) setBack(asked);
+  };
+
+  const goBack = () => {
+    if (back === null) return;
+    latest.current.onRestore(back);
+    setBack(null);
+    inputReference.current?.focus();
   };
 
   const clear = () => {
@@ -233,6 +258,15 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
           <li key={index}>
             <div style={{ opacity: 0.8 }}>{turn.question}</div>
             <div>{turn.answer}</div>
+            {turn.ids.length === 0 ? null : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {turn.ids.map((id) => (
+                  <button key={id} type="button" onClick={() => onSelect(id)} style={{ ...control, cursor: "pointer" }}>
+                    {knownLabels.get(id) || id}
+                  </button>
+                ))}
+              </div>
+            )}
           </li>
         ))}
       </ol>
@@ -258,6 +292,11 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
         <button type="submit" style={{ ...control, cursor: "pointer" }}>
           Ask
         </button>
+        {back === null ? null : (
+          <button type="button" onClick={goBack} style={{ ...control, cursor: "pointer" }}>
+            Back to previous view
+          </button>
+        )}
         {turns.length === 0 ? null : (
           <button type="button" onClick={clear} style={{ ...control, cursor: "pointer" }}>
             Clear
