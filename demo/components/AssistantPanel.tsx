@@ -4,7 +4,7 @@ import type { CSSProperties, ReactElement } from "react";
 import { useMemo } from "react";
 import { STAND_IN_NOTICE, standInAdapter } from "../assistant/standIn";
 import { token } from "../tokens";
-import { ASSISTANT_PANEL_BOTTOM, ASSISTANT_PANEL_WIDTH, assistantPanelHeight, GUTTER } from "./floatingLayout";
+import { ASSISTANT_PANEL_BOTTOM, assistantPanelHeight, GUTTER } from "./floatingLayout";
 import { TOUCH_TARGET_SIZE } from "./narrow";
 
 type BoxProps = Parameters<typeof AssistantBox>[0];
@@ -16,6 +16,8 @@ interface AssistantPanelProps {
   /** The measured top bar height: the narrow sheet starts below it. */
   topInset: number;
   windowHeight: number;
+  /** The wide panel's width: narrower than usual beside the open drawer. */
+  width: number;
   spec: MapSpec;
   selectedId: string | null;
   view: BoxProps["view"];
@@ -47,11 +49,11 @@ const panelStyle: CSSProperties = {
  * from an AI.
  */
 export function AssistantPanel(properties: AssistantPanelProps): ReactElement {
-  const { open, narrow, topInset, windowHeight, spec, onClose, ...box } = properties;
+  const { open, narrow, topInset, windowHeight, width, spec, onClose, ...box } = properties;
   const ask = useMemo(() => standInAdapter(spec), [spec]);
   const placement: CSSProperties = narrow
     ? { top: topInset + GUTTER, left: GUTTER, right: GUTTER, maxWidth: "100vw" }
-    : { bottom: ASSISTANT_PANEL_BOTTOM, left: GUTTER, width: ASSISTANT_PANEL_WIDTH, maxWidth: "90vw" };
+    : { bottom: ASSISTANT_PANEL_BOTTOM, left: GUTTER, width, maxWidth: "90vw" };
   return (
     <div
       data-assistant-panel

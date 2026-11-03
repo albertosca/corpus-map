@@ -74,6 +74,15 @@ describe("CorpusMap setView (spec assistant §2)", () => {
     act(() => handle.current?.setView({ centre: [10, 10], zoom: 4 }));
     expect(changes).toHaveLength(1);
     expect(sameView(changes[0]?.[0] as MapViewport, { centre: [10, 10], zoom: 4 })).toBe(true);
+    // Nothing was drawn: the held view stays the one on screen.
+    expect(sameView(handle.current?.getView() as MapViewport, held)).toBe(true);
+  });
+
+  it("clamps a zoom far below the band", () => {
+    const { changes, handle } = mount();
+    act(() => handle.current?.setView({ centre: [50, 0], zoom: 1e-9 }));
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.[0].zoom).toBe(0.125);
   });
 });
 
@@ -91,6 +100,26 @@ describe("CorpusMap getView (spec assistant §2)", () => {
     const { handle } = mount();
     act(() => handle.current?.setView({ centre: [30, 20], zoom: 2 }));
     expect(sameView(handle.current?.getView() as MapViewport, { centre: [30, 20], zoom: 2 })).toBe(true);
+  });
+
+  it("follows a box resize, matching what the map reported for it", () => {
+    const changes: Change[] = [];
+    const handle = createRef<CorpusMapHandle>();
+    const element = (width: number) => (
+      <CorpusMap
+        renderCard={card}
+        ref={handle}
+        spec={spec}
+        width={width}
+        height={300}
+        onViewportChange={(...call) => changes.push(call)}
+      />
+    );
+    const { rerender } = render(element(400));
+    rerender(element(200));
+    const reported = changes[changes.length - 1];
+    expect(reported?.[1].reason).toBe("resize");
+    expect(sameView(handle.current?.getView() as MapViewport, reported?.[0] as MapViewport)).toBe(true);
   });
 
   it("is undefined while the map has no box to draw in", () => {

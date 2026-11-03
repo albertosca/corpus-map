@@ -358,7 +358,13 @@ export function TopBar({
         />
       ) : null}
       {assistant ? (
-        <button type="button" aria-pressed={assistant.open} onClick={assistant.onToggle} style={gearButtonStyle}>
+        <button
+          type="button"
+          data-assistant-toggle
+          aria-pressed={assistant.open}
+          onClick={assistant.onToggle}
+          style={gearButtonStyle}
+        >
           Ask AI
         </button>
       ) : null}

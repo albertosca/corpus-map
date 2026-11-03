@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type ReactElement,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -139,9 +140,11 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
   }
   const knownLabels = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node.label])), [spec]);
   const inputReference = useRef<HTMLInputElement>(null);
+  const sectionReference = useRef<HTMLElement>(null);
   // The newest props for the answer, which outlives the render that asked.
   const latest = useRef({ ask, knownLabels, selectedId, view, onMatches, onReveal, onRestore });
-  useEffect(() => {
+  // A layout effect, so an answer that resolves right after a commit already sees that commit's spec and view.
+  useLayoutEffect(() => {
     latest.current = { ask, knownLabels, selectedId, view, onMatches, onReveal, onRestore };
   });
   // Bumped by every change that makes an answer in flight out of date.
@@ -155,12 +158,11 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
 
   useEffect(() => cancel, []);
 
-  const firstSpec = useRef(true);
-  useEffect(() => {
-    if (firstSpec.current) {
-      firstSpec.current = false;
-      return;
-    }
+  // Compared by value, not by a first-run flag, so StrictMode's second mount does not read as a swap.
+  const reportedSpec = useRef(spec);
+  useLayoutEffect(() => {
+    if (reportedSpec.current === spec) return;
+    reportedSpec.current = spec;
     cancel();
     resetReferences();
     latest.current.onMatches(null);
@@ -202,13 +204,15 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
     const turn: AssistantTurn = { question: text, answer: answer.text, ids };
     turnsReference.current = [...turnsReference.current, turn];
     setTurns(turnsReference.current);
-    setQuestion("");
+    // A draft typed while waiting is the reader's, not this answer's.
+    setQuestion((draft) => (draft === text ? "" : draft));
     setStatus(settle({ kind: "answered", count: ids.length }));
+    if (sectionReference.current?.contains(document.activeElement)) inputReference.current?.focus();
     latest.current.onMatches(ids.length > 0 ? ids : null);
     if (ids.length === 0) return;
     // Frame only if the reader has not moved the view since asking (nothing tracked means nothing to protect).
     const now = latest.current.view;
-    if (asked !== undefined && (now === undefined || !sameView(now, asked))) return;
+    if (asked === undefined ? now !== undefined : now === undefined || !sameView(now, asked)) return;
     latest.current.onReveal(ids);
     if (asked !== undefined) setBack(asked);
   };
@@ -244,6 +248,7 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
 
   return (
     <section
+      ref={sectionReference}
       aria-label={label}
       style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: "100%", minHeight: 0, ...style }}
     >
@@ -301,7 +306,7 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
             Back to previous view
           </button>
         )}
-        {turns.length === 0 ? null : (
+        {turns.length === 0 && status.kind !== "asking" ? null : (
           <button type="button" onClick={clear} style={{ ...control, cursor: "pointer" }}>
             Clear
           </button>

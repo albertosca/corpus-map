@@ -429,6 +429,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   const handleCloseAssistant = () => {
     assistantOpenReference.current = false;
     setAssistantOpen(false);
+    // The focused control is about to hide: hand focus to what stays (the toggle, or the map under a sheet).
+    const next = narrow ? mapFocusTarget.current : document.querySelector<HTMLElement>("[data-assistant-toggle]");
+    next?.focus();
   };
 
   const handleMapViewport = (view: MapViewport) => {
@@ -523,6 +526,9 @@ export function App({ loadArxiv }: AppProps = {}) {
   const selected = selectedId === null ? null : (current?.spec.nodes.find((node) => node.id === selectedId) ?? null);
   // On a narrow window the dialogue sheet and the item sheet take turns (they would share the screen's height):
   // the selection stays, and the item's sheet comes back when the dialogue closes.
+  // Beside the open drawer the wide panel narrows rather than reach under it (a window just over 600 px).
+  const drawerWidth = selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0;
+  const assistantWidth = Math.min(ASSISTANT_PANEL_WIDTH, Math.max(0, viewportWidth - drawerWidth - 3 * GUTTER));
   const itemSheetShown = selected !== null && !(narrow && assistantOpen);
   const territoryName =
     selected && current
@@ -531,9 +537,22 @@ export function App({ loadArxiv }: AppProps = {}) {
 
   const mapKey = current?.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current?.id;
   // A new map (a corpus switch, a regenerated synthetic one) starts at its fit, which it does not report: read it.
+  // The previous map's view must not outlive it, open or not: the next open would seed from it.
   useEffect(() => {
-    if (mapKey !== undefined && assistantOpenReference.current) setAssistantView(mapReference.current?.getView());
+    if (mapKey === undefined) return;
+    const fit = mapReference.current?.getView();
+    latestView.current = fit;
+    if (assistantOpenReference.current) setAssistantView(fit);
   }, [mapKey]);
+  // A large corpus builds its scene in slices, so its first fit exists only later: read it when the map reports.
+  const handleViewChange = (info: Parameters<typeof viewStore.set>[0]) => {
+    viewStore.set(info);
+    if (latestView.current !== undefined) return;
+    const fit = mapReference.current?.getView();
+    if (fit === undefined) return;
+    latestView.current = fit;
+    if (assistantOpenReference.current) setAssistantView(fit);
+  };
   // The map keeps its hidden categories itself; the demo only watches them so
   // the drawer leaves out what the map dims. They belong to the map they were
   // hidden on: a new key mounts a map with nothing hidden.
@@ -592,7 +611,7 @@ export function App({ loadArxiv }: AppProps = {}) {
             tuning={panelValues.appliedTuning}
             thresholds={panelValues.appliedThresholds}
             cardSize={cardSize}
-            onViewChange={viewStore.set}
+            onViewChange={handleViewChange}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
             selectedId={selectedId}
             matches={matches}
@@ -614,7 +633,7 @@ export function App({ loadArxiv }: AppProps = {}) {
                   }
                 : {
                     right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0,
-                    left: assistantOpen ? ASSISTANT_PANEL_WIDTH + 2 * GUTTER : 0,
+                    left: assistantOpen ? assistantWidth + 2 * GUTTER : 0,
                   }
             }
           />
@@ -658,7 +677,9 @@ export function App({ loadArxiv }: AppProps = {}) {
         windowHeight={windowHeight}
         spec={current?.spec ?? NOTHING_TO_SEARCH}
         selectedId={selectedId}
-        view={assistantView}
+        // Closed, the dialogue is not watching the view: an answer that lands then never frames.
+        view={assistantOpen ? assistantView : undefined}
+        width={assistantWidth}
         onMatches={setMatches}
         onReveal={(ids) => mapReference.current?.revealAll(ids)}
         onRestore={(view) => mapReference.current?.setView(view)}

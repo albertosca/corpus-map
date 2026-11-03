@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { StrictMode, useLayoutEffect } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import type { MapSpec } from "../shared/spec";
 import type { MapViewport } from "../viewport/publicViewport";
@@ -400,5 +402,155 @@ describe("AssistantBox citing, framing once and going back (spec assistant §4)"
     });
     expect(onRestore).toHaveBeenCalledWith(overview);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssistantBox final review fixes (2026-11-03 whole-branch review)", () => {
+  it("drops an old-corpus answer that lands between a spec swap's commit and its passive effects", async () => {
+    const pending = deferred<Answer>();
+    const onMatches = vi.fn();
+    const onReveal = vi.fn();
+    const ask = vi.fn<Ask>(() => pending.promise);
+    function ReleaseOnSwap() {
+      useLayoutEffect(() => {
+        pending.resolve({ text: "old corpus", ids: ["beta"] });
+      }, []);
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const globals = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globals.IS_REACT_ACT_ENVIRONMENT = false;
+    const root = createRoot(container);
+    const boxProperties = {
+      ask,
+      selectedId: null,
+      view: undefined,
+      onMatches,
+      onReveal,
+      onRestore: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+    root.render(<AssistantBox spec={spec} {...boxProperties} />);
+    await settle();
+    const field = container.querySelector("input") as HTMLInputElement;
+    const form = container.querySelector("form") as HTMLFormElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "q");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await settle();
+    onMatches.mockClear();
+    // The swap mounts a sibling whose layout effect resolves the answer in the very commit that swaps the spec.
+    root.render(
+      <>
+        <AssistantBox spec={otherSpec} {...boxProperties} />
+        <ReleaseOnSwap />
+      </>,
+    );
+    await settle();
+    const logText = container.querySelector("[role=log]")?.textContent;
+    root.unmount();
+    container.remove();
+    globals.IS_REACT_ACT_ENVIRONMENT = true;
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(onMatches.mock.calls.every(([ids]) => ids === null)).toBe(true);
+    expect(logText).toBe("");
+  });
+
+  it("keeps a draft typed while the answer was pending", async () => {
+    const pending = deferred<Answer>();
+    const { ask } = mount();
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("first");
+    type("my follow-up draft");
+    await act(async () => pending.resolve({ text: "x", ids: [] }));
+    expect((input() as HTMLInputElement).value).toBe("my follow-up draft");
+  });
+
+  it("clears the field when the answer arrives and the reader typed nothing more", async () => {
+    mount();
+    await submit("first");
+    expect((input() as HTMLInputElement).value).toBe("");
+  });
+
+  it("does not frame when no view was tracked at asking but one is by the answer", async () => {
+    const pending = deferred<Answer>();
+    const onReveal = vi.fn();
+    const { ask, rerender, onMatches } = mount({ onReveal });
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("q");
+    rerender(
+      <AssistantBox
+        spec={spec}
+        ask={ask}
+        selectedId={null}
+        view={{ centre: [5, 5], zoom: 2 }}
+        onMatches={onMatches}
+        onReveal={onReveal}
+        onRestore={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    await act(async () => pending.resolve({ text: "x", ids: ["alpha"] }));
+    expect(onMatches).toHaveBeenLastCalledWith(["alpha"]);
+    expect(onReveal).not.toHaveBeenCalled();
+  });
+
+  it("reports nothing on mount under StrictMode", () => {
+    const onMatches = vi.fn();
+    render(
+      <StrictMode>
+        <AssistantBox
+          spec={spec}
+          ask={vi.fn<Ask>()}
+          selectedId={null}
+          view={undefined}
+          onMatches={onMatches}
+          onReveal={vi.fn()}
+          onRestore={vi.fn()}
+          onSelect={vi.fn()}
+        />
+      </StrictMode>,
+    );
+    expect(onMatches).not.toHaveBeenCalled();
+  });
+
+  it("offers Clear while the first question is pending, and it aborts that question", async () => {
+    const pending = deferred<Answer>();
+    const { ask, onMatches } = mount();
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("first");
+    const signal = signalOf(ask, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(signal.aborted).toBe(true);
+    expect(onMatches).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+    expect(status().textContent).toBe("");
+  });
+
+  it("returns focus to the input after an answer when the reader pressed Ask", async () => {
+    mount();
+    type("q");
+    const ask = screen.getByRole("button", { name: "Ask" });
+    ask.focus();
+    await act(async () => {
+      fireEvent.click(ask);
+    });
+    expect(document.activeElement).toBe(input());
+  });
+
+  it("does not take focus from outside the box when the answer arrives", async () => {
+    const pending = deferred<Answer>();
+    const { ask } = mount();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    ask.mockReturnValueOnce(pending.promise);
+    await submit("q");
+    outside.focus();
+    await act(async () => pending.resolve({ text: "x", ids: [] }));
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
   });
 });

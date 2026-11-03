@@ -2490,6 +2490,48 @@ describe("App (showcase Task 5)", () => {
       await waitFor(() => expect(screen.queryByText(/Found 2 items/)).toBeNull());
     });
 
+    it("returns focus to the Ask AI button when Close assistant hides the dialogue (whole-branch review)", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(askButton());
+      const close = screen.getByRole("button", { name: "Close assistant" });
+      close.focus();
+      fireEvent.click(close);
+      expect(document.activeElement).toBe(askButton());
+    });
+
+    it("does not frame an answer that lands after the dialogue was closed and the reader zoomed (whole-branch review)", async () => {
+      await renderApp(ASSISTANT_SPEC);
+      await screen.findByText(/1\.0×/);
+      await openAndAsk("graph");
+      fireEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+      fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      const zoomed = await waitFor(() => screen.getByText(/\d+\.\d×/).textContent);
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      expect(screen.getByText(/\d+\.\d×/).textContent).toBe(zoomed);
+    });
+
+    describe("beside the open drawer on a window just over 600 px (whole-branch review)", () => {
+      const originalInnerWidth = window.innerWidth;
+      afterEach(() => {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: originalInnerWidth });
+      });
+
+      it("narrows the panel so it never reaches under the drawer", async () => {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 620 });
+        const { container } = await renderApp(ASSISTANT_SPEC);
+        await screen.findByText(/1\.0×/);
+        await openAndAsk("graph");
+        await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+        fireEvent.click(within(dialogue()).getByRole("button", { name: "Graph matching" }));
+        await screen.findByRole("dialog");
+        const panel = container.querySelector<HTMLElement>("[data-assistant-panel]") as HTMLElement;
+        const panelRight = Number.parseFloat(panel.style.left) + Number.parseFloat(panel.style.width);
+        const drawerLeft = 620 - DRAWER_MAXIMUM_WIDTH;
+        expect(panelRight).toBeLessThanOrEqual(drawerLeft - 12);
+      });
+    });
+
     it("keeps the open dialogue in the floating-control overflow check", async () => {
       const { container } = await renderApp(ASSISTANT_SPEC);
       await screen.findByText(/1\.0×/);
