@@ -76,4 +76,10 @@ describe("legendMaximumHeight", () => {
     expect(legendMaximumHeight("top-left", "top-right", 110)).toBe("calc(100% - 24px)");
     expect(legendMaximumHeight("top-left", null, 110)).toBe("calc(100% - 24px)");
   });
+
+  it("also leaves free the overlay's inset on the legend's own vertical side, and ignores the other", () => {
+    const insets = { top: 50, right: 0, bottom: 30, left: 0 };
+    expect(legendMaximumHeight("top-left", null, 110, insets)).toBe("calc(100% - 74px)");
+    expect(legendMaximumHeight("bottom-right", null, 110, insets)).toBe("calc(100% - 54px)");
+  });
 });

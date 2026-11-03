@@ -232,6 +232,16 @@ describe("AssistantBox asking (spec assistant §4, §5)", () => {
     expect(input().style.minHeight).toBe("44px");
     expect(screen.getByRole("button", { name: "Ask" }).style.minHeight).toBe("44px");
   });
+
+  it("gives the input a row of its own for touch, so the buttons wrap as a deliberate second row", () => {
+    mount({ touchTargets: true });
+    expect(input().style.flex).toBe("1 1 100%");
+  });
+
+  it("keeps the input beside the buttons without touch targets", () => {
+    mount();
+    expect(input().style.flex).toBe("1 1 4rem");
+  });
 });
 
 const overview: MapViewport = { centre: [10, 20], zoom: 1 };

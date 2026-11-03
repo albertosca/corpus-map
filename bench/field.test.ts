@@ -15,8 +15,8 @@ import { fitScene } from "../src/viewport/fitScene";
 // plus headroom, once the first CI run produces one.
 const BUDGET_MS = 16;
 
-const WARM_UPS = 2;
-const SAMPLES = 7;
+const WARM_UPS = 5;
+const SAMPLES = 15;
 
 function median(values: number[]): number {
   const sorted = [...values].sort((first, second) => first - second);

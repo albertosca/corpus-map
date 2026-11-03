@@ -107,3 +107,30 @@ describe("legend touch targets on a narrow box (spec mobile §5)", () => {
     expect(screen.getByRole("button", { name: "Legend" }).style.minHeight).toBe("24px");
   });
 });
+
+describe("legend and the insets prop (a consumer overlay)", () => {
+  it("sits clear of the overlay on its own two sides and gives up the matching height", () => {
+    const { rerender } = render(<CorpusMap spec={spec} width={600} height={300} renderCard={() => null} legend />);
+    const region = () => screen.getByRole("region", { name: "Map legend" });
+    expect([region().style.left, region().style.top, region().style.maxHeight]).toEqual([
+      "12px",
+      "12px",
+      "calc(100% - 24px)",
+    ]);
+    rerender(
+      <CorpusMap
+        spec={spec}
+        width={600}
+        height={300}
+        renderCard={() => null}
+        legend
+        insets={{ left: 340, top: 50, right: 200 }}
+      />,
+    );
+    expect([region().style.left, region().style.top, region().style.maxHeight]).toEqual([
+      "352px",
+      "62px",
+      "calc(100% - 74px)",
+    ]);
+  });
+});

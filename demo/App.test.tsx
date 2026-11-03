@@ -2472,6 +2472,44 @@ describe("App (showcase Task 5)", () => {
       expect(within(dialogue()).queryByRole("button", { name: "Back to previous view" })).toBeNull();
     });
 
+    // 2026-11-03 final review #11: the effect on `mapKey` forgets the old map's
+    // view. Without it a regenerated synthetic corpus kept the zoomed view of
+    // the map it replaced, and the next ask captured (and Back restored) that.
+    it("Back after a regenerated synthetic corpus returns to the new map's fit, not the replaced map's zoom", async () => {
+      vi.doMock("../fixtures/synthetic/generate", async () => {
+        const actual = await vi.importActual<typeof import("../fixtures/synthetic/generate")>(
+          "../fixtures/synthetic/generate",
+        );
+        return { ...actual, generateCorpus: vi.fn(() => structuredClone(ASSISTANT_SPEC)) };
+      });
+      try {
+        const { container } = await renderApp(TINY_ARXIV_SPEC);
+        await screen.findByText(territoryButtonText(TINY_ARXIV_SPEC));
+        fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "synthetic" } });
+        await screen.findByText(/1\.0×/);
+        const fit = screen.getByText(/\d+\.\d×/).textContent;
+
+        // Zoom the first synthetic map, then replace it with a regenerated one.
+        fireEvent.wheel(container.querySelector("[data-map-surface]") as HTMLElement, {
+          deltaY: -200,
+          deltaMode: 0,
+          ctrlKey: false,
+        });
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(fit));
+        fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
+        fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(fit));
+
+        await openAndAsk("graph");
+        await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(fit));
+        fireEvent.click(within(dialogue()).getByRole("button", { name: "Back to previous view" }));
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(fit));
+      } finally {
+        vi.doUnmock("../fixtures/synthetic/generate");
+      }
+    });
+
     it("selects a cited item when its button is pressed", async () => {
       await renderApp(ASSISTANT_SPEC);
       await screen.findByText(/1\.0×/);

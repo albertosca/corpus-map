@@ -1,5 +1,6 @@
 import { compareIds } from "../shared/compareIds";
 import { CORNER_MARGIN, type Corner } from "../shared/corner";
+import { type Insets, NO_INSETS } from "../shared/insets";
 import type { Territory } from "../shared/spec";
 
 export interface LegendEntry {
@@ -36,10 +37,17 @@ export function legendCorner(requested: Corner, minimap: Corner | null): Corner 
 /**
  * The legend's height ceiling: its column less the two margins, and less the
  * minimap's height and one more margin when the minimap sits at the other end
- * of the same side — an expanded legend otherwise runs down over it.
+ * of the same side — an expanded legend otherwise runs down over it — and
+ * less the consumer overlay's inset on the legend's own vertical side.
  */
-export function legendMaximumHeight(legend: Corner, minimap: Corner | null, minimapHeight: number): string {
+export function legendMaximumHeight(
+  legend: Corner,
+  minimap: Corner | null,
+  minimapHeight: number,
+  insets: Insets = NO_INSETS,
+): string {
   const sameSide = minimap !== null && minimap !== legend && minimap.endsWith(legend.split("-")[1] as string);
-  const reserved = 2 * CORNER_MARGIN + (sameSide ? minimapHeight + CORNER_MARGIN : 0);
+  const overlay = legend.startsWith("top") ? insets.top : insets.bottom;
+  const reserved = 2 * CORNER_MARGIN + (sameSide ? minimapHeight + CORNER_MARGIN : 0) + overlay;
   return `calc(100% - ${reserved}px)`;
 }

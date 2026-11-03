@@ -153,7 +153,8 @@ export interface CorpusMapProps {
      * Pixels of the box a consumer overlay covers on each side (a drawer, a
      * toolbar); a missing, negative or non-finite side is 0. Edge markers stay
      * in the uncovered area, an item under an overlay counts as off screen,
-     * and `reveal` (or a marker press) centres in that area. The fit ignores
+     * and `reveal` (or a marker press) centres in that area; the legend sits
+     * clear of it on its own two sides. The fit ignores
      * insets, so an overlay opening or closing never moves the zoom ratio.
      */
     insets?: Partial<Insets> | undefined;
@@ -865,6 +866,7 @@ export declare function useMeasure(): Measure;
 import { type ReactElement } from "react";
 import type { HeadingTag } from "../a11y/headingLevel";
 import { type Corner } from "../shared/corner";
+import { type Insets } from "../shared/insets";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
 import type { TerritoryGroup } from "../territories/groups";
@@ -880,6 +882,8 @@ export interface LegendProps {
     corner: Corner;
     /** A CSS height ceiling (`legendMaximumHeight`), so the expanded list never runs over the minimap. */
     maximumHeight: string;
+    /** The area a consumer overlay covers: the legend sits clear of it on its own two sides (spec assistant, `insets`). */
+    insets?: Insets | undefined;
     theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
     /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
     narrow: boolean;
@@ -907,6 +911,7 @@ export declare const Legend: import("react").MemoExoticComponent<typeof LegendVi
 
 // legend/entries.d.ts
 import { type Corner } from "../shared/corner";
+import { type Insets } from "../shared/insets";
 import type { Territory } from "../shared/spec";
 export interface LegendEntry {
     id: string;
@@ -921,9 +926,10 @@ export declare function legendCorner(requested: Corner, minimap: Corner | null):
 /**
  * The legend's height ceiling: its column less the two margins, and less the
  * minimap's height and one more margin when the minimap sits at the other end
- * of the same side — an expanded legend otherwise runs down over it.
+ * of the same side — an expanded legend otherwise runs down over it — and
+ * less the consumer overlay's inset on the legend's own vertical side.
  */
-export declare function legendMaximumHeight(legend: Corner, minimap: Corner | null, minimapHeight: number): string;
+export declare function legendMaximumHeight(legend: Corner, minimap: Corner | null, minimapHeight: number, insets?: Insets): string;
 
 // legend/model.d.ts
 import type { TerritoryGroup } from "../territories/groups";

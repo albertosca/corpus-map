@@ -54,6 +54,22 @@ describe("Legend", () => {
     expect(screen.queryByRole("button", { name: "North" })).toBeNull();
   });
 
+  it.each([
+    ["top-left", { top: 40, right: 0, bottom: 0, left: 340 }, { top: "52px", left: "352px" }],
+    ["top-right", { top: 0, right: 200, bottom: 0, left: 340 }, { top: "12px", right: "212px" }],
+    ["bottom-left", { top: 40, right: 0, bottom: 90, left: 0 }, { bottom: "102px", left: "12px" }],
+  ] as const)("sits clear of an overlay's insets at %s", (corner, insets, expected) => {
+    render(<Legend {...props({ corner, insets })} />);
+    const style = screen.getByRole("region", { name: "Map legend" }).style;
+    for (const [side, value] of Object.entries(expected)) expect(style.getPropertyValue(side)).toBe(value);
+  });
+
+  it("keeps its corner margin when no inset is given", () => {
+    render(<Legend {...props()} />);
+    const style = screen.getByRole("region", { name: "Map legend" }).style;
+    expect([style.top, style.left]).toEqual(["12px", "12px"]);
+  });
+
   it("reports the pressed territory", () => {
     const onEntry = vi.fn();
     render(<Legend {...props({ onEntry })} />);

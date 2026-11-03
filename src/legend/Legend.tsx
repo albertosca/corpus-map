@@ -1,6 +1,7 @@
 import { memo, type ReactElement, type SyntheticEvent, useId, useState } from "react";
 import type { HeadingTag } from "../a11y/headingLevel";
-import { CORNER_POSITION, type Corner, OVERLAY_LAYER } from "../shared/corner";
+import { CORNER_MARGIN, type Corner, OVERLAY_LAYER } from "../shared/corner";
+import { type Insets, NO_INSETS } from "../shared/insets";
 import type { Presentation } from "../shared/presentation";
 import type { Theme } from "../shared/theme";
 import type { TerritoryGroup } from "../territories/groups";
@@ -19,6 +20,8 @@ export interface LegendProps {
   corner: Corner;
   /** A CSS height ceiling (`legendMaximumHeight`), so the expanded list never runs over the minimap. */
   maximumHeight: string;
+  /** The area a consumer overlay covers: the legend sits clear of it on its own two sides (spec assistant, `insets`). */
+  insets?: Insets | undefined;
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
   /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */
   narrow: boolean;
@@ -50,6 +53,12 @@ function touch<Style extends object>(style: Style, touchTargets: boolean): Style
 }
 const FINGER = { minHeight: 44, alignItems: "center" } as const;
 
+/** A corner's two offsets: its margin, pushed in by the overlay's inset on that same side. */
+function clearOf(corner: Corner, insets: Insets): Partial<Record<keyof Insets, number>> {
+  const [vertical, horizontal] = corner.split("-") as [keyof Insets, keyof Insets];
+  return { [vertical]: CORNER_MARGIN + insets[vertical], [horizontal]: CORNER_MARGIN + insets[horizontal] };
+}
+
 function stop(event: SyntheticEvent): void {
   event.stopPropagation();
 }
@@ -75,6 +84,7 @@ export function LegendView(properties: LegendProps): ReactElement {
     presentation,
     corner,
     maximumHeight,
+    insets = NO_INSETS,
     theme,
     narrow,
     touchTargets = false,
@@ -121,7 +131,7 @@ export function LegendView(properties: LegendProps): ReactElement {
       onKeyDown={stop}
       style={{
         position: "absolute",
-        ...CORNER_POSITION[corner],
+        ...clearOf(corner, insets),
         zIndex: OVERLAY_LAYER,
         maxWidth: 280,
         maxHeight: maximumHeight,

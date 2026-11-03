@@ -296,7 +296,7 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
             event.stopPropagation();
             setQuestion("");
           }}
-          style={{ ...control, flex: "1 1 4rem", minWidth: 0 }}
+          style={{ ...control, flex: touchTargets ? "1 1 100%" : "1 1 4rem", minWidth: 0 }}
         />
         <button type="submit" style={{ ...control, cursor: "pointer" }}>
           Ask
