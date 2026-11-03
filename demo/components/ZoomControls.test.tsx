@@ -14,6 +14,7 @@ function fakeHandleRef(): { reference: RefObject<CorpusMapHandle | null>; handle
     focus: vi.fn(),
     reveal: vi.fn(),
     revealAll: vi.fn(),
+    setView: vi.fn(),
   };
   return { reference: { current: handle }, handle };
 }

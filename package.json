@@ -48,7 +48,7 @@
   },
   "sizeLimit": {
     "file": "dist/corpus-map.js",
-    "maximumGzipBytes": 35290,
+    "maximumGzipBytes": 35335,
     "search": {
       "file": "dist/search.js",
       "maximumGzipBytes": 2270

@@ -23,6 +23,8 @@ export interface CorpusMapHandle {
     reveal(id: string): void;
     /** Fits the view around the live items in `ids` inside the area `insets` leaves uncovered, at most once per call (reason `"interaction"`); unknown ids and ids of dimmed territories are ignored, and none left does nothing (spec search §3). */
     revealAll(ids: Iterable<string>): void;
+    /** Jumps to a public `MapViewport` (the shape `onViewportChange` reports), clamped to the zoom band (reason `"interaction"`); a view that cannot be drawn does nothing (spec assistant §2). */
+    setView(view: MapViewport): void;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
