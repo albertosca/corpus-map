@@ -51,6 +51,12 @@ function mount(properties: Partial<SearchBoxProps> = {}) {
 }
 
 describe("SearchBox (spec search §4, §5)", () => {
+  it("names its field and never gives it an id, so Chrome does not flag it and two boxes can share a page", () => {
+    mount();
+    expect(input().getAttribute("name")).toBe("search");
+    expect(input().hasAttribute("id")).toBe(false);
+  });
+
   it("waits the debounce, then reports the local matches in spec order", async () => {
     const { onMatches } = mount();
     type("graphs");

@@ -268,6 +268,39 @@ describe("AssistantBox citing, framing once and going back (spec assistant §4)"
     expect(onSelect).toHaveBeenCalledWith("gamma");
   });
 
+  it("names its field and never gives it an id, so Chrome does not flag it and two boxes can share a page", () => {
+    framed();
+    expect(input().getAttribute("name")).toBe("assistant-question");
+    expect(input().hasAttribute("id")).toBe(false);
+  });
+
+  it("lets a long cited label wrap instead of clipping it (2026-11-03 browser pass)", async () => {
+    const { ask } = framed();
+    ask.mockResolvedValueOnce({ text: "see this", ids: ["gamma"] });
+    await submit("q");
+    const citation = screen.getByRole("button", { name: "Gamma graphs" });
+    expect(citation.style.whiteSpace).toBe("normal");
+    expect(citation.style.textAlign).toBe("left");
+  });
+
+  it("scrolls the answers on their own so the input and Back stay in reach (2026-11-03 browser pass)", () => {
+    framed();
+    const log = screen.getByRole("log");
+    expect(log.style.overflowY).toBe("auto");
+    expect(log.style.minHeight).toBe("0px");
+  });
+
+  it("keeps the turns a real list inside the log, not a list that lost its role (Lighthouse listitem)", async () => {
+    const { ask } = framed();
+    ask.mockResolvedValueOnce({ text: "one", ids: ["gamma"] });
+    await submit("q");
+    const log = screen.getByRole("log");
+    expect(log.tagName).not.toBe("OL");
+    const list = log.querySelector("ol");
+    expect(list?.hasAttribute("role")).toBe(false);
+    expect(list?.querySelectorAll(":scope > li")).toHaveLength(1);
+  });
+
   it("falls back to the id for a label that is empty", async () => {
     const blank: MapSpec = { ...spec, nodes: [{ id: "nameless", label: "", x: 0, y: 0, territory: null }] };
     const { ask } = framed({ spec: blank });

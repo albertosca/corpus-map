@@ -245,31 +245,34 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
   return (
     <section
       aria-label={label}
-      style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: "100%", ...style }}
+      style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: "100%", minHeight: 0, ...style }}
     >
       {aboutLabel === undefined ? null : <span style={{ opacity: 0.8 }}>{`About: ${aboutLabel}`}</span>}
-      <ol
-        role="log"
-        aria-live="polite"
-        style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}
-      >
-        {turns.map((turn, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: turns are append-only and never reordered
-          <li key={index}>
-            <div style={{ opacity: 0.8 }}>{turn.question}</div>
-            <div>{turn.answer}</div>
-            {turn.ids.length === 0 ? null : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {turn.ids.map((id) => (
-                  <button key={id} type="button" onClick={() => onSelect(id)} style={{ ...control, cursor: "pointer" }}>
-                    {knownLabels.get(id) || id}
-                  </button>
-                ))}
-              </div>
-            )}
-          </li>
-        ))}
-      </ol>
+      <div role="log" aria-live="polite" style={{ overflowY: "auto", minHeight: 0 }}>
+        <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+          {turns.map((turn, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: turns are append-only and never reordered
+            <li key={index}>
+              <div style={{ opacity: 0.8 }}>{turn.question}</div>
+              <div>{turn.answer}</div>
+              {turn.ids.length === 0 ? null : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {turn.ids.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => onSelect(id)}
+                      style={{ ...control, cursor: "pointer", whiteSpace: "normal", textAlign: "left" }}
+                    >
+                      {knownLabels.get(id) || id}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
       <form
         onSubmit={submit}
         style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", maxWidth: "100%" }}
@@ -277,6 +280,7 @@ export function AssistantBox(properties: AssistantBoxProps): ReactElement {
         <input
           ref={inputReference}
           type="text"
+          name="assistant-question"
           autoComplete="off"
           aria-label={label}
           value={question}

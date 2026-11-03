@@ -59,7 +59,7 @@
     },
     "assistant": {
       "file": "dist/assistant.js",
-      "maximumGzipBytes": 2275
+      "maximumGzipBytes": 2350
     }
   },
   "devDependencies": {

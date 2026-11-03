@@ -30,9 +30,9 @@ const panelStyle: CSSProperties = {
   position: "fixed",
   zIndex: 10,
   boxSizing: "border-box",
-  overflowY: "auto",
+  overflowY: "hidden",
   padding: 12,
-  background: token("surface"),
+  background: token("surfaceSolid"),
   border: `1px solid ${token("border")}`,
   borderRadius: 6,
   boxShadow: `0 2px 10px ${token("shadow")}`,
@@ -67,6 +67,7 @@ export function AssistantPanel(properties: AssistantPanelProps): ReactElement {
       }}
     >
       <AssistantBox
+        style={{ flex: "1 1 auto", minHeight: 0 }}
         spec={spec}
         ask={ask}
         notice={STAND_IN_NOTICE}
@@ -83,6 +84,7 @@ export function AssistantPanel(properties: AssistantPanelProps): ReactElement {
         onClick={onClose}
         style={{
           alignSelf: "flex-start",
+          flexShrink: 0,
           maxWidth: "100%",
           font: "inherit",
           color: "inherit",
