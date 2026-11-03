@@ -1,10 +1,12 @@
-import type { CorpusMapHandle, LodThresholds, MapSpec, Tuning } from "corpus-map";
+import type { CorpusMapHandle, LodThresholds, MapSpec, MapViewport, Tuning } from "corpus-map";
 import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, resolveTuning } from "corpus-map";
 import { type CSSProperties, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
+import { AssistantPanel } from "./components/AssistantPanel";
 import { DRAWER_MAXIMUM_WIDTH, Drawer } from "./components/Drawer";
 import { Footer } from "./components/Footer";
+import { ASSISTANT_PANEL_WIDTH, assistantPanelHeight, GUTTER } from "./components/floatingLayout";
 import { createViewStore, Indicator } from "./components/Indicator";
 import { sheetCollapsedHeight, useNarrowWindow, useViewportHeight, useViewportWidth } from "./components/narrow";
 import { type LinkStatus, TopBar } from "./components/TopBar";
@@ -203,6 +205,12 @@ export function App({ loadArxiv }: AppProps = {}) {
   const mapReference = useRef<CorpusMapHandle>(null);
   // The ids the search found (spec search §6); null while no search is active. It belongs to the corpus it was made in.
   const [matches, setMatches] = useState<readonly string[] | null>(null);
+  // The dialogue (spec assistant §7): collapsed until asked. The view it compares is kept in a ref and
+  // copied to state only while the panel is open, so a pan re-renders the page only for a reader who is asking.
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantView, setAssistantView] = useState<MapViewport | undefined>(undefined);
+  const latestView = useRef<MapViewport | undefined>(undefined);
+  const assistantOpenReference = useRef(false);
   // Wraps `CorpusMap` (or the loading/error state); programmatically
   // focusable (`tabIndex={-1}`: never in the Tab order) as the fallback
   // focus target when no map is mounted.
@@ -246,7 +254,8 @@ export function App({ loadArxiv }: AppProps = {}) {
   const viewportWidth = useViewportWidth();
   // Below 600 px the demo lays itself out for a phone (spec mobile §6).
   const narrow = useNarrowWindow();
-  const collapsedSheetHeight = sheetCollapsedHeight(useViewportHeight());
+  const windowHeight = useViewportHeight();
+  const collapsedSheetHeight = sheetCollapsedHeight(windowHeight);
 
   // The linked view and selection apply while the page still shows the
   // corpus the link named. A user switch ends that for good: the map refits
@@ -410,7 +419,30 @@ export function App({ loadArxiv }: AppProps = {}) {
   // `onViewChange` again, never a stale count from the corpus just left.
   // The drawer closes too — a selection belongs to the corpus it was made
   // in, and must never keep showing once that corpus is gone.
+  const handleToggleAssistant = () => {
+    const next = !assistantOpen;
+    assistantOpenReference.current = next;
+    setAssistantOpen(next);
+    if (next) setAssistantView(latestView.current ?? mapReference.current?.getView());
+  };
+
+  const handleCloseAssistant = () => {
+    assistantOpenReference.current = false;
+    setAssistantOpen(false);
+    // The focused control is about to hide: hand focus to what stays (the toggle, or the map under a sheet).
+    const next = narrow ? mapFocusTarget.current : document.querySelector<HTMLElement>("[data-assistant-toggle]");
+    next?.focus();
+  };
+
+  const handleMapViewport = (view: MapViewport) => {
+    latestView.current = view;
+    if (assistantOpenReference.current) setAssistantView(view);
+    updateLink({ view });
+  };
+
   const handleCorpusChange = (id: GalleryEntry["id"]) => {
+    latestView.current = undefined;
+    setAssistantView(undefined);
     setCorpusId(id);
     viewStore.set(null);
     setSelectedId(null);
@@ -492,12 +524,35 @@ export function App({ loadArxiv }: AppProps = {}) {
   // from whichever spec is actually on screen, so `Drawer` itself never
   // needs to know how a `MapSpec` is shaped.
   const selected = selectedId === null ? null : (current?.spec.nodes.find((node) => node.id === selectedId) ?? null);
+  // On a narrow window the dialogue sheet and the item sheet take turns (they would share the screen's height):
+  // the selection stays, and the item's sheet comes back when the dialogue closes.
+  // Beside the open drawer the wide panel narrows rather than reach under it (a window just over 600 px).
+  const drawerWidth = selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0;
+  const assistantWidth = Math.min(ASSISTANT_PANEL_WIDTH, Math.max(0, viewportWidth - drawerWidth - 3 * GUTTER));
+  const itemSheetShown = selected !== null && !(narrow && assistantOpen);
   const territoryName =
     selected && current
       ? (current.spec.territories.find((territory) => territory.id === selected.territory)?.name ?? null)
       : null;
 
   const mapKey = current?.id === "synthetic" ? `synthetic:${syntheticSize}:${syntheticSeed}` : current?.id;
+  // A new map (a corpus switch, a regenerated synthetic one) starts at its fit, which it does not report: read it.
+  // The previous map's view must not outlive it, open or not: the next open would seed from it.
+  useEffect(() => {
+    if (mapKey === undefined) return;
+    const fit = mapReference.current?.getView();
+    latestView.current = fit;
+    if (assistantOpenReference.current) setAssistantView(fit);
+  }, [mapKey]);
+  // A large corpus builds its scene in slices, so its first fit exists only later: read it when the map reports.
+  const handleViewChange = (info: Parameters<typeof viewStore.set>[0]) => {
+    viewStore.set(info);
+    if (latestView.current !== undefined) return;
+    const fit = mapReference.current?.getView();
+    if (fit === undefined) return;
+    latestView.current = fit;
+    if (assistantOpenReference.current) setAssistantView(fit);
+  };
   // The map keeps its hidden categories itself; the demo only watches them so
   // the drawer leaves out what the map dims. They belong to the map they were
   // hidden on: a new key mounts a map with nothing hidden.
@@ -531,6 +586,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         onCopyLink={handleCopyLink}
         linkStatus={linkStatus}
         narrow={narrow}
+        assistant={{ open: assistantOpen, onToggle: handleToggleAssistant }}
         search={{
           // While the corpus loads there is nothing to search: an empty spec keeps the box (and the bar's height) in place.
           spec: current?.spec ?? NOTHING_TO_SEARCH,
@@ -555,11 +611,11 @@ export function App({ loadArxiv }: AppProps = {}) {
             tuning={panelValues.appliedTuning}
             thresholds={panelValues.appliedThresholds}
             cardSize={cardSize}
-            onViewChange={viewStore.set}
+            onViewChange={handleViewChange}
             defaultViewport={linkApplies ? (initialLink.view ?? undefined) : undefined}
             selectedId={selectedId}
             matches={matches}
-            onViewportChange={(view) => updateLink({ view })}
+            onViewportChange={handleMapViewport}
             onSelectedChange={handleSelectedChange}
             onHiddenTerritoriesChange={(ids) => setHiddenOnMap({ mapKey, ids })}
             // The drawer and the panel cover the map's right edge, so edge
@@ -570,8 +626,15 @@ export function App({ loadArxiv }: AppProps = {}) {
             // when it collapses again.
             insets={
               narrow
-                ? { bottom: selected !== null ? collapsedSheetHeight : 0 }
-                : { right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0 }
+                ? {
+                    bottom: itemSheetShown ? collapsedSheetHeight : 0,
+                    // The dialogue sheet hangs under the top bar while it is open.
+                    top: assistantOpen ? assistantPanelHeight(windowHeight, true) + GUTTER : 0,
+                  }
+                : {
+                    right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0,
+                    left: assistantOpen ? assistantWidth + 2 * GUTTER : 0,
+                  }
             }
           />
         ) : hasError ? (
@@ -595,7 +658,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         mapRef={mapReference}
         drawerOpen={selected !== null || panelOpen}
         narrow={narrow}
-        {...(narrow && selected !== null ? { coveredBottom: collapsedSheetHeight } : {})}
+        {...(narrow && itemSheetShown ? { coveredBottom: collapsedSheetHeight } : {})}
       />
       {narrow ? (
         <div data-bottom-strip data-floating-control style={bottomStripStyle}>
@@ -607,9 +670,30 @@ export function App({ loadArxiv }: AppProps = {}) {
           <Footer corpusId={corpusId} drawerOpen={selected !== null || panelOpen} />
         </>
       )}
+      <AssistantPanel
+        open={assistantOpen}
+        narrow={narrow}
+        topInset={topBarHeight}
+        windowHeight={windowHeight}
+        spec={current?.spec ?? NOTHING_TO_SEARCH}
+        selectedId={selectedId}
+        // Closed, the dialogue is not watching the view: an answer that lands then never frames.
+        view={assistantOpen ? assistantView : undefined}
+        width={assistantWidth}
+        onMatches={setMatches}
+        onReveal={(ids) => mapReference.current?.revealAll(ids)}
+        onRestore={(view) => mapReference.current?.setView(view)}
+        onSelect={(id) => {
+          setSelectedId(id);
+          mapReference.current?.reveal(id);
+          // The item's sheet takes the narrow screen back: the answer waits behind Ask AI.
+          if (narrow) handleCloseAssistant();
+        }}
+        onClose={handleCloseAssistant}
+      />
       <Drawer
         layout={narrow ? "sheet" : "side"}
-        node={selected}
+        node={narrow && assistantOpen ? null : selected}
         territoryName={territoryName}
         isArxiv={current?.id === "arxiv"}
         onClose={() => setSelectedId(null)}

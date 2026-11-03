@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { MapSpec } from "corpus-map";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -65,8 +65,9 @@ describe("demo indicator commits", () => {
 
   it("a zoom updates the indicator without re-rendering App", async () => {
     render(<App loadArxiv={async () => SPEC} />);
-    const indicator = await screen.findByText(/items$/);
-    const before = indicator.textContent;
+    // The indicator itself, not any text ending in "items": the accessible tree's buttons end that way too.
+    await waitFor(() => expect(document.querySelector("[data-indicator]")?.textContent).toMatch(/items$/));
+    const before = document.querySelector("[data-indicator]")?.textContent;
     vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
     const rendersBefore = mapRenders.count;
 

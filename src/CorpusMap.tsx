@@ -94,6 +94,10 @@ export interface CorpusMapHandle {
   reveal(id: string): void;
   /** Fits the view around the live items in `ids` inside the area `insets` leaves uncovered, at most once per call (reason `"interaction"`); unknown ids and ids of dimmed territories are ignored, and none left does nothing (spec search §3). */
   revealAll(ids: Iterable<string>): void;
+  /** Jumps to a public `MapViewport` (the shape `onViewportChange` reports), clamped to the zoom band (reason `"interaction"`); a view that cannot be drawn does nothing (spec assistant §2). */
+  setView(view: MapViewport): void;
+  /** The view drawn now, in the shape `onViewportChange` reports; `undefined` while the map has no box to draw in. It exists because the first spec's fit is never reported (spec assistant §2). */
+  getView(): MapViewport | undefined;
 }
 
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
@@ -1203,6 +1207,17 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     requestViewport((previous) => ({ ...previous, ...view }), "interaction");
   };
 
+  // Jumps to a public view; the handle's `setView`. A view that cannot be drawn
+  // makes `drawableView` answer the fit, which is not what was asked for, so
+  // that substitution is told apart and ignored.
+  const jumpTo = (view: MapViewport) => {
+    const clean = sanitise(view, ZOOM_BAND);
+    if (clean === null) return;
+    const drawn = drawableView(clean, fitted, width, height);
+    if (drawn === fitted && !sameView(toPublic(fitted, fitScale, width, height), clean)) return;
+    requestViewport(drawn, "interaction");
+  };
+
   // One zoom step (the wheel's notch) anchored at a box point: the box centre
   // for the handle and the keys, the tap for a double tap or a two-finger tap.
   const zoomStepAbout = (horizontal: number, vertical: number, direction: "in" | "out") => {
@@ -1244,6 +1259,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     focus: () => rootReference.current?.focus(),
     reveal: goTo,
     revealAll: goToAll,
+    setView: jumpTo,
+    getView: () => (ready ? toPublic(viewport, fitScale, width, height) : undefined),
   }));
 
   // Spoken once keyboard movement settles, so a held arrow key does not

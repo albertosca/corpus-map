@@ -5,6 +5,10 @@ export default defineConfig({
   root: "demo",
   resolve: {
     alias: [
+      {
+        find: /^corpus-map\/assistant$/,
+        replacement: fileURLToPath(new URL("./src/assistant/index.ts", import.meta.url)),
+      },
       { find: /^corpus-map\/search$/, replacement: fileURLToPath(new URL("./src/search/index.ts", import.meta.url)) },
       { find: /^corpus-map$/, replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
     ],

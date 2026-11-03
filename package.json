@@ -27,6 +27,10 @@
     "./search": {
       "types": "./dist/search/index.d.ts",
       "import": "./dist/search.js"
+    },
+    "./assistant": {
+      "types": "./dist/assistant/index.d.ts",
+      "import": "./dist/assistant.js"
     }
   },
   "files": [
@@ -34,7 +38,7 @@
   ],
   "scripts": {
     "prepare": "npm run build",
-    "build": "vite build && vite build --config vite.search.config.ts && tsc -p tsconfig.build.json",
+    "build": "vite build && vite build --config vite.search.config.ts && vite build --config vite.assistant.config.ts && tsc -p tsconfig.build.json",
     "dev": "vite --config vite.demo.config.ts",
     "build:demo": "vite build --config vite.demo.config.ts",
     "test": "vitest run --coverage",
@@ -48,10 +52,14 @@
   },
   "sizeLimit": {
     "file": "dist/corpus-map.js",
-    "maximumGzipBytes": 35290,
+    "maximumGzipBytes": 35355,
     "search": {
       "file": "dist/search.js",
       "maximumGzipBytes": 2270
+    },
+    "assistant": {
+      "file": "dist/assistant.js",
+      "maximumGzipBytes": 2410
     }
   },
   "devDependencies": {

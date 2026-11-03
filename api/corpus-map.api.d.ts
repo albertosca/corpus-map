@@ -23,6 +23,10 @@ export interface CorpusMapHandle {
     reveal(id: string): void;
     /** Fits the view around the live items in `ids` inside the area `insets` leaves uncovered, at most once per call (reason `"interaction"`); unknown ids and ids of dimmed territories are ignored, and none left does nothing (spec search §3). */
     revealAll(ids: Iterable<string>): void;
+    /** Jumps to a public `MapViewport` (the shape `onViewportChange` reports), clamped to the zoom band (reason `"interaction"`); a view that cannot be drawn does nothing (spec assistant §2). */
+    setView(view: MapViewport): void;
+    /** The view drawn now, in the shape `onViewportChange` reports; `undefined` while the map has no box to draw in. It exists because the first spec's fit is never reported (spec assistant §2). */
+    getView(): MapViewport | undefined;
 }
 /** The payload `onViewChange` fires: the committed regime, the scale ratio to the fitted scale, how many nodes are on screen (uncapped), and the presentation in effect. */
 export interface CorpusMapView {
@@ -265,6 +269,71 @@ export type Direction = "left" | "right" | "up" | "down";
 export declare function neighbourInDirection(from: MapNode, nodes: readonly MapNode[], direction: Direction): MapNode | null;
 /** The item nearest a world point, ties by id; where Enter starts the walk (spec spatial keys §4). */
 export declare function nearestTo(nodes: readonly MapNode[], horizontal: number, vertical: number): MapNode | null;
+
+// assistant/AssistantBox.d.ts
+import { type CSSProperties, type ReactElement } from "react";
+import type { MapSpec } from "../shared/spec";
+import type { MapViewport } from "../viewport/publicViewport";
+/** What the consumer's assistant is asked (spec assistant §3). */
+export interface AssistantRequest {
+    question: string;
+    /** The selected item when the spec knows it, else `null`. */
+    selectedId: string | null;
+    /** The turns of this session so far, oldest first. */
+    history: readonly AssistantTurn[];
+}
+/** One question and its answer, as the box keeps and sends them. */
+export interface AssistantTurn {
+    question: string;
+    answer: string;
+    /** The cited items the spec knows, deduplicated, in the answer's order. */
+    ids: readonly string[];
+}
+/** A whole answer: no streaming in the contract. */
+export interface AssistantAnswer {
+    text: string;
+    /** The cited items; ids the spec does not know are dropped. */
+    ids: readonly string[];
+}
+/** The consumer's AI: aborts `signal` when the reader asks again, clears the dialogue or the spec changes. */
+export type AssistantAdapter = (request: AssistantRequest, signal: AbortSignal) => Promise<AssistantAnswer>;
+export interface AssistantBoxProps {
+    /** The corpus the answers cite; a new spec object clears the dialogue. */
+    spec: MapSpec;
+    /** The consumer's AI. */
+    ask: AssistantAdapter;
+    /** The selected item: sent with every question, so "what is this?" can mean it. */
+    selectedId: string | null;
+    /** The consumer's current view (what `onViewportChange` reported), or `undefined` when it does not track one. */
+    view: MapViewport | undefined;
+    /** The items to highlight: pass it to `CorpusMap`'s `matches`; `null` when the answer cites none. */
+    onMatches: (ids: readonly string[] | null) => void;
+    /** Frame these items, once per answer (pair with `CorpusMapHandle.revealAll`). */
+    onReveal: (ids: readonly string[]) => void;
+    /** Go back to the view the reader had when asking (pair with `CorpusMapHandle.setView`). */
+    onRestore: (view: MapViewport) => void;
+    /** A cited item was pressed. */
+    onSelect: (id: string) => void;
+    /** The accessible name of the region and the input; "Assistant" by default. */
+    label?: string | undefined;
+    /** A line shown under the box, for example that the answers are not from an AI. */
+    notice?: string | undefined;
+    /** Gives every control a 44 px target, for a narrow box. */
+    touchTargets?: boolean | undefined;
+    /** Extra inline styles for the container. */
+    style?: CSSProperties | undefined;
+}
+/**
+ * A dialogue box for `CorpusMap` (spec assistant §4): the reader asks, the
+ * consumer's `ask` answers whole, the cited items are highlighted. One
+ * question at a time (a newer one aborts the older, whose answer is dropped),
+ * cleared by Clear or a new spec. Neutral inline styles that inherit the
+ * colour and the font, so it follows the page's theme.
+ */
+export declare function AssistantBox(properties: AssistantBoxProps): ReactElement;
+
+// assistant/index.d.ts
+export { type AssistantAdapter, type AssistantAnswer, AssistantBox, type AssistantBoxProps, type AssistantRequest, type AssistantTurn, } from "./AssistantBox";
 
 // cards/CardOverlay.d.ts
 import type { ReactElement, ReactNode } from "react";

@@ -170,6 +170,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
       <input
         ref={inputReference}
         type="text"
+        name="search"
         inputMode="search"
         autoComplete="off"
         spellCheck={false}

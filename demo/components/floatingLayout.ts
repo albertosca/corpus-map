@@ -108,3 +108,20 @@ export const FOOTER_MAXIMUM_WIDTH = 340;
  * Fit sits one gutter above it.
  */
 export const STRIP_HEIGHT_ESTIMATE = 40;
+
+/**
+ * The dialogue panel (spec assistant §7). Wide: a column at the left edge,
+ * above the bottom-left column and the footer when it is lifted (three lines
+ * of 12 px text at most, `FOOTER_LIFT_ESTIMATE`); narrow: a sheet under the
+ * top bar. Its height is a share of the window's, so the map keeps the rest.
+ */
+export const ASSISTANT_PANEL_WIDTH = 320;
+export const FOOTER_LIFT_ESTIMATE = 64;
+export const ASSISTANT_PANEL_BOTTOM = BOTTOM_ROW_HEIGHT + GUTTER + FOOTER_LIFT_ESTIMATE;
+const ASSISTANT_PANEL_WIDE_HEIGHT_SHARE = 0.4;
+const ASSISTANT_PANEL_NARROW_HEIGHT_SHARE = 0.45;
+
+/** The panel's height ceiling in whole pixels for a window of this height. */
+export function assistantPanelHeight(windowHeight: number, narrow: boolean): number {
+  return Math.round(windowHeight * (narrow ? ASSISTANT_PANEL_NARROW_HEIGHT_SHARE : ASSISTANT_PANEL_WIDE_HEIGHT_SHARE));
+}
