@@ -3,7 +3,7 @@ import { gzipSync } from "node:zlib";
 
 // React and react-dom are external in the Vite build, so this file is
 // exactly what a consumer adds on top of the peers they already have.
-const { file, maximumGzipBytes, search } = JSON.parse(readFileSync("package.json", "utf8")).sizeLimit;
+const { file, maximumGzipBytes, search, assistant } = JSON.parse(readFileSync("package.json", "utf8")).sizeLimit;
 const BADGE = "docs/badges/size.svg";
 
 const gzipBytesOf = (path) => {
@@ -16,12 +16,14 @@ const gzipBytesOf = (path) => {
 };
 const bytes = gzipBytesOf(file);
 
-// `corpus-map/search` is its own file with its own ceiling; the badge stays the main entry's.
-const searchBytes = gzipBytesOf(search.file);
-console.log(`size: ${search.file} is ${searchBytes} bytes gzipped (ceiling ${search.maximumGzipBytes})`);
-if (searchBytes > search.maximumGzipBytes) {
-  console.error(`size: ${search.file} is over the ceiling by ${searchBytes - search.maximumGzipBytes} bytes`);
-  process.exit(1);
+// `corpus-map/search` and `corpus-map/assistant` are their own files with their own ceilings; the badge stays the main entry's.
+for (const entry of [search, assistant]) {
+  const entryBytes = gzipBytesOf(entry.file);
+  console.log(`size: ${entry.file} is ${entryBytes} bytes gzipped (ceiling ${entry.maximumGzipBytes})`);
+  if (entryBytes > entry.maximumGzipBytes) {
+    console.error(`size: ${entry.file} is over the ceiling by ${entryBytes - entry.maximumGzipBytes} bytes`);
+    process.exit(1);
+  }
 }
 
 const kilobytes = (bytes / 1024).toFixed(1);
