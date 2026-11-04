@@ -95,6 +95,8 @@ describe("TuningPanel (showcase Task 7)", () => {
     expect(screen.getByLabelText(/Wheel sensitivity/)).toHaveProperty("value", String(DEFAULT_TUNING.wheelSensitivity));
     expect(screen.getByLabelText(/Pinch gain/)).toHaveProperty("value", String(DEFAULT_TUNING.pinchGain));
     expect(screen.getByLabelText(/Hover radius/)).toHaveProperty("value", String(DEFAULT_TUNING.hoverRadius));
+    expect(screen.getByLabelText(/Focus floor/)).toHaveProperty("value", String(DEFAULT_TUNING.focusFloor));
+    expect(screen.getByLabelText(/Focus full/)).toHaveProperty("value", String(DEFAULT_TUNING.focusFull));
     expect(screen.getByLabelText(/Label class: large/)).toHaveProperty(
       "value",
       String(DEFAULT_TUNING.labelClasses.large),

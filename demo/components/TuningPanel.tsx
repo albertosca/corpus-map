@@ -232,7 +232,8 @@ interface TuningFieldConfig {
  * `wheelSensitivity` must stay `> 0` (min just above it); `pinchGain` and
  * `hullPadding` likewise `> 0`; `maxZoomPerEvent` must stay `> 1`;
  * `hysteresis` must stay `< 0.5` (max just under it); `fadeBand` and
- * `hoverRadius` only need `>= 0`.
+ * `hoverRadius` only need `>= 0`; `focusFull` must stay `<= 1` and `focusFloor` below it (a pair that
+ * breaks that shows the library's own `RangeError`, like any other invalid draft).
  */
 const TUNING_FIELDS: readonly TuningFieldConfig[] = [
   { key: "wheelSensitivity", label: "Wheel sensitivity", min: 0.0005, max: 0.02, step: 0.0005 },
@@ -242,6 +243,8 @@ const TUNING_FIELDS: readonly TuningFieldConfig[] = [
   { key: "fadeBand", label: "Fade band", min: 0, max: 1, step: 0.05 },
   { key: "hullPadding", label: "Hull padding", min: 0.5, max: 8, step: 0.1 },
   { key: "hoverRadius", label: "Hover radius (px)", min: 0, max: 48, step: 1 },
+  { key: "focusFloor", label: "Focus floor (share of the largest family)", min: 0, max: 0.95, step: 0.05 },
+  { key: "focusFull", label: "Focus full (share of the largest family)", min: 0.05, max: 1, step: 0.05 },
 ];
 
 interface ThresholdFieldConfig {

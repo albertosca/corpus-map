@@ -774,6 +774,8 @@ export interface LabelBox {
     dimmed?: ReadonlySet<string> | undefined;
     /** Draw the family names compact, as a box narrower than `NARROW_BOX_WIDTH` does (spec mobile §4); absent means false. */
     compactGroupNames?: boolean | undefined;
+    /** Family id → weight (spec family focus §3): a family's leaf names are drawn at `(1 - groupAlpha) * weight`, its own name at the rest. Absent means every family at 1. */
+    focus?: ReadonlyMap<string, number> | undefined;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
@@ -1408,6 +1410,8 @@ export interface Frame {
     presentation?: Presentation | undefined;
     /** Group names' alpha this frame (spec categories §4); absent means 0. */
     groupAlpha?: number | undefined;
+    /** Each family's weight at mid and near (spec family focus §3): its leaves are drawn in proportion, the rest at the family level; absent means every family at 1. */
+    focus?: ReadonlyMap<string, number> | undefined;
     /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
     dimmed?: ReadonlySet<string> | undefined;
     /** The ids a search found (spec search §2): the rest are dimmed, these ringed; absent means no search is active. */
@@ -1826,6 +1830,14 @@ export interface Tuning {
      * through all of far.
      */
     groupNamesUntil: number;
+    /**
+     * At mid and near, the share of the largest family's on-screen items at or
+     * below which a family is drawn as a family, not as leaves (spec family
+     * focus §2); the weight rises smoothly to 1 at `focusFull`.
+     */
+    focusFloor: number;
+    /** The share of the largest family's on-screen items at or above which a family shows all its leaves. */
+    focusFull: number;
     /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
     edgesPerNode: number;
     /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2); narrower than an ellipsis, each line is the ellipsis alone. */
@@ -1931,6 +1943,26 @@ export declare function familyColours(shapes: ReadonlyMap<string, readonly Ring[
     groupColours: Map<string, string>;
 };
 
+// territories/familyFocus.d.ts
+export interface FocusOptions {
+    /** A share of the largest family at or below which a family shows no leaves. */
+    focusFloor: number;
+    /** A share at or above which a family shows all its leaves. */
+    focusFull: number;
+}
+/**
+ * Each family's weight in [0, 1] from how many items it has on screen (spec
+ * family focus §2): the largest family is 1, the rest follow the smoothstep of
+ * their share of it. Nothing on screen leaves every family at 1, which is the
+ * map as it was drawn before this existed.
+ */
+export declare function familyFocus(counts: ReadonlyMap<string, number>, options: FocusOptions): ReadonlyMap<string, number>;
+/** A family's two levels from the frame's group alpha and its weight: its leaves' and its own. */
+export declare function levelsOf(groupAlpha: number, weight: number): {
+    leaf: number;
+    family: number;
+};
+
 // territories/groups.d.ts
 import { type MapSpec } from "../shared/spec";
 /** Territories shown together in the legend and named together on the far map (spec categories §3). */
@@ -2007,8 +2039,14 @@ export declare const GROUP_OUTLINE_WIDTH = 2.5;
  * at `fillAlpha * familyAlpha`, then every family's outline on top at
  * `GROUP_OUTLINE_WIDTH` as the frame its children sit in. A family whose
  * every leaf is dimmed is drawn at `DIMMED_ALPHA`.
+ *
+ * `focus` (spec family focus §4) gives each family a weight; its leaves are
+ * drawn at `(1 - familyAlpha) * weight` and its own region at the rest. Shapes
+ * of one level share one layer (and one stroke alpha), so overlaps inside a
+ * level never darken and the steady state stays at two layers. Absent, or all
+ * 1, it draws exactly what it drew before; a leaf in no family counts as 1.
  */
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
