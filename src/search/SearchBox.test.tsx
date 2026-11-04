@@ -252,6 +252,18 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(onMatches).not.toHaveBeenCalled();
   });
 
+  it("takes its ids back when it unmounts holding an answer, and says nothing when it held none (whole-branch review I1)", async () => {
+    const holding = mount();
+    type("graphs");
+    await settle();
+    expect(lastCall(holding.onMatches)).toEqual(["alpha", "gamma"]);
+    holding.unmount();
+    expect(lastCall(holding.onMatches)).toBeNull();
+    const idle = mount();
+    idle.unmount();
+    expect(idle.onMatches).not.toHaveBeenCalled();
+  });
+
   it("clears on Escape and keeps the focus in the input", async () => {
     const { onMatches } = mount();
     type("graphs");

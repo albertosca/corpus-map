@@ -19,9 +19,21 @@ export interface FilterIndex {
   items: readonly { id: string; values: readonly string[] }[];
 }
 
-function optionsOf(found: ReturnType<FilterAttribute>): readonly FilterOption[] {
-  if (found === undefined) return [];
-  return typeof found === "string" || "value" in found ? [found] : found;
+/** The values an attribute gave for one item: nothing for `null`/`undefined`, a list as it is, anything else as a one-item list. */
+function optionsOf(found: unknown): readonly unknown[] {
+  if (found === undefined || found === null) return [];
+  return Array.isArray(found) ? found : [found];
+}
+
+/** One option as a value and a label; a JavaScript consumer's number or null is read forgivingly, not thrown on. */
+function readOption(option: unknown): { value: string; label: string } | null {
+  if (option === undefined || option === null) return null;
+  if (typeof option === "object") {
+    const { value, label } = option as { value?: unknown; label?: unknown };
+    if (value === undefined || value === null) return null;
+    return { value: String(value), label: label === undefined || label === null ? String(value) : String(label) };
+  }
+  return { value: String(option), label: String(option) };
 }
 
 function compareText(first: string, second: string): number {
@@ -39,15 +51,16 @@ export function buildFilterIndex(spec: MapSpec, attribute: FilterAttribute): Fil
   const items: { id: string; values: readonly string[] }[] = [];
   for (const node of spec.nodes) {
     const own: string[] = [];
-    for (const option of optionsOf(attribute(node))) {
-      const value = typeof option === "string" ? option : option.value;
+    for (const raw of optionsOf(attribute(node))) {
+      const option = readOption(raw);
+      if (option === null) continue;
+      const { value } = option;
       if (value === "" || own.includes(value)) continue;
       own.push(value);
       const known = tally.get(value);
       if (known) known.count += 1;
       else {
-        const label = typeof option === "string" ? option : option.label;
-        tally.set(value, { value, label: label === "" ? value : label, count: 1 });
+        tally.set(value, { value, label: option.label === "" ? value : option.label, count: 1 });
       }
     }
     items.push({ id: node.id, values: own });

@@ -59,7 +59,7 @@
     "maximumGzipBytes": 35480,
     "search": {
       "file": "dist/search.js",
-      "maximumGzipBytes": 2270
+      "maximumGzipBytes": 2290
     },
     "assistant": {
       "file": "dist/assistant.js",
@@ -67,7 +67,7 @@
     },
     "filter": {
       "file": "dist/filter.js",
-      "maximumGzipBytes": 2348
+      "maximumGzipBytes": 2458
     }
   },
   "devDependencies": {

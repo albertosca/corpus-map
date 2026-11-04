@@ -69,23 +69,31 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
   const panelReference = useRef<HTMLFieldSetElement>(null);
   // How far the open panel is moved sideways so it stays inside the window (0 or negative).
   const [shift, setShift] = useState(0);
-  useLayoutEffect(() => {
+  const place = () => {
     const element = panelReference.current;
     if (!open || !element) return;
-    const place = () => {
-      const box = element.getBoundingClientRect();
-      // No layout (a hidden or detached panel): nothing to measure, so nothing to move.
-      if (box.width === 0) return;
-      const naturalLeft = box.left - shift;
-      const naturalRight = box.right - shift;
-      const room = document.documentElement.clientWidth - WINDOW_MARGIN;
-      const next = Math.max(Math.min(0, room - naturalRight), WINDOW_MARGIN - naturalLeft);
-      if (next !== shift) setShift(next);
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [open, shift]);
+    const box = element.getBoundingClientRect();
+    // No layout (a hidden or detached panel): nothing to measure, so nothing to move.
+    if (box.width === 0) return;
+    const naturalLeft = box.left - shift;
+    const naturalRight = box.right - shift;
+    const room = document.documentElement.clientWidth - WINDOW_MARGIN;
+    const next = Math.max(Math.min(0, room - naturalRight), WINDOW_MARGIN - naturalLeft);
+    if (next !== shift) setShift(next);
+  };
+  // Measured after every render: a Menu that was closed while the window changed shows the panel again by rendering it,
+  // and a resize in the meantime reached no listener. It settles, because a shift only moves when the measure differs.
+  useLayoutEffect(place);
+  const placeReference = useRef(place);
+  useEffect(() => {
+    placeReference.current = place;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => placeReference.current();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open]);
   const panelIdentifier = useId();
   const emptyIdentifier = useId();
   // The newest props for the effect below, which reads them after the render that set them.
@@ -100,6 +108,13 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
     reported.current = selected.size > 0;
     latest.current.onMatches(idsFromIndex(latest.current.index, selected));
   }, [selected]);
+  // A box that goes away (a window resized to the narrow layout) takes its ids back, so nothing stays dimmed by a filter no one can see.
+  useEffect(
+    () => () => {
+      if (reported.current) latest.current.onMatches(null);
+    },
+    [],
+  );
 
   const choose = (next: ReadonlySet<string>) => {
     setSelected(next);

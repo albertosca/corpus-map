@@ -95,10 +95,13 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   // Bumped by every change that makes an answer in flight out of date.
   const generation = useRef(0);
   const touched = useRef(false);
+  // Whether the consumer holds ids from this box, so unmounting hands them back (a window resized to another layout).
+  const holding = useRef(false);
 
   useEffect(
     () => () => {
       generation.current += 1;
+      if (holding.current) latest.current.onMatches(null);
     },
     [],
   );
@@ -110,6 +113,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     const trimmed = query.trim();
     if (trimmed === "") {
       touched.current = query !== "";
+      holding.current = false;
       latest.current.onMatches(null);
       return;
     }
@@ -133,12 +137,14 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         if (generation.current !== mine) return;
         releaseFocus();
         setStatus((previous) => announced(previous, { kind: "failed" }));
+        holding.current = false;
         latest.current.onMatches(null);
         return;
       }
       if (generation.current !== mine) return;
       if (ids.length === 0) releaseFocus();
       setStatus((previous) => announced(previous, { kind: "found", count: ids.length }));
+      holding.current = true;
       latest.current.onMatches(ids);
     }, SEARCH_DEBOUNCE_MILLISECONDS);
     return () => clearTimeout(timer);

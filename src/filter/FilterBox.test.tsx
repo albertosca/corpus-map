@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MapSpec } from "../shared/spec";
 import { FilterBox, type FilterBoxProps } from "./FilterBox";
@@ -191,6 +191,44 @@ describe("FilterBox (spec filter §3, §5)", () => {
       mount();
       openPanel();
       expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("-312px");
+      rect.mockRestore();
+      clientWidth.mockRestore();
+    });
+
+    it("shifts a panel that sits too far left back to the margin (the left-edge branch)", () => {
+      const clientWidth = vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+      const rect = stubBox(-50, 350);
+      mount();
+      openPanel();
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("62px");
+      rect.mockRestore();
+      clientWidth.mockRestore();
+    });
+
+    it("moves the panel again when the window changes while it was hidden, on the next render (whole-branch review, minor 3)", () => {
+      const clientWidth = vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+      const rect = stubBox(900, 1300);
+      const { onMatches, rerender } = mount();
+      openPanel();
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("-312px");
+      // A resize while the Menu was closed reached no listener (the panel had no box); showing the Menu renders the box again.
+      clientWidth.mockReturnValue(800);
+      rerender(<FilterBox spec={spec} attribute={kinds} onMatches={onMatches} />);
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("-512px");
+      rect.mockRestore();
+      clientWidth.mockRestore();
+    });
+
+    it("re-places the open panel when the window is resized", () => {
+      const clientWidth = vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+      const rect = stubBox(900, 1300);
+      mount();
+      openPanel();
+      clientWidth.mockReturnValue(800);
+      act(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("-512px");
       rect.mockRestore();
       clientWidth.mockRestore();
     });

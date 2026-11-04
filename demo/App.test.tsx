@@ -2485,6 +2485,8 @@ describe("App (showcase Task 5)", () => {
       expect(await isMatch("Graph matching")).toBe(true);
     });
 
+    // The map reads an empty list as "dim everything" and null as "no constraint"; the tree marks a match the same way for
+    // both, so that difference is pinned where it can be seen: intersectMatches' and CorpusMap.matches.test.tsx's own tests.
     it("lights nothing when the search finds only what the filter excludes (an intersection, not a winner)", async () => {
       await renderApp(FILTER_SPEC);
       await screen.findByText(/1\.0×/);
@@ -2495,6 +2497,56 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText("1 result");
       await waitFor(async () => expect(await isMatch("Graph matching")).toBe(false));
       expect(await isMatch("Graph colouring")).toBe(false);
+    });
+
+    const scale = () => screen.getByText(/\d+\.\d×/).textContent;
+    const showOnMap = async () => {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Show on map" }));
+      });
+    };
+
+    it("frames only the intersection with Show on map, and the search's own items when the filter excludes them all (whole-branch review, minor 1)", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "filler" } });
+      await screen.findByText("2 results");
+      await showOnMap();
+      const intersection = scale();
+      fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+      await showOnMap();
+      expect(intersection).not.toBe(scale());
+      fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+      const fitted = scale();
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "colouring" } });
+      await screen.findByText("1 result");
+      await showOnMap();
+      expect(scale()).not.toBe(fitted);
+    });
+
+    it("frames only the intersection of the dialogue's answer with the filter (whole-branch review, minor 2)", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      const initial = scale();
+      fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+      const question = screen.getByRole("textbox", { name: "Assistant" });
+      fireEvent.change(question, { target: { value: "filler" } });
+      fireEvent.submit(question.closest("form") as HTMLFormElement);
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      await waitFor(() => expect(scale()).not.toBe(initial));
+      const wholeAnswer = scale();
+      fireEvent.click(screen.getByRole("button", { name: "Back to previous view" }));
+      await waitFor(() => expect(scale()).toBe(initial));
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(question, { target: { value: "filler " } });
+      fireEvent.submit(question.closest("form") as HTMLFormElement);
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      await waitFor(() => expect(scale()).not.toBe(initial));
+      expect(scale()).not.toBe(wholeAnswer);
     });
 
     it("composes with the dialogue's answer: picking narrows it, clearing brings the answer back", async () => {
@@ -2521,10 +2573,15 @@ describe("App (showcase Task 5)", () => {
       fireEvent.click(filterButton());
       fireEvent.click(categoryBox(LEARNING));
       expect(filterButton().textContent).toBe("Filter (1)");
+      zoomToNear();
+      await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
       fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
       await waitFor(() => expect(screen.queryByRole("button", { name: /^Filter/ })).toBeNull());
       fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
       await waitFor(() => expect(filterButton().textContent).toBe("Filter"));
+      // The old ids are gone from the map too, not only from the button (whole-branch review I2).
+      zoomToNear();
+      expect(await isMatch("Graph matching")).toBe(false);
     });
 
     it("keeps the open panel in the floating-control overflow check", async () => {
@@ -2541,14 +2598,37 @@ describe("App (showcase Task 5)", () => {
         Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: originalInnerWidth });
       });
 
-      it("puts the Filter in the Menu, where a picked category still counts", async () => {
-        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 375 });
+      it("lets go of the dimming when a resize unmounts the picked filter (whole-branch review I1)", async () => {
         await renderApp(FILTER_SPEC);
         await screen.findByText(/1\.0×/);
-        fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+        zoomToNear();
+        fireEvent.click(filterButton());
+        fireEvent.click(categoryBox(LEARNING));
+        await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
+        act(() => {
+          Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 375 });
+          window.dispatchEvent(new Event("resize"));
+        });
+        await waitFor(() => expect(screen.queryByRole("button", { name: /^Filter/ })).toBeNull());
+        // No constraint left: the tree marks no match at all (a match is only marked while a search or filter is active).
+        await waitFor(async () => expect(await isMatch("Graph matching")).toBe(false));
+      });
+
+      it("puts the Filter in the Menu, where a picked category still dims the map (whole-branch review, minor 6)", async () => {
+        // Zoomed in while wide (the narrow bar has no zoom buttons), then narrowed: the scale is kept, so items are buttons.
+        await renderApp(FILTER_SPEC);
+        await screen.findByText(/1\.0×/);
+        zoomToNear();
+        act(() => {
+          Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 375 });
+          window.dispatchEvent(new Event("resize"));
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "Menu" }));
         fireEvent.click(filterButton());
         fireEvent.click(categoryBox(LEARNING));
         expect(filterButton().textContent).toBe("Filter (1)");
+        await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
+        expect(await isMatch("Graph colouring")).toBe(false);
       });
     });
   });

@@ -144,6 +144,15 @@ const NOTHING_HIDDEN: readonly string[] = [];
 const NOTHING_TO_SEARCH: MapSpec = { version: "1", territories: [], nodes: [] };
 
 /**
+ * What a search or an answer is framed on: the part of it the filter lets through, so the view lands on what is lit.
+ * When the filter excludes all of it nothing is lit, and the press still answers by framing the items themselves.
+ */
+function framing(ids: readonly string[], filterMatches: readonly string[] | null): readonly string[] {
+  const lit = intersectMatches(ids, filterMatches);
+  return lit !== null && lit.length > 0 ? lit : ids;
+}
+
+/**
  * The one async corpus's (arXiv's) most recently settled load.
  *
  * Fix round 2: this used to carry an `attempt` number tagged with the
@@ -596,7 +605,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           // While the corpus loads there is nothing to search: an empty spec keeps the box (and the bar's height) in place.
           spec: current?.spec ?? NOTHING_TO_SEARCH,
           onMatches: setSearchMatches,
-          onShow: () => mapReference.current?.revealAll(matches ?? []),
+          onShow: () => mapReference.current?.revealAll(framing(searchMatches ?? [], filterMatches)),
         }}
         filter={
           // Like the search, mounted with an empty spec while the corpus loads, so a retry clears it.
@@ -692,7 +701,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         view={assistantOpen ? assistantView : undefined}
         width={assistantWidth}
         onMatches={setSearchMatches}
-        onReveal={(ids) => mapReference.current?.revealAll(ids)}
+        onReveal={(ids) => mapReference.current?.revealAll(framing(ids, filterMatches))}
         onRestore={(view) => mapReference.current?.setView(view)}
         onSelect={(id) => {
           setSelectedId(id);

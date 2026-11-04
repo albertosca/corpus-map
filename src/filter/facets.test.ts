@@ -54,6 +54,20 @@ describe("facetsOf (spec filter §3)", () => {
     expect(facetsOf(specOf([node("only")]), empty)).toEqual([{ value: "v", label: "v", count: 1 }]);
   });
 
+  it("survives an attribute that returns null, a number or a list holding null (a JS consumer; whole-branch review, minor 5)", () => {
+    const loose = specOf([
+      node("a", { year: 2024 }),
+      node("b", { year: null }),
+      node("c", { year: [null, 2023, 2024] }),
+    ]);
+    const years = ((current: MapNode) => (current.meta as { year: unknown }).year) as unknown as FilterAttribute;
+    expect(facetsOf(loose, years)).toEqual([
+      { value: "2023", label: "2023", count: 1 },
+      { value: "2024", label: "2024", count: 2 },
+    ]);
+    expect(idsMatching(loose, years, ["2024"])).toEqual(["a", "c"]);
+  });
+
   it("is empty when no item has the attribute", () => {
     expect(facetsOf(specOf([node("rock")]), kinds)).toEqual([]);
   });
