@@ -103,7 +103,7 @@ describe("paintTerritories with a family focus (spec family focus §4)", () => {
     expect(surface.layers).toHaveLength(3);
     expect(surface.layers[0]).toBeCloseTo(FILL_ALPHA);
     expect(surface.layers[1]).toBeCloseTo(FILL_ALPHA * 0.5);
-    expect(surface.layers[2]).toBeCloseTo(FILL_ALPHA * 0.5);
+    expect(surface.layers[2]).toBeCloseTo((FILL_ALPHA * 0.5) / (1 - FILL_ALPHA * 0.5));
     const halfOutline = surface.outlines.filter((outline) => outline.width === TERRITORY_OUTLINE_WIDTH);
     expect(halfOutline.map((outline) => outline.color)).toEqual([
       "#a10000",
@@ -153,5 +153,47 @@ describe("paintTerritories with a family focus (spec family focus §4)", () => {
     const halfLayer = surface.layers.findIndex((alpha) => Math.abs(alpha - FILL_ALPHA * 0.5) < 1e-9);
     expect(halfLayer).toBeGreaterThanOrEqual(0);
     expect(surface.alphas).toContain(DIMMED_ALPHA);
+  });
+});
+
+describe("paintTerritories keeps the fill as opaque as at rest through a transition (review M-6)", () => {
+  // Layers composite one over the other, so where a leaf and its family overlap the opacity is 1 - (1 - leaf) * (1 - family).
+  // The loose leaf (in no family) has a layer of its own at FILL_ALPHA, which is not part of A's or B's pixel.
+  const composite = (surface: RecordingSurface) =>
+    1 - surface.layers.filter((alpha) => alpha !== FILL_ALPHA).reduce((rest, alpha) => rest * (1 - alpha), 1);
+
+  it("composites a leaf and its family to FILL_ALPHA at every group alpha, not below it", () => {
+    for (const familyAlpha of [0.1, 0.25, 0.5, 0.75, 0.9])
+      expect(
+        composite(
+          paint(
+            familyAlpha,
+            new Map([
+              ["A", 1],
+              ["B", 1],
+            ]),
+          ),
+        ),
+      ).toBeCloseTo(FILL_ALPHA, 10);
+  });
+
+  it("does the same for a family the focus has taken part-way down", () => {
+    for (const weight of [0.2, 0.5, 0.8])
+      expect(
+        composite(
+          paint(
+            0,
+            new Map([
+              ["A", weight],
+              ["B", weight],
+            ]),
+          ),
+        ),
+      ).toBeCloseTo(FILL_ALPHA, 10);
+  });
+
+  it("is unchanged at rest: leaves alone at 0, families alone at 1", () => {
+    expect(paint(0).layers).toEqual([FILL_ALPHA]);
+    expect(paint(1).layers).toEqual([FILL_ALPHA]);
   });
 });

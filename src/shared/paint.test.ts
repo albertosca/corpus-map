@@ -649,7 +649,9 @@ describe("families (spec slice E §4)", () => {
 
   it("cross-fades the two fill layers inside the band", () => {
     const surface = record(0.25);
-    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha * 0.75, DEFAULT_THEME.territoryFillAlpha * 0.25]);
+    const fill = DEFAULT_THEME.territoryFillAlpha;
+    // The families' layer goes over the leaves', at the alpha that keeps the pair as opaque as at rest (review M-6).
+    expect(surface.layers).toEqual([fill * 0.75, (fill * 0.25) / (1 - fill * 0.75)]);
   });
 
   it("paints a family of one child once in the fill layer", () => {

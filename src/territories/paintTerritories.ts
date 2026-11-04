@@ -155,7 +155,11 @@ export function paintTerritories(
   const familyLevels = familyOrder.map((id) => levelsOf(familyAlpha, focus?.get(id) ?? 1).family);
   const leafGroups = byLevel(leaves, leafLevels);
   for (const [level, group] of leafGroups) fillLayer(surface, group, fillAlpha * level);
-  for (const [level, group] of byLevel(families, familyLevels)) fillLayer(surface, group, fillAlpha * level);
+  // The family layer goes over its leaves' layer, so it is drawn at the alpha that leaves the pair as opaque as
+  // `fillAlpha` itself: 1 - (1 - fillAlpha * leaf) * (1 - alpha) = fillAlpha. Without it a mid transition showed
+  // a lighter fill than either end (review M-6). At level 1 (no leaf layer under it) this is `fillAlpha`.
+  for (const [level, group] of byLevel(families, familyLevels))
+    fillLayer(surface, group, (fillAlpha * level) / (1 - fillAlpha * (1 - level)));
   for (const [level, group] of leafGroups) outlines(surface, group, TERRITORY_OUTLINE_WIDTH, level);
   outlines(surface, families, GROUP_OUTLINE_WIDTH, 1);
 }
