@@ -30,6 +30,6 @@ export function familyFocus(counts: ReadonlyMap<string, number>, options: FocusO
 
 /** A family's two levels from the frame's group alpha and its weight: its leaves' and its own. */
 export function levelsOf(groupAlpha: number, weight: number): { leaf: number; family: number } {
-  const leaf = (1 - groupAlpha) * weight;
-  return { leaf, family: 1 - leaf };
+  // Written so that weight 1 gives exactly `groupAlpha` and weight 0 exactly 1 at group alpha 0: no rounding noise in the unfocused map.
+  return { leaf: (1 - groupAlpha) * weight, family: groupAlpha + (1 - groupAlpha) * (1 - weight) };
 }

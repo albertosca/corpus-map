@@ -39,6 +39,8 @@ export interface Frame {
   presentation?: Presentation | undefined;
   /** Group names' alpha this frame (spec categories §4); absent means 0. */
   groupAlpha?: number | undefined;
+  /** Each family's weight at mid and near (spec family focus §3): its leaves are drawn in proportion, the rest at the family level; absent means every family at 1. */
+  focus?: ReadonlyMap<string, number> | undefined;
   /** Territory ids drawn at `DIMMED_ALPHA` (spec categories §5); absent means none. */
   dimmed?: ReadonlySet<string> | undefined;
   /** The ids a search found (spec search §2): the rest are dimmed, these ringed; absent means no search is active. */
@@ -76,7 +78,7 @@ export function paint(
   surface.clear();
   const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
   const dimmed = frame.dimmed ?? NO_DIMMED;
-  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0);
+  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0, frame.focus);
   // A search shows its result at every regime, far included (where a corpus opens): the points are drawn at full strength then.
   const searching = frame.matches !== undefined;
   const pointAlpha = searching ? 1 : frame.pointAlpha;

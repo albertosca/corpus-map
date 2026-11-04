@@ -4,6 +4,7 @@ import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { toScreen, type Viewport } from "../viewport/viewport";
 import { largestFirst } from "./colour";
+import { levelsOf } from "./familyFocus";
 import type { Ring } from "./shape";
 
 /** Territory outline width in CSS pixels (spec slice D §3). */
@@ -80,6 +81,19 @@ function outlines(surface: Surface, projected: readonly Projected[], width: numb
   if (current !== 1) surface.globalAlpha(1);
 }
 
+/** The projected shapes grouped by their level, in order of first appearance; a level of 0 draws nothing. */
+function byLevel(projected: readonly Projected[], levels: readonly number[]): Array<[number, Projected[]]> {
+  const groups = new Map<number, Projected[]>();
+  projected.forEach((shape, position) => {
+    const level = levels[position] as number;
+    if (level <= 0) return;
+    const group = groups.get(level);
+    if (group) group.push(shape);
+    else groups.set(level, [shape]);
+  });
+  return [...groups];
+}
+
 /**
  * Fills every territory opaque, largest first, into one layer composited at
  * `fillAlpha`, so each pixel shows the colour of the smallest territory
@@ -94,6 +108,12 @@ function outlines(surface: Surface, projected: readonly Projected[], width: numb
  * at `fillAlpha * familyAlpha`, then every family's outline on top at
  * `GROUP_OUTLINE_WIDTH` as the frame its children sit in. A family whose
  * every leaf is dimmed is drawn at `DIMMED_ALPHA`.
+ *
+ * `focus` (spec family focus §4) gives each family a weight; its leaves are
+ * drawn at `(1 - familyAlpha) * weight` and its own region at the rest. Shapes
+ * of one level share one layer (and one stroke alpha), so overlaps inside a
+ * level never darken and the steady state stays at two layers. Absent, or all
+ * 1, it draws exactly what it drew before; a leaf in no family counts as 1.
  */
 export function paintTerritories(
   surface: Surface,
@@ -103,6 +123,7 @@ export function paintTerritories(
   fillAlpha: number,
   dimmed: ReadonlySet<string> = NO_DIMMED,
   familyAlpha = 0,
+  focus?: ReadonlyMap<string, number>,
 ): void {
   const leaves = project(
     scene.paintOrder,
@@ -118,16 +139,23 @@ export function paintTerritories(
     return;
   }
   const membersOf = new Map(scene.groups.map((group) => [group.id, group.members]));
+  const familyOfLeaf = new Map(scene.groups.flatMap((group) => group.members.map((member) => [member, group.id])));
+  const familyOrder = largestFirst(scene.groupShapes);
   const families = project(
-    largestFirst(scene.groupShapes),
+    familyOrder,
     scene.groupShapes,
     scene.groupColours,
     theme.pointNeutral,
     (id) => (membersOf.get(id) ?? []).every((member) => dimmed.has(member)),
     viewport,
   );
-  if (familyAlpha < 1) fillLayer(surface, leaves, fillAlpha * (1 - familyAlpha));
-  if (familyAlpha > 0) fillLayer(surface, families, fillAlpha * familyAlpha);
-  if (familyAlpha < 1) outlines(surface, leaves, TERRITORY_OUTLINE_WIDTH, 1 - familyAlpha);
+  const leafLevels = scene.paintOrder.map(
+    (id) => levelsOf(familyAlpha, focus?.get(familyOfLeaf.get(id) ?? "") ?? 1).leaf,
+  );
+  const familyLevels = familyOrder.map((id) => levelsOf(familyAlpha, focus?.get(id) ?? 1).family);
+  const leafGroups = byLevel(leaves, leafLevels);
+  for (const [level, group] of leafGroups) fillLayer(surface, group, fillAlpha * level);
+  for (const [level, group] of byLevel(families, familyLevels)) fillLayer(surface, group, fillAlpha * level);
+  for (const [level, group] of leafGroups) outlines(surface, group, TERRITORY_OUTLINE_WIDTH, level);
   outlines(surface, families, GROUP_OUTLINE_WIDTH, 1);
 }
