@@ -1,7 +1,7 @@
 import { paintFocusedNode, paintFocusedTerritory } from "../a11y/paintFocus";
 import { paintEdges } from "../edges/paintEdges";
 import type { PlacedItemLabel } from "../labels/itemLabels";
-import { paintItemLabels } from "../labels/paintItemLabels";
+import { drawnItemLabels, paintItemLabels } from "../labels/paintItemLabels";
 import { paintLabels } from "../labels/paintLabels";
 import type { Regime } from "../lod/lod";
 import { paintMatches } from "../points/paintMatches";
@@ -105,5 +105,17 @@ export function paint(
   if (typeof frame.focusedTerritory === "string")
     paintFocusedTerritory(surface, scene, viewport, theme, frame.focusedTerritory);
   if (typeof frame.focusedNode === "string") paintFocusedNode(surface, scene, viewport, theme, frame.focusedNode);
-  paintLabels(surface, scene, viewport, theme, frame);
+  const platesShown = frame.regime === "near" && (frame.itemLabelAlpha ?? 0) > 0 && frame.itemLabels !== undefined;
+  paintLabels(surface, scene, viewport, theme, {
+    ...frame,
+    itemPlates: platesShown
+      ? drawnItemLabels(frame.itemLabels ?? [], viewport, {
+          width: frame.width,
+          height: frame.height,
+          dimmed,
+          matches: frame.matches,
+        })
+      : undefined,
+    itemPlateAlpha: pointAlpha * (frame.itemLabelAlpha ?? 0),
+  });
 }

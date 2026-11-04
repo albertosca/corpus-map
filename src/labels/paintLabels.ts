@@ -5,6 +5,7 @@ import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { levelsOf } from "../territories/familyFocus";
 import { toScreen, type Viewport } from "../viewport/viewport";
+import type { PlacedItemLabel } from "./itemLabels";
 import type { PlacedLabel } from "./placement";
 
 /** The canvas's CSS size; a name larger than it is never drawn. */
@@ -21,6 +22,10 @@ export interface LabelBox {
   compactGroupNames?: boolean | undefined;
   /** Family id → weight (spec family focus §3): a family's leaf names are drawn at `(1 - groupAlpha) * weight`, its own name at the rest. Absent means every family at 1. */
   focus?: ReadonlyMap<string, number> | undefined;
+  /** The item label plates drawn this frame (near only; review I-2): a family name gives way to one it overlaps, by `itemPlateAlpha`. Absent means none. */
+  itemPlates?: readonly PlacedItemLabel[] | undefined;
+  /** The alpha the plates are drawn at; absent means 0. */
+  itemPlateAlpha?: number | undefined;
 }
 
 interface Item {
@@ -31,21 +36,59 @@ interface Item {
   letterSpacing?: string;
 }
 
-/** The highest level among the drawn leaf names whose box overlaps `label`'s, 0 when none does. Both boxes are centred on their anchors and measured in screen pixels. */
+/** How far two name boxes must overlap, in screen pixels, before one gives way completely: a smaller overlap fades it in proportion, so a zoom across the edge never pops it. */
+const OVERLAP_BAND = 8;
+
+/**
+ * How much of `label`'s box the box of width/height centred `(offsetAcross, offsetDown)` screen pixels away
+ * covers, in [0, 1]: 0 when they only touch, 1 from `OVERLAP_BAND` pixels of overlap.
+ */
+function coverage(offsetAcross: number, offsetDown: number, width: number, height: number, label: PlacedLabel): number {
+  const across = (width + label.width) / 2 - Math.abs(offsetAcross);
+  const down = (height + label.height) / 2 - Math.abs(offsetDown);
+  return across <= 0 || down <= 0 ? 0 : Math.min(1, Math.min(across, down) / OVERLAP_BAND);
+}
+
+/**
+ * The strongest cover over `label` by a drawn item label plate. Both are measured in screen pixels
+ * from the anchors and the plate's offset, so a pan changes neither the answer nor the fade.
+ */
+function platedOver(label: PlacedLabel, plates: readonly PlacedItemLabel[], scale: number): number {
+  let strongest = 0;
+  for (const plate of plates)
+    strongest = Math.max(
+      strongest,
+      coverage(
+        (plate.anchor[0] - label.anchor[0]) * scale + plate.offset[0],
+        (plate.anchor[1] - label.anchor[1]) * scale + plate.offset[1],
+        plate.width,
+        plate.height,
+        label,
+      ),
+    );
+  return strongest;
+}
+
+/** The strongest cover over `label` by a drawn leaf name, at that name's drawn alpha. Both boxes are centred on their anchors and measured in screen pixels. */
 function boxedBy(
   label: PlacedLabel,
-  drawn: ReadonlyArray<{ label: PlacedLabel; level: number }>,
+  drawn: ReadonlyArray<{ label: PlacedLabel; alpha: number }>,
   scale: number,
 ): number {
-  let highest = 0;
-  for (const { label: leaf, level } of drawn)
-    if (
-      level > highest &&
-      Math.abs(leaf.anchor[0] - label.anchor[0]) * scale < (leaf.width + label.width) / 2 &&
-      Math.abs(leaf.anchor[1] - label.anchor[1]) * scale < (leaf.height + label.height) / 2
-    )
-      highest = level;
-  return highest;
+  let strongest = 0;
+  for (const { label: leaf, alpha } of drawn)
+    strongest = Math.max(
+      strongest,
+      alpha *
+        coverage(
+          (leaf.anchor[0] - label.anchor[0]) * scale,
+          (leaf.anchor[1] - label.anchor[1]) * scale,
+          leaf.width,
+          leaf.height,
+          label,
+        ),
+    );
+  return strongest;
 }
 
 /**
@@ -91,20 +134,22 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
     if (label && label.id !== group.id && label.name === group.name && fits(label))
       handedOver.add(group.id).add(label.id);
   }
-  const drawnLeaves: Array<{ label: PlacedLabel; level: number }> = [];
+  // Each leaf name drawn, at the alpha it is drawn at, so a family name gives way to what is really on screen.
+  const drawnLeaves: Array<{ label: PlacedLabel; alpha: number }> = [];
   for (const label of scene.labels) {
     if (!fits(label)) continue;
     const level = levelsOf(groupAlpha, weightOf(familyOfLeaf.get(label.id))).leaf;
     if (level <= 0 && !handedOver.has(label.id)) continue;
-    if (level > 0) drawnLeaves.push({ label, level });
+    const alpha =
+      (handedOver.has(label.id) ? 1 : level) *
+      (box.presentation === "dense" && label.labelClass !== "large" ? DENSE_NAME_ALPHA : 1) *
+      fadeOf(dimmed.has(label.id));
+    if (alpha > 0) drawnLeaves.push({ label, alpha });
     items.push({
       name: label.name,
       anchor: label.anchor,
       font: theme.territoryFonts[label.labelClass],
-      alpha:
-        (handedOver.has(label.id) ? 1 : level) *
-        (box.presentation === "dense" && label.labelClass !== "large" ? DENSE_NAME_ALPHA : 1) *
-        fadeOf(dimmed.has(label.id)),
+      alpha,
     });
   }
   const [groupLabels, groupFont] = box.compactGroupNames
@@ -117,7 +162,13 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
     if (level <= 0) continue;
     // A family the focus has taken down a level shares the map with leaf names it was not placed
     // against: it gives way to a drawn leaf name that boxes it, by that name's level (no pop on pan).
-    const clear = weight < 1 ? 1 - boxedBy(label, drawnLeaves, viewport.scale) : 1;
+    const underLeaf = weight < 1 ? 1 - boxedBy(label, drawnLeaves, viewport.scale) : 1;
+    // And to an item label plate drawn over it at near, which was placed against the leaf names only.
+    const underPlate =
+      box.itemPlates === undefined
+        ? 1
+        : 1 - platedOver(label, box.itemPlates, viewport.scale) * (box.itemPlateAlpha ?? 0);
+    const clear = underLeaf * underPlate;
     if (clear <= 0) continue;
     items.push({
       name: label.name,

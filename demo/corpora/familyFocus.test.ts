@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_ITEM_LABEL_FONT, placeItemLabels } from "../../src/labels/itemLabels";
+import { drawnItemLabels, itemLabelRect } from "../../src/labels/paintItemLabels";
 import { estimateText } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { groupNameAlpha, regimeAt } from "../../src/lod/regime";
@@ -30,6 +32,9 @@ const BOXES = [
 ] as const;
 /** The zooms (ratio of the fit) the sweeps visit: the demo's mid for arXiv starts at 2 and its near at 2.5. */
 const RATIOS = [2, 2.5, 3, 4];
+
+/** How far (px) two name boxes may overlap and still be a graze: the painter fades a family name in proportion up to `OVERLAP_BAND` (8) pixels of overlap, so the sweeps count only deeper overlaps. */
+const OVERLAP_MARGIN = 8;
 
 /** The fitted view `CorpusMap` opens on. */
 function fitAt(width: number, height: number): Viewport {
@@ -151,6 +156,37 @@ describe("metric 19: only the dominant family is drawn as leaves (arXiv, painted
   }
 });
 
+describe("metric 19 (outlines): a family out of focus draws no leaf outlines (arXiv, painted)", () => {
+  it("metric 19: the focus removes leaf outlines at mid and never adds any", () => {
+    const [width, height] = BOXES[0];
+    const fit = fitAt(width, height);
+    const outlinesOf = (viewport: Viewport, ratio: number, focus?: Map<string, number>) => {
+      const regime = regimeFor(ratio);
+      const surface = new RecordingSurface();
+      paint(
+        surface,
+        scene,
+        spec,
+        viewport,
+        { regime, pointAlpha: 0, width, height, groupAlpha: groupNameAlpha(ratio, regime, options), focus },
+        DEFAULT_THEME,
+      );
+      return surface.outlines.reduce((sum, outline) => sum + outline.rings.length, 0);
+    };
+    let removed = 0;
+    for (const group of scene.groups) {
+      const viewport = viewAt(fit, width, height, 3, centreOf(group.members));
+      const { weights } = weightsAt(viewport, width, height);
+      const without = outlinesOf(viewport, 3);
+      const withFocus = outlinesOf(viewport, 3, new Map(weights));
+      expect(withFocus).toBeLessThanOrEqual(without);
+      removed += without - withFocus;
+    }
+    // Non-vacuous: somewhere a family was out of focus with leaf outlines to lose.
+    expect(removed).toBeGreaterThan(0);
+  });
+});
+
 /** Every drawn name with the alpha it was drawn at, in order. */
 function drawnWithAlpha(surface: RecordingSurface) {
   let current = 1;
@@ -198,8 +234,8 @@ describe("risk 2: a family name beside leaf names at mid (arXiv, painted)", () =
           for (const family of names.filter((entry) => familyNames.has(entry.text)))
             for (const leaf of names.filter((entry) => !familyNames.has(entry.text)))
               if (
-                Math.abs(family.x - leaf.x) < (family.width + leaf.width) / 2 &&
-                Math.abs(family.y - leaf.y) < (family.height + leaf.height) / 2
+                Math.abs(family.x - leaf.x) < (family.width + leaf.width) / 2 - OVERLAP_MARGIN &&
+                Math.abs(family.y - leaf.y) < (family.height + leaf.height) / 2 - OVERLAP_MARGIN
               ) {
                 boxed += 1;
                 strongest = Math.max(strongest, Math.min(family.alpha, leaf.alpha));
@@ -283,4 +319,100 @@ describe("continuity: a pan across a family boundary at mid changes no name's al
       expect(largest).toBeGreaterThan(0);
     });
   }
+});
+
+describe("continuity at near: a small pan moves no family's weight by more than a stated step (review I-1)", () => {
+  // A frame is one 2% of the box width of pan; at near that is a few items entering or leaving.
+  const PAN_FRACTION = 0.02;
+  const FRAMES = 60;
+  // Measured 0.48 (1440x900) and 0.30 (375x812) at ratios 4, 8 and 16: with hundreds of items on screen a pan that crosses a dense cluster moves a share by whole steps; the low-count jump to 0 (review I-1) is what the confidence blend removed.
+  const MAXIMUM_WEIGHT_JUMP = 0.55;
+  for (const [width, height] of BOXES) {
+    it(`no weight jumps by more than ${MAXIMUM_WEIGHT_JUMP} between frames, at ${width}x${height}`, () => {
+      const fit = fitAt(width, height);
+      let frames = 0;
+      let largest = 0;
+      let where = "";
+      for (const ratio of [4, 8, 16])
+        for (const [origin, destination] of neighbouringFamilies()) {
+          const direction = Math.atan2(destination[1] - origin[1], destination[0] - origin[0]);
+          const worldStep = (width * PAN_FRACTION) / (fit.scale * ratio);
+          let previous = new Map<string, number>();
+          for (let step = 0; step <= FRAMES; step += 1) {
+            const centre: [number, number] = [
+              origin[0] + Math.cos(direction) * worldStep * step,
+              origin[1] + Math.sin(direction) * worldStep * step,
+            ];
+            const { counts, weights } = weightsAt(viewAt(fit, width, height, ratio, centre), width, height);
+            if (step > 0)
+              for (const [family, weight] of weights) {
+                const jump = Math.abs(weight - (previous.get(family) ?? weight));
+                if (jump > largest) {
+                  largest = jump;
+                  where = `${family} at ratio ${ratio}, step ${step}, ${counts.get(family)} of ${Math.max(...counts.values())} items`;
+                }
+              }
+            previous = new Map(weights);
+            frames += 1;
+          }
+        }
+      expect(frames).toBeGreaterThan(500);
+      expect(largest, where).toBeLessThanOrEqual(MAXIMUM_WEIGHT_JUMP);
+      expect(largest).toBeGreaterThan(0);
+    });
+  }
+});
+
+describe("review I-2: a family name beside item label plates at near (arXiv, painted)", () => {
+  const labels = placeItemLabels(
+    spec,
+    scene.labels,
+    { font: DEFAULT_ITEM_LABEL_FONT, width: DEFAULT_TUNING.itemLabelWidth, lines: DEFAULT_TUNING.itemLabelLines },
+    estimateText,
+  );
+  const familyNames = new Set(scene.groups.map((group) => group.name));
+  for (const [width, height] of BOXES)
+    it(`no family name above 0.5 alpha overlaps a drawn item label plate, at ${width}x${height}`, () => {
+      const fit = fitAt(width, height);
+      let names = 0;
+      const overlaps: string[] = [];
+      for (const ratio of [4, 8])
+        for (const centre of [...gridOfCentres(7, 7), ...scene.groups.map((group) => centreOf(group.members))]) {
+          const viewport = viewAt(fit, width, height, ratio, centre);
+          const { weights } = weightsAt(viewport, width, height);
+          const surface = new RecordingSurface();
+          const frame = {
+            regime: regimeFor(ratio),
+            pointAlpha: 1,
+            width,
+            height,
+            groupAlpha: groupNameAlpha(ratio, regimeFor(ratio), options),
+            focus: new Map(weights),
+            itemLabels: labels,
+            itemLabelAlpha: 1,
+            compactGroupNames: width < NARROW_BOX_WIDTH,
+          };
+          paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
+          // Plates are drawn at near only; below it the paint draws none and none is to be avoided.
+          const plates =
+            regimeFor(ratio) === "near"
+              ? drawnItemLabels(labels, viewport, { width, height, dimmed: new Set() }).map((label) =>
+                  itemLabelRect(label, viewport),
+                )
+              : [];
+          for (const drawn of drawnWithAlpha(surface)) {
+            if (!familyNames.has(drawn.text) || drawn.alpha <= 0.5) continue;
+            names += 1;
+            const box = estimateText(drawn.text, drawn.font);
+            for (const plate of plates)
+              if (
+                Math.abs(plate.left + plate.width / 2 - drawn.x) < (plate.width + box.width) / 2 - OVERLAP_MARGIN &&
+                Math.abs(plate.top + plate.height / 2 - drawn.y) < (plate.height + box.height) / 2 - OVERLAP_MARGIN
+              )
+                overlaps.push(`${drawn.text} at ratio ${ratio}, centre ${centre.map(Math.round)}`);
+          }
+        }
+      expect(names).toBeGreaterThan(0);
+      expect([...new Set(overlaps)]).toEqual([]);
+    });
 });

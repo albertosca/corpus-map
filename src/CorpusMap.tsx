@@ -45,7 +45,7 @@ import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { startSlices, useSliced } from "./shared/useSliced";
-import { familyFocus } from "./territories/familyFocus";
+import { familyFocus, namesLeaf } from "./territories/familyFocus";
 import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
@@ -961,9 +961,12 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // `territoriesAt` (most members first), so the innermost of nested ones.
   const centreHorizontal = width / 2;
   const centreVertical = height / 2;
+  // A territory whose name the focus has not drawn is not "open" (review I-3): what is painted is what is named.
+  const namedLeaf = (territoryId: string) =>
+    scene.groups.length === 0 || namesLeaf(groupAlpha, focus?.get(familyOfLeaf.get(territoryId) ?? "") ?? 1);
   const openCandidates =
     ready && next === "near"
-      ? territoriesAt(scene, spec, toWorld(viewport, centreHorizontal, centreVertical), dimmed)
+      ? territoriesAt(scene, spec, toWorld(viewport, centreHorizontal, centreVertical), dimmed).filter(namedLeaf)
       : [];
   const openTerritory = openCandidates[openCandidates.length - 1] ?? null;
   const onOpenTerritoryChangeReference = useRef(properties.onOpenTerritoryChange);
@@ -1596,15 +1599,18 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       }
       return;
     }
-    // Below the family threshold the families are what is painted, so they are what is named (spec slice E §4).
-    const level = scene.groups.length > 0 && groupAlpha >= 0.5 ? "family" : "territory";
+    // Below the family threshold the families are what is painted, so they are what is named (spec slice E §4);
+    // so is a family the focus has taken down a level, whose leaf names are not drawn (review I-3).
     const world = toWorld(viewport, position.x, position.y);
-    const ids =
-      cardAt(position.clientX, position.clientY) !== null
-        ? []
-        : level === "family"
-          ? familiesAt(scene, world, dimmed)
-          : territoriesAt(scene, spec, world, dimmed);
+    const overCard = cardAt(position.clientX, position.clientY) !== null;
+    const hasGroups = scene.groups.length > 0;
+    const familyLevel = hasGroups && groupAlpha >= 0.5;
+    const hitTerritories = familyLevel || overCard ? [] : territoriesAt(scene, spec, world, dimmed);
+    const level =
+      familyLevel || (hasGroups && hitTerritories.length > 0 && hitTerritories.every((id) => !namedLeaf(id)))
+        ? "family"
+        : "territory";
+    const ids = overCard ? [] : level === "family" ? familiesAt(scene, world, dimmed) : hitTerritories;
     if (ids.length === 0) {
       if (previousHover !== null) setHover(null);
       return;

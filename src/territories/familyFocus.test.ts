@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { familyFocus, levelsOf } from "./familyFocus";
+import { familyFocus, levelsOf, namesLeaf } from "./familyFocus";
 
 const options = { focusFloor: 0.25, focusFull: 0.6 };
 const counts = (entries: Array<[string, number]>) => new Map(entries);
@@ -40,16 +40,34 @@ describe("familyFocus (spec family focus §2)", () => {
     expect([weights.get("a"), weights.get("b")]).toEqual([1, 1]);
   });
 
-  it("gives a family with no items 0 beside a positive maximum", () => {
+  it("gives a family with no items 0 beside a large maximum", () => {
     expect(
       familyFocus(
         counts([
-          ["a", 5],
+          ["a", 100],
           ["b", 0],
         ]),
         options,
       ).get("b"),
     ).toBe(0);
+  });
+
+  it("keeps a family mostly drawn while the largest has only a few items, and takes it down as they grow, one item at a time", () => {
+    const weightOfEmpty = (largest: number) =>
+      familyFocus(
+        counts([
+          ["a", largest],
+          ["b", 0],
+        ]),
+        options,
+      ).get("b") as number;
+    // An item entering an empty screen must not drop the other families from 1 to 0 in one step.
+    expect(weightOfEmpty(1)).toBeGreaterThan(0.9);
+    let largestStep = 0;
+    for (let items = 1; items <= 60; items += 1)
+      largestStep = Math.max(largestStep, Math.abs(weightOfEmpty(items) - weightOfEmpty(items - 1)));
+    expect(largestStep).toBeLessThan(0.1);
+    expect(weightOfEmpty(60)).toBe(0);
   });
 
   it("is 0 at or below the floor and 1 at or above the full share", () => {
@@ -116,5 +134,16 @@ describe("levelsOf", () => {
 
   it("composes the cross-fade with the weight", () => {
     expect(levelsOf(0.5, 0.5)).toEqual({ leaf: 0.25, family: 0.75 });
+  });
+});
+
+describe("namesLeaf (review I-3)", () => {
+  it("is true while the leaf level is at least half, false below it", () => {
+    expect(namesLeaf(0, 1)).toBe(true);
+    expect(namesLeaf(0, 0.5)).toBe(true);
+    expect(namesLeaf(0, 0.49)).toBe(false);
+    expect(namesLeaf(0, 0)).toBe(false);
+    expect(namesLeaf(0.6, 1)).toBe(false);
+    expect(namesLeaf(0.4, 1)).toBe(true);
   });
 });

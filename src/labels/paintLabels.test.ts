@@ -307,6 +307,144 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
     });
   });
 
+  describe("a family name beside an item label plate at near (review I-2)", () => {
+    const familyLabel = scene.groupLabels.find((label) => label.id === firstGroup.id) as PlacedLabel;
+    const plateAt = (anchor: readonly [number, number], offset: readonly [number, number] = [0, 0]) => ({
+      id: "item",
+      territory: null,
+      anchor,
+      lines: ["an item"],
+      width: 60,
+      height: 20,
+      offset,
+      activeFromScale: 0,
+    });
+    const alphaOfFamilyName = (plates: ReturnType<typeof plateAt>[], itemPlateAlpha: number) => {
+      const surface = new RecordingSurface();
+      paintLabels(surface, { ...scene, labels: [], groupLabels: [familyLabel] }, VIEWPORT, DEFAULT_THEME, {
+        ...BOX,
+        groupAlpha: 0,
+        focus: weights(0),
+        itemPlates: plates,
+        itemPlateAlpha,
+      });
+      let current = 1;
+      let alphaIndex = 0;
+      let textIndex = 0;
+      for (const call of surface.calls) {
+        if (call === "alpha") current = surface.alphas[alphaIndex++] as number;
+        else if (call === "text" && surface.texts[textIndex++]?.text === firstGroup.name) return current;
+      }
+      return surface.texts.some((entry) => entry.text === firstGroup.name) ? current : 0;
+    };
+    const onTheName: [number, number] = [familyLabel.anchor[0], familyLabel.anchor[1]];
+    const away: [number, number] = [familyLabel.anchor[0] + 1000, familyLabel.anchor[1]];
+
+    it("draws the family name at its level where no plate is", () => {
+      expect(alphaOfFamilyName([plateAt(away)], 1)).toBe(1);
+      expect(alphaOfFamilyName([], 1)).toBe(1);
+    });
+
+    it("does not draw it over a plate drawn at 1", () => {
+      expect(alphaOfFamilyName([plateAt(onTheName)], 1)).toBe(0);
+    });
+
+    it("fades it by the plate's alpha, so it never pops", () => {
+      expect(alphaOfFamilyName([plateAt(onTheName)], 0.4)).toBeCloseTo(0.6);
+    });
+
+    it("measures the plate where it sits, offset from its point", () => {
+      expect(alphaOfFamilyName([plateAt(onTheName, [0, -1000])], 1)).toBe(1);
+    });
+  });
+
+  describe("what fades a family name is what is drawn over it (review M-1, M-2, M-3)", () => {
+    const otherLeaf = scene.labels.find((label) => !firstGroup.members.includes(label.id)) as PlacedLabel;
+    const familyLabel = scene.groupLabels.find((label) => label.id === firstGroup.id) as PlacedLabel;
+    const otherFamilyId = (scene.groups.find((group) => group.members.includes(otherLeaf.id)) as TerritoryGroup).id;
+    const alphaOfName = (arranged: Scene, box: Parameters<typeof paintLabels>[4], name: string) => {
+      const surface = new RecordingSurface();
+      paintLabels(surface, arranged, VIEWPORT, DEFAULT_THEME, box);
+      let current = 1;
+      let alphaIndex = 0;
+      let textIndex = 0;
+      for (const call of surface.calls) {
+        if (call === "alpha") current = surface.alphas[alphaIndex++] as number;
+        else if (call === "text" && surface.texts[textIndex++]?.text === name) return current;
+      }
+      return surface.texts.some((entry) => entry.text === name) ? current : 0;
+    };
+    const leafBeside = (distance: number): Scene => ({
+      ...scene,
+      labels: [{ ...otherLeaf, anchor: [familyLabel.anchor[0] + distance / VIEWPORT.scale, familyLabel.anchor[1]] }],
+      groupLabels: [familyLabel],
+    });
+    const focus = new Map([
+      [firstGroup.id, 0],
+      [otherFamilyId, 1],
+    ]);
+
+    it("fades by the leaf name's drawn alpha, a dimmed leaf name included (M-2)", () => {
+      const box = { ...BOX, groupAlpha: 0, focus, dimmed: new Set([otherLeaf.id]) };
+      expect(alphaOfName(leafBeside(0), box, firstGroup.name)).toBeCloseTo(1 - DIMMED_ALPHA);
+    });
+
+    it("fades by a dense leaf name's drawn alpha, not its level (M-2)", () => {
+      const classed = leafBeside(0);
+      const box = { ...BOX, groupAlpha: 0, focus, presentation: "dense" as const };
+      const expected = otherLeaf.labelClass === "large" ? 1 : DENSE_NAME_ALPHA;
+      expect(alphaOfName(classed, box, firstGroup.name)).toBeCloseTo(1 - expected);
+    });
+
+    it("grows with how far the boxes overlap, so a zoom across the edge never pops it (M-3)", () => {
+      const reach = (otherLeaf.width + familyLabel.width) / 2;
+      const box = { ...BOX, groupAlpha: 0, focus };
+      expect(alphaOfName(leafBeside(reach), box, firstGroup.name)).toBeCloseTo(1);
+      expect(alphaOfName(leafBeside(reach - 4), box, firstGroup.name)).toBeCloseTo(0.5);
+      expect(alphaOfName(leafBeside(reach - 8), box, firstGroup.name)).toBeCloseTo(0);
+    });
+
+    it("fades by a handed-over name drawn at 1 although its family is at weight 0 (M-1)", () => {
+      const handed = validateSpec({
+        version: "1",
+        territories: [
+          { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0] },
+          { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0] },
+          { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50] },
+        ],
+        nodes: [
+          { id: "a", label: "a", x: 0, y: 0, territory: "solo" },
+          { id: "b", label: "b", x: 100, y: 0, territory: "pair-a" },
+          { id: "c", label: "c", x: 100, y: 50, territory: "pair-b" },
+        ],
+        groups: [
+          { id: "solo-family", name: "Solo", members: ["solo"] },
+          { id: "pair-family", name: "Pair", members: ["pair-a", "pair-b"] },
+        ],
+      } as unknown);
+      const built = buildScene(handed, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+      const soloLabel = built.labels.find((label) => label.id === "solo") as PlacedLabel;
+      // The small scene places no family names itself, so the two are built from the leaf's box.
+      const soloFamilyLabel: PlacedLabel = { ...soloLabel, id: "solo-family", name: "Solo" };
+      const pairLabel: PlacedLabel = { ...soloLabel, id: "pair-family", name: "Pair" };
+      const arranged: Scene = {
+        ...built,
+        labels: [soloLabel],
+        groupLabels: [soloFamilyLabel, { ...pairLabel, anchor: soloLabel.anchor }],
+      };
+      const box = {
+        ...BOX,
+        groupAlpha: 0,
+        focus: new Map([
+          [soloFamilyLabel.id, 0],
+          [pairLabel.id, 0],
+        ]),
+      };
+      expect(alphaOfName(arranged, box, "Solo")).toBe(1);
+      expect(alphaOfName(arranged, box, "Pair")).toBe(0);
+    });
+  });
+
   it("ignores the focus at groupAlpha 1", () => {
     const absent = new RecordingSurface();
     paintLabels(absent, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1 });

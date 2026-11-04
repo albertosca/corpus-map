@@ -762,6 +762,7 @@ import { type Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
+import type { PlacedItemLabel } from "./itemLabels";
 /** The canvas's CSS size; a name larger than it is never drawn. */
 export interface LabelBox {
     width: number;
@@ -776,6 +777,10 @@ export interface LabelBox {
     compactGroupNames?: boolean | undefined;
     /** Family id → weight (spec family focus §3): a family's leaf names are drawn at `(1 - groupAlpha) * weight`, its own name at the rest. Absent means every family at 1. */
     focus?: ReadonlyMap<string, number> | undefined;
+    /** The item label plates drawn this frame (near only; review I-2): a family name gives way to one it overlaps, by `itemPlateAlpha`. Absent means none. */
+    itemPlates?: readonly PlacedItemLabel[] | undefined;
+    /** The alpha the plates are drawn at; absent means 0. */
+    itemPlateAlpha?: number | undefined;
 }
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
@@ -1962,6 +1967,12 @@ export declare function levelsOf(groupAlpha: number, weight: number): {
     leaf: number;
     family: number;
 };
+/**
+ * Whether a family's leaves are what the painted map names (review I-3): a
+ * leaf name is drawn at half strength or more. Hover and the open territory
+ * name what is painted (spec slice E §4), so they read this, not the zoom alone.
+ */
+export declare function namesLeaf(groupAlpha: number, weight: number): boolean;
 
 // territories/groups.d.ts
 import { type MapSpec } from "../shared/spec";
