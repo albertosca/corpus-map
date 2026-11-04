@@ -45,6 +45,7 @@ import { canvasSurface } from "./shared/surface";
 import { DEFAULT_THEME, type Theme } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { startSlices, useSliced } from "./shared/useSliced";
+import { familyFocus } from "./territories/familyFocus";
 import { familiesAt, onScreenTerritories, territoriesAt } from "./territories/hitTest";
 import { GROUP_LINE_OPACITY, TOOLTIP_OFFSET, TOOLTIP_ROW_LIMIT, tooltipPosition } from "./territories/tooltipPosition";
 import { boundsOf, fitBounds, fitClamped, ringBounds, sceneBounds } from "./viewport/fit";
@@ -931,7 +932,30 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // hit-test's own `visibleNodes(..., Infinity)` call above, not the
   // cards/tree's `cardCap`-limited one, so a consumer's indicator reads the
   // same count a maxed-out card cap would otherwise hide (showcase Task 3).
-  const visibleCount = ready ? visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY).length : 0;
+  const visibleItems = ready ? visibleNodes(liveSpec, viewport, width, height, Number.POSITIVE_INFINITY) : [];
+  const visibleCount = visibleItems.length;
+
+  // The family focus (spec family focus §3), derived per frame from the same
+  // on-screen walk: each family's share of the items drawn decides how much of
+  // it is drawn as leaves. Never in the scene; keyed on the weights themselves
+  // so a pan that moves no weight does not paint again.
+  const familyOfLeaf = useMemo(
+    () => new Map(scene.groups.flatMap((group) => group.members.map((member) => [member, group.id] as const))),
+    [scene.groups],
+  );
+  const focusKey = (() => {
+    if (!ready || scene.groups.length === 0 || (next === "far" && groupAlpha === 1)) return "";
+    const counts = new Map<string, number>(scene.groups.map((group) => [group.id, 0]));
+    for (const node of visibleItems) {
+      const family = node.territory === null ? undefined : familyOfLeaf.get(node.territory);
+      if (family !== undefined) counts.set(family, (counts.get(family) ?? 0) + 1);
+    }
+    return JSON.stringify([...familyFocus(counts, tuning)]);
+  })();
+  const focus = useMemo(
+    () => (focusKey === "" ? undefined : new Map<string, number>(JSON.parse(focusKey) as Array<[string, number]>)),
+    [focusKey],
+  );
 
   // The open territory (spec slice C §5): only computed at near. Last of
   // `territoriesAt` (most members first), so the innermost of nested ones.
@@ -1082,6 +1106,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
         itemLabels,
         itemLabelAlpha: cardOpacity,
         compactGroupNames,
+        focus,
       },
       theme,
     );
@@ -1106,6 +1131,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     itemLabels,
     cardOpacity,
     compactGroupNames,
+    focus,
   ]);
 
   // Latest callback in a ref so an inline arrow prop does not re-fire the
