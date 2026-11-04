@@ -28,6 +28,14 @@ export interface Tuning {
    * through all of far.
    */
   groupNamesUntil: number;
+  /**
+   * At mid and near, the share of the largest family's on-screen items at or
+   * below which a family is drawn as a family, not as leaves (spec family
+   * focus §2); the weight rises smoothly to 1 at `focusFull`.
+   */
+  focusFloor: number;
+  /** The share of the largest family's on-screen items at or above which a family shows all its leaves. */
+  focusFull: number;
   /** How many related items the selected or hovered item draws a line to, heaviest first (spec slice E §6); 0 draws none. */
   edgesPerNode: number;
   /** Widest an item label's text may run at near, in screen pixels, before it wraps (spec item labels §2); narrower than an ellipsis, each line is the ellipsis alone. */
@@ -46,6 +54,8 @@ export const DEFAULT_TUNING: Tuning = {
   labelClasses: { large: 0.8, medium: 0.4 },
   hoverRadius: 12,
   groupNamesUntil: 1.4,
+  focusFloor: 0.25,
+  focusFull: 0.6,
   edgesPerNode: 3,
   itemLabelWidth: 160,
   itemLabelLines: 3,
@@ -69,6 +79,14 @@ function validateTuning(tuning: Tuning): void {
   }
   if (!Number.isFinite(tuning.groupNamesUntil) || tuning.groupNamesUntil < 1) {
     throw new RangeError(`tuning.groupNamesUntil must be a finite number >= 1, got ${tuning.groupNamesUntil}`);
+  }
+  if (!Number.isFinite(tuning.focusFull) || tuning.focusFull > 1) {
+    throw new RangeError(`tuning.focusFull must be a finite number <= 1, got ${tuning.focusFull}`);
+  }
+  if (!Number.isFinite(tuning.focusFloor) || tuning.focusFloor < 0 || tuning.focusFloor >= tuning.focusFull) {
+    throw new RangeError(
+      `tuning.focusFloor must be a finite number >= 0 and < focusFull (${tuning.focusFull}), got ${tuning.focusFloor}`,
+    );
   }
   if (!Number.isFinite(tuning.hullPadding) || tuning.hullPadding <= 0) {
     throw new RangeError(`tuning.hullPadding must be a finite number > 0, got ${tuning.hullPadding}`);

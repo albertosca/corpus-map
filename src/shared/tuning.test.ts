@@ -45,3 +45,21 @@ describe("item label tuning", () => {
     expect(() => resolveTuning({ itemLabelLines: 1.5 })).toThrow(/itemLabelLines/);
   });
 });
+
+describe("family focus keys (spec family focus §2)", () => {
+  it("defaults to a floor of 0.25 and a full share of 0.6", () => {
+    expect([DEFAULT_TUNING.focusFloor, DEFAULT_TUNING.focusFull]).toEqual([0.25, 0.6]);
+  });
+
+  it("rejects a floor not below the full share, a share above 1, a negative floor and NaN", () => {
+    expect(() => resolveTuning({ focusFloor: 0.7 })).toThrow(RangeError);
+    expect(() => resolveTuning({ focusFull: 1.1 })).toThrow(RangeError);
+    expect(() => resolveTuning({ focusFloor: -0.1 })).toThrow(RangeError);
+    expect(() => resolveTuning({ focusFloor: Number.NaN })).toThrow(RangeError);
+    expect(() => resolveTuning({ focusFull: Number.NaN })).toThrow(RangeError);
+  });
+
+  it("accepts a valid pair", () => {
+    expect(resolveTuning({ focusFloor: 0.1, focusFull: 0.9 })).toMatchObject({ focusFloor: 0.1, focusFull: 0.9 });
+  });
+});
