@@ -31,6 +31,23 @@ interface Item {
   letterSpacing?: string;
 }
 
+/** The highest level among the drawn leaf names whose box overlaps `label`'s, 0 when none does. Both boxes are centred on their anchors and measured in screen pixels. */
+function boxedBy(
+  label: PlacedLabel,
+  drawn: ReadonlyArray<{ label: PlacedLabel; level: number }>,
+  scale: number,
+): number {
+  let highest = 0;
+  for (const { label: leaf, level } of drawn)
+    if (
+      level > highest &&
+      Math.abs(leaf.anchor[0] - label.anchor[0]) * scale < (leaf.width + label.width) / 2 &&
+      Math.abs(leaf.anchor[1] - label.anchor[1]) * scale < (leaf.height + label.height) / 2
+    )
+      highest = level;
+  return highest;
+}
+
 /**
  * Draws every placed name whose `activeFromScale` the viewport's current
  * scale has reached, except a name whose measured box is wider or taller
@@ -74,10 +91,12 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
     if (label && label.id !== group.id && label.name === group.name && fits(label))
       handedOver.add(group.id).add(label.id);
   }
+  const drawnLeaves: Array<{ label: PlacedLabel; level: number }> = [];
   for (const label of scene.labels) {
     if (!fits(label)) continue;
     const level = levelsOf(groupAlpha, weightOf(familyOfLeaf.get(label.id))).leaf;
     if (level <= 0 && !handedOver.has(label.id)) continue;
+    if (level > 0) drawnLeaves.push({ label, level });
     items.push({
       name: label.name,
       anchor: label.anchor,
@@ -93,13 +112,18 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
     : [scene.groupLabels, theme.territoryFonts.large];
   for (const label of groupLabels) {
     if (!fits(label) || handedOver.has(label.id)) continue;
-    const level = levelsOf(groupAlpha, weightOf(label.id)).family;
+    const weight = weightOf(label.id);
+    const level = levelsOf(groupAlpha, weight).family;
     if (level <= 0) continue;
+    // A family the focus has taken down a level shares the map with leaf names it was not placed
+    // against: it gives way to a drawn leaf name that boxes it, by that name's level (no pop on pan).
+    const clear = weight < 1 ? 1 - boxedBy(label, drawnLeaves, viewport.scale) : 1;
+    if (clear <= 0) continue;
     items.push({
       name: label.name,
       anchor: label.anchor,
       font: groupFont,
-      alpha: level * fadeOf(isWhollyDimmed(groupsById.get(label.id)?.members ?? [])),
+      alpha: level * clear * fadeOf(isWhollyDimmed(groupsById.get(label.id)?.members ?? [])),
       letterSpacing: `${GROUP_LETTER_SPACING}px`,
     });
   }

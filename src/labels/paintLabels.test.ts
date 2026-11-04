@@ -237,12 +237,13 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
     for (const other of scene.groups.slice(1)) expect(drawn).not.toContain(other.name);
   });
 
-  it("at weight 0.5 draws both levels of that family at 0.5", () => {
+  it("at weight 0.5 draws both levels of that family at 0.5 (its name further faded by the leaf names that box it)", () => {
     const surface = new RecordingSurface();
     paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0, focus: weights(0.5) });
     const drawn = surface.texts.map((entry) => entry.text);
     expect(drawn).toContain(firstGroup.name);
-    expect(surface.alphas).toEqual([0.5, 1]);
+    // At this zoom the family's name sits on its own leaf names (level 0.5): 0.5 * (1 - 0.5).
+    expect(surface.alphas).toEqual([0.5, 0.25, 1]);
   });
 
   it("composes a dimmed leaf name with its level", () => {
@@ -255,6 +256,55 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
       dimmed: new Set([label.id]),
     });
     expect(surface.alphas).toContain(0.5 * DIMMED_ALPHA);
+  });
+
+  describe("a family name beside a leaf name (spec family focus risk 2)", () => {
+    const otherLeaf = scene.labels.find((label) => !firstGroup.members.includes(label.id)) as PlacedLabel;
+    const familyLabel = scene.groupLabels.find((label) => label.id === firstGroup.id) as PlacedLabel;
+    /** The scene with the other family's leaf name moved to `anchor`, and no other leaf name. */
+    const withLeafAt = (anchor: readonly [number, number]): Scene => ({
+      ...scene,
+      labels: [{ ...otherLeaf, anchor: [anchor[0], anchor[1]] }],
+      groupLabels: [familyLabel],
+    });
+    const otherFamilyId = (scene.groups.find((group) => group.members.includes(otherLeaf.id)) as TerritoryGroup).id;
+    const focusOf = (familyWeight: number, leafWeight: number) =>
+      new Map([
+        [firstGroup.id, familyWeight],
+        [otherFamilyId, leafWeight],
+      ]);
+    const alphaOfFamilyName = (arranged: Scene, focus: ReadonlyMap<string, number>) => {
+      const surface = new RecordingSurface();
+      paintLabels(surface, arranged, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0, focus });
+      let current = 1;
+      let alphaIndex = 0;
+      let textIndex = 0;
+      for (const call of surface.calls) {
+        if (call === "alpha") current = surface.alphas[alphaIndex++] as number;
+        else if (call === "text") {
+          if (surface.texts[textIndex++]?.text === firstGroup.name) return current;
+        }
+      }
+      return 0;
+    };
+    const nearby: [number, number] = [familyLabel.anchor[0], familyLabel.anchor[1]];
+    const faraway: [number, number] = [familyLabel.anchor[0] + 1000, familyLabel.anchor[1]];
+
+    it("draws the family name at its level where no leaf name boxes it", () => {
+      expect(alphaOfFamilyName(withLeafAt(faraway), focusOf(0, 1))).toBe(1);
+    });
+
+    it("does not draw it where a drawn leaf name (level 1) boxes it", () => {
+      expect(alphaOfFamilyName(withLeafAt(nearby), focusOf(0, 1))).toBe(0);
+    });
+
+    it("fades it by the overlapping leaf name's level, so it never pops", () => {
+      expect(alphaOfFamilyName(withLeafAt(nearby), focusOf(0, 0.25))).toBe(0.75);
+    });
+
+    it("is not held back by a leaf name that is not drawn (level 0)", () => {
+      expect(alphaOfFamilyName(withLeafAt(nearby), focusOf(0, 0))).toBe(1);
+    });
   });
 
   it("ignores the focus at groupAlpha 1", () => {
