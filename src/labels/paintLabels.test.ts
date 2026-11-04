@@ -206,3 +206,96 @@ describe("paintLabels with a one-member family (backlog 2026-10-26)", () => {
     expect(surface.alphas).toEqual([]);
   });
 });
+
+describe("paintLabels with a family focus (spec family focus §4)", () => {
+  const { scene } = grouped();
+  const groupNames = new Set(scene.groups.map((group) => group.name));
+  const firstGroup = scene.groups[0] as TerritoryGroup;
+  const weights = (weight: number, others = 1) =>
+    new Map(scene.groups.map((group) => [group.id, group.id === firstGroup.id ? weight : others]));
+  const leafNamesOf = (group: TerritoryGroup) =>
+    new Set(scene.labels.filter((label) => group.members.includes(label.id)).map((label) => label.name));
+
+  it.each([0, 0.5, 1])(
+    "with focus absent or every weight 1 draws exactly what it drew at groupAlpha %s",
+    (groupAlpha) => {
+      const absent = new RecordingSurface();
+      paintLabels(absent, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha });
+      const full = new RecordingSurface();
+      paintLabels(full, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha, focus: weights(1) });
+      expect(full.calls).toEqual(absent.calls);
+    },
+  );
+
+  it("at groupAlpha 0 draws no leaf name of a weight-0 family and draws its name at 1", () => {
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0, focus: weights(0) });
+    const drawn = surface.texts.map((entry) => entry.text);
+    for (const name of leafNamesOf(firstGroup)) expect(drawn).not.toContain(name);
+    expect(drawn).toContain(firstGroup.name);
+    expect(surface.alphas).toEqual([]);
+    for (const other of scene.groups.slice(1)) expect(drawn).not.toContain(other.name);
+  });
+
+  it("at weight 0.5 draws both levels of that family at 0.5", () => {
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 0, focus: weights(0.5) });
+    const drawn = surface.texts.map((entry) => entry.text);
+    expect(drawn).toContain(firstGroup.name);
+    expect(surface.alphas).toEqual([0.5, 1]);
+  });
+
+  it("composes a dimmed leaf name with its level", () => {
+    const label = scene.labels.find((entry) => firstGroup.members.includes(entry.id)) as PlacedLabel;
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, DEFAULT_THEME, {
+      ...BOX,
+      groupAlpha: 0,
+      focus: weights(0.5),
+      dimmed: new Set([label.id]),
+    });
+    expect(surface.alphas).toContain(0.5 * DIMMED_ALPHA);
+  });
+
+  it("ignores the focus at groupAlpha 1", () => {
+    const absent = new RecordingSurface();
+    paintLabels(absent, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1 });
+    const focused = new RecordingSurface();
+    paintLabels(focused, scene, VIEWPORT, DEFAULT_THEME, { ...BOX, groupAlpha: 1, focus: weights(0) });
+    expect(focused.calls).toEqual(absent.calls);
+    expect(focused.texts.every((entry) => groupNames.has(entry.text))).toBe(true);
+  });
+
+  it("keeps a handed-over single-territory family drawn once, at 1, at weights 0 and 1", () => {
+    const single = validateSpec({
+      version: "1",
+      territories: [
+        { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0] },
+        { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0] },
+        { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50] },
+      ],
+      nodes: [
+        { id: "a", label: "a", x: 0, y: 0, territory: "solo" },
+        { id: "b", label: "b", x: 100, y: 0, territory: "pair-a" },
+        { id: "c", label: "c", x: 100, y: 50, territory: "pair-b" },
+      ],
+      groups: [
+        { id: "solo-family", name: "Solo", members: ["solo"] },
+        { id: "pair-family", name: "Pair", members: ["pair-a", "pair-b"] },
+      ],
+    } as unknown);
+    const singleScene = buildScene(single, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+    for (const weight of [0, 1]) {
+      const surface = new RecordingSurface();
+      paintLabels(surface, singleScene, VIEWPORT, DEFAULT_THEME, {
+        ...BOX,
+        groupAlpha: 0.5,
+        focus: new Map([
+          ["solo-family", weight],
+          ["pair-family", 1],
+        ]),
+      });
+      expect(surface.texts.filter((entry) => entry.text === "Solo")).toHaveLength(1);
+    }
+  });
+});
