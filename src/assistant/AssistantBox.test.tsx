@@ -442,28 +442,37 @@ describe("AssistantBox final review fixes (2026-11-03 whole-branch review)", () 
       onSelect: vi.fn(),
     };
     const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
-    root.render(<AssistantBox spec={spec} {...boxProperties} />);
-    await settle();
-    const field = container.querySelector("input") as HTMLInputElement;
-    const form = container.querySelector("form") as HTMLFormElement;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "q");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-    await settle();
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await settle();
-    onMatches.mockClear();
-    // The swap mounts a sibling whose layout effect resolves the answer in the very commit that swaps the spec.
-    root.render(
-      <>
-        <AssistantBox spec={otherSpec} {...boxProperties} />
-        <ReleaseOnSwap />
-      </>,
-    );
-    await settle();
-    const logText = container.querySelector("[role=log]")?.textContent;
-    root.unmount();
-    container.remove();
-    globals.IS_REACT_ACT_ENVIRONMENT = true;
+    // A root outside act commits on a later task, so wait for what the next step needs instead of a fixed pause: a loaded machine missed 30 ms, left the field null and the flag off for every later test.
+    const until = async (found: () => unknown) => {
+      for (let attempt = 0; attempt < 600 && !found(); attempt += 1)
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    };
+    let logText: string | null | undefined;
+    try {
+      root.render(<AssistantBox spec={spec} {...boxProperties} />);
+      await until(() => container.querySelector("input"));
+      const field = container.querySelector("input") as HTMLInputElement;
+      const form = container.querySelector("form") as HTMLFormElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "q");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await until(() => ask.mock.calls.length > 0);
+      onMatches.mockClear();
+      // The swap mounts a sibling whose layout effect resolves the answer in the very commit that swaps the spec.
+      root.render(
+        <>
+          <AssistantBox spec={otherSpec} {...boxProperties} />
+          <ReleaseOnSwap />
+        </>,
+      );
+      await settle();
+      logText = container.querySelector("[role=log]")?.textContent;
+    } finally {
+      root.unmount();
+      container.remove();
+      globals.IS_REACT_ACT_ENVIRONMENT = true;
+    }
     expect(onReveal).not.toHaveBeenCalled();
     expect(onMatches.mock.calls.every(([ids]) => ids === null)).toBe(true);
     expect(logText).toBe("");

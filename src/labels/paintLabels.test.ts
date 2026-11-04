@@ -408,18 +408,16 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
       const handed = validateSpec({
         version: "1",
         territories: [
-          { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0] },
-          { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0] },
-          { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50] },
+          { id: "solo-family", name: "Solo", members: [], centroid: [0, 0] },
+          { id: "pair-family", name: "Pair", members: [], centroid: [100, 25] },
+          { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0], parent: "solo-family" },
+          { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0], parent: "pair-family" },
+          { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50], parent: "pair-family" },
         ],
         nodes: [
           { id: "a", label: "a", x: 0, y: 0, territory: "solo" },
           { id: "b", label: "b", x: 100, y: 0, territory: "pair-a" },
           { id: "c", label: "c", x: 100, y: 50, territory: "pair-b" },
-        ],
-        groups: [
-          { id: "solo-family", name: "Solo", members: ["solo"] },
-          { id: "pair-family", name: "Pair", members: ["pair-a", "pair-b"] },
         ],
       } as unknown);
       const built = buildScene(handed, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
@@ -440,6 +438,9 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
           [pairLabel.id, 0],
         ]),
       };
+      // Control: the same family name, far from the leaf, is drawn at its level, so the 0 below is the fade.
+      const apart: Scene = { ...arranged, groupLabels: [soloFamilyLabel, { ...pairLabel, anchor: [50, 50] }] };
+      expect(alphaOfName(apart, box, "Pair")).toBe(1);
       expect(alphaOfName(arranged, box, "Solo")).toBe(1);
       expect(alphaOfName(arranged, box, "Pair")).toBe(0);
     });
@@ -458,18 +459,16 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
     const single = validateSpec({
       version: "1",
       territories: [
-        { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0] },
-        { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0] },
-        { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50] },
+        { id: "solo-family", name: "Solo", members: [], centroid: [0, 0] },
+        { id: "pair-family", name: "Pair", members: [], centroid: [100, 25] },
+        { id: "solo", name: "Solo", members: ["a"], centroid: [0, 0], parent: "solo-family" },
+        { id: "pair-a", name: "Pair A", members: ["b"], centroid: [100, 0], parent: "pair-family" },
+        { id: "pair-b", name: "Pair B", members: ["c"], centroid: [100, 50], parent: "pair-family" },
       ],
       nodes: [
         { id: "a", label: "a", x: 0, y: 0, territory: "solo" },
         { id: "b", label: "b", x: 100, y: 0, territory: "pair-a" },
         { id: "c", label: "c", x: 100, y: 50, territory: "pair-b" },
-      ],
-      groups: [
-        { id: "solo-family", name: "Solo", members: ["solo"] },
-        { id: "pair-family", name: "Pair", members: ["pair-a", "pair-b"] },
       ],
     } as unknown);
     const singleScene = buildScene(single, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
