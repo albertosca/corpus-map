@@ -31,6 +31,11 @@
   },
   "overrides": [
     { "includes": ["src/**"], "linter": { "rules": { "suspicious": { "noConsole": "error" } } } },
-    { "includes": ["api/**"], "formatter": { "enabled": false }, "linter": { "enabled": false } }
+    {
+      "includes": ["api/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    }
   ]
 }

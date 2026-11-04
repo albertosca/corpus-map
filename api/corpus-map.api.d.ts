@@ -562,6 +562,72 @@ export interface RelatedItem {
  */
 export declare function relatedItems(spec: MapSpec, id: string): RelatedItem[];
 
+// filter/FilterBox.d.ts
+import { type CSSProperties, type ReactElement } from "react";
+import type { MapSpec } from "../shared/spec";
+import { type FilterAttribute } from "./facets";
+export interface FilterBoxProps {
+    /** The corpus whose items are filtered; a new spec object clears the selection. */
+    spec: MapSpec;
+    /** Which value or values an item has. Keep the reference stable: the facets are computed once per `spec` and `attribute` pair. */
+    attribute: FilterAttribute;
+    /** The ids that pass the filter, or `null` while nothing is selected. Pass it to `CorpusMap`'s `matches`, through `intersectMatches` when a search is also active. */
+    onMatches: (ids: readonly string[] | null) => void;
+    /** The button's text and the group's accessible name; "Filter" by default. */
+    label?: string | undefined;
+    /** Gives every control a 44 px target, for a narrow box. */
+    touchTargets?: boolean | undefined;
+    /** Extra inline styles for the container. */
+    style?: CSSProperties | undefined;
+}
+/**
+ * A checkbox filter for `CorpusMap`'s `matches` (spec filter §3): one disclosure
+ * listing each value of an attribute with its item count, several values at
+ * once (any of them passes). It owns its selection, clears it on a new spec and
+ * reports through `onMatches`, like `SearchBox`. Neutral inline styles that
+ * inherit the colour and the font; the panel uses the page's `Canvas` colours,
+ * which follow its `color-scheme`.
+ */
+export declare function FilterBox(properties: FilterBoxProps): ReactElement;
+
+// filter/facets.d.ts
+import type { MapNode, MapSpec } from "../shared/spec";
+/** One value of an attribute: a string stands for both the value and its label. */
+export type FilterOption = string | {
+    value: string;
+    label: string;
+};
+/** Reads an item's value or values for the attribute being filtered; `undefined` or an empty list means it has none. */
+export type FilterAttribute = (node: MapNode) => FilterOption | readonly FilterOption[] | undefined;
+/** A distinct value of the attribute, with how many items have it. */
+export interface Facet {
+    value: string;
+    label: string;
+    count: number;
+}
+/** What one pass over a spec yields: the facets, and each item's distinct values in spec order. */
+export interface FilterIndex {
+    facets: readonly Facet[];
+    items: readonly {
+        id: string;
+        values: readonly string[];
+    }[];
+}
+/** One pass over `spec`: each item once per value (empty values skipped), the first label in spec order wins. */
+export declare function buildFilterIndex(spec: MapSpec, attribute: FilterAttribute): FilterIndex;
+/** The ids of the items having any selected value, in spec order; `null` while nothing is selected (no filter). */
+export declare function idsFromIndex(index: FilterIndex, selected: ReadonlySet<string>): readonly string[] | null;
+/** The distinct values of `attribute` over `spec`, sorted by label then value, each with its item count. */
+export declare function facetsOf(spec: MapSpec, attribute: FilterAttribute): readonly Facet[];
+/** The ids having any of the `selected` values (OR inside one attribute); `null` when `selected` is empty. */
+export declare function idsMatching(spec: MapSpec, attribute: FilterAttribute, selected: Iterable<string>): readonly string[] | null;
+/** The ids in both lists, in the order of `first`; `null` means "no constraint" on that side. */
+export declare function intersectMatches(first: readonly string[] | null, second: readonly string[] | null): readonly string[] | null;
+
+// filter/index.d.ts
+export { FilterBox, type FilterBoxProps } from "./FilterBox";
+export { type Facet, type FilterAttribute, type FilterOption, facetsOf, idsMatching, intersectMatches, } from "./facets";
+
 // index.d.ts
 export type { HeadingLevel } from "./a11y/headingLevel";
 export type { CorpusMapHandle, CorpusMapProps, CorpusMapView } from "./CorpusMap";

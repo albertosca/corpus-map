@@ -9,6 +9,10 @@ export default defineConfig({
         find: /^corpus-map\/assistant$/,
         replacement: fileURLToPath(new URL("./src/assistant/index.ts", import.meta.url)),
       },
+      {
+        find: /^corpus-map\/filter$/,
+        replacement: fileURLToPath(new URL("./src/filter/index.ts", import.meta.url)),
+      },
       { find: /^corpus-map\/search$/, replacement: fileURLToPath(new URL("./src/search/index.ts", import.meta.url)) },
       { find: /^corpus-map$/, replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
     ],
