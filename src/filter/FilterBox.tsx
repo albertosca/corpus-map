@@ -4,6 +4,7 @@ import {
   type ReactElement,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -27,6 +28,8 @@ export interface FilterBoxProps {
 }
 
 const TOUCH_TARGET = 44;
+/** The space kept between an open panel and the window's edge. */
+const WINDOW_MARGIN = 12;
 const NOTHING_SELECTED: ReadonlySet<string> = new Set();
 const QUIET = { text: "", pad: false };
 
@@ -63,6 +66,26 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
     setOpen(false);
   }
   const buttonReference = useRef<HTMLButtonElement>(null);
+  const panelReference = useRef<HTMLFieldSetElement>(null);
+  // How far the open panel is moved sideways so it stays inside the window (0 or negative).
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    const element = panelReference.current;
+    if (!open || !element) return;
+    const place = () => {
+      const box = element.getBoundingClientRect();
+      // No layout (a hidden or detached panel): nothing to measure, so nothing to move.
+      if (box.width === 0) return;
+      const naturalLeft = box.left - shift;
+      const naturalRight = box.right - shift;
+      const room = document.documentElement.clientWidth - WINDOW_MARGIN;
+      const next = Math.max(Math.min(0, room - naturalRight), WINDOW_MARGIN - naturalLeft);
+      if (next !== shift) setShift(next);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open, shift]);
   const panelIdentifier = useId();
   const emptyIdentifier = useId();
   // The newest props for the effect below, which reads them after the render that set them.
@@ -116,14 +139,15 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
   const panel: CSSProperties = {
     position: "absolute",
     top: "100%",
-    left: 0,
+    left: shift,
     zIndex: 10,
     marginTop: 4,
     display: open ? "flex" : "none",
     flexDirection: "column",
     gap: 2,
     padding: 8,
-    minWidth: "max-content",
+    // As wide as the longest label, but never past the window: a longer label wraps.
+    width: "max-content",
     maxWidth: "calc(100vw - 24px)",
     maxHeight: "min(24rem, 60vh)",
     overflowY: "auto",
@@ -161,7 +185,7 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
           No values to filter by
         </span>
       ) : null}
-      <fieldset id={panelIdentifier} aria-label={label} hidden={!open} style={panel}>
+      <fieldset ref={panelReference} id={panelIdentifier} aria-label={label} hidden={!open} style={panel}>
         {selected.size === 0 ? null : (
           <button
             type="button"
@@ -176,7 +200,12 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
         )}
         {index.facets.map((facet) => (
           <label key={facet.value} style={row}>
-            <input type="checkbox" checked={selected.has(facet.value)} onChange={() => toggle(facet.value)} />
+            <input
+              type="checkbox"
+              checked={selected.has(facet.value)}
+              onChange={() => toggle(facet.value)}
+              style={{ width: 24, height: 24, margin: 0, flexShrink: 0 }}
+            />
             {`${facet.label} (${facet.count})`}
           </label>
         ))}

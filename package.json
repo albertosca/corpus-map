@@ -67,7 +67,7 @@
     },
     "filter": {
       "file": "dist/filter.js",
-      "maximumGzipBytes": 2111
+      "maximumGzipBytes": 2348
     }
   },
   "devDependencies": {

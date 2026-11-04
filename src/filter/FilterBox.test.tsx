@@ -168,4 +168,60 @@ describe("FilterBox (spec filter §3, §5)", () => {
     fireEvent.click(box("bird (2)"));
     for (const button of screen.getAllByRole("button")) expect(button.style.maxWidth).toBe("100%");
   });
+
+  describe("keeping the panel inside the window", () => {
+    const stubBox = (left: number, right: number) =>
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const shifted = Number.parseFloat(this.style.left || "0");
+        return this.tagName === "FIELDSET"
+          ? ({
+              left: left + shifted,
+              right: right + shifted,
+              top: 0,
+              bottom: 0,
+              width: right - left,
+              height: 0,
+            } as DOMRect)
+          : ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 } as DOMRect);
+      });
+
+    it("shifts a panel that would run past the right edge back inside, with a margin", () => {
+      const clientWidth = vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+      const rect = stubBox(900, 1300);
+      mount();
+      openPanel();
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("-312px");
+      rect.mockRestore();
+      clientWidth.mockRestore();
+    });
+
+    it("lets a long label wrap instead of widening the panel past the window", () => {
+      mount();
+      openPanel();
+      const panelStyle = screen.getByRole("group", { name: "Filter" }).style;
+      expect([
+        panelStyle.getPropertyValue("min-width"),
+        panelStyle.width,
+        panelStyle.getPropertyValue("max-width"),
+      ]).toEqual(["", "max-content", "calc(100vw - 24px)"]);
+    });
+
+    it("gives every checkbox a 24 px target even without touchTargets (WCAG 2.2 target size)", () => {
+      mount();
+      openPanel();
+      for (const checkbox of screen.getAllByRole("checkbox")) {
+        expect([checkbox.style.width, checkbox.style.height]).toEqual(["24px", "24px"]);
+      }
+    });
+
+    it("leaves a panel that already fits where it is", () => {
+      const clientWidth = vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+      const rect = stubBox(100, 500);
+      mount();
+      openPanel();
+      expect(screen.getByRole("group", { name: "Filter" }).style.left).toBe("0px");
+      rect.mockRestore();
+      clientWidth.mockRestore();
+    });
+  });
 });
