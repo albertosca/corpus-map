@@ -1,4 +1,5 @@
 import type { MapSpec } from "corpus-map";
+import { type FilterAttribute, FilterBox } from "corpus-map/filter";
 import { SearchBox } from "corpus-map/search";
 import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
@@ -32,6 +33,10 @@ interface TopBarProps {
         onMatches: (ids: readonly string[] | null) => void;
         onShow: () => void;
       }
+    | undefined;
+  /** The attribute filter (spec filter §6); absent draws none. Wide: after the search; narrow: first in the Menu. */
+  filter?:
+    | { spec: MapSpec; attribute: FilterAttribute; onMatches: (ids: readonly string[] | null) => void }
     | undefined;
 }
 
@@ -201,6 +206,7 @@ export function TopBar({
   linkStatus,
   narrow = false,
   search,
+  filter,
   assistant,
 }: TopBarProps): ReactElement {
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -293,6 +299,9 @@ export function TopBar({
           hidden={!menuOpen}
           style={menuOpen ? popoverStyle : { ...popoverStyle, display: "none" }}
         >
+          {filter ? (
+            <FilterBox spec={filter.spec} attribute={filter.attribute} onMatches={filter.onMatches} touchTargets />
+          ) : null}
           {assistant ? (
             <button
               type="button"
@@ -357,6 +366,7 @@ export function TopBar({
           style={searchStyle}
         />
       ) : null}
+      {filter ? <FilterBox spec={filter.spec} attribute={filter.attribute} onMatches={filter.onMatches} /> : null}
       {assistant ? (
         <button
           type="button"

@@ -1,5 +1,7 @@
 import type { MapSpec } from "corpus-map";
 import { validateSpec } from "corpus-map";
+import type { FilterAttribute } from "corpus-map/filter";
+import { arxivCategory } from "./arxivFilter";
 import { withExpandedArxiv } from "./compact";
 import { constellationsSpec } from "./constellations";
 import type { DisplaySettings } from "./display";
@@ -14,8 +16,14 @@ export type CorpusId = "arxiv" | "elements" | "constellations" | "synthetic";
  * enough to ship in the main bundle and carries its `spec` synchronously.
  */
 export type GalleryEntry =
-  | { id: "arxiv"; label: string; load: () => Promise<MapSpec>; display?: DisplaySettings }
-  | { id: Exclude<CorpusId, "arxiv">; label: string; spec: MapSpec; display?: DisplaySettings };
+  | { id: "arxiv"; label: string; load: () => Promise<MapSpec>; display?: DisplaySettings; filter?: FilterAttribute }
+  | {
+      id: Exclude<CorpusId, "arxiv">;
+      label: string;
+      spec: MapSpec;
+      display?: DisplaySettings;
+      filter?: FilterAttribute;
+    };
 
 /**
  * Vite emits the JSON as an asset for this URL pattern, in dev and in the build.
@@ -93,6 +101,7 @@ export const gallery: GalleryEntry[] = [
     label: "Computer-science papers (arXiv metadata)",
     load: loadArxiv,
     display: { thresholds: { nearAt: 2.5 } },
+    filter: arxivCategory,
   },
   { id: "elements", label: "Chemical elements", spec: elementsSpec, display: { thresholds: { nearAt: 5 } } },
   { id: "constellations", label: "Constellations", spec: constellationsSpec, display: { thresholds: { nearAt: 3.5 } } },

@@ -1,5 +1,6 @@
 import type { CorpusMapHandle, LodThresholds, MapSpec, MapViewport, Tuning } from "corpus-map";
 import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, resolveTuning } from "corpus-map";
+import { intersectMatches } from "corpus-map/filter";
 import { type CSSProperties, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
@@ -203,8 +204,11 @@ export function App({ loadArxiv }: AppProps = {}) {
   const [viewStore] = useState(createViewStore);
   const scheme = useColourScheme();
   const mapReference = useRef<CorpusMapHandle>(null);
-  // The ids the search found (spec search §6); null while no search is active. It belongs to the corpus it was made in.
-  const [matches, setMatches] = useState<readonly string[] | null>(null);
+  // The ids the search (or the dialogue's answer) found, and the ids the filter lets through (spec filter §6); null
+  // while none is active. Each belongs to the corpus it was made in, and the map gets their intersection.
+  const [searchMatches, setSearchMatches] = useState<readonly string[] | null>(null);
+  const [filterMatches, setFilterMatches] = useState<readonly string[] | null>(null);
+  const matches = useMemo(() => intersectMatches(searchMatches, filterMatches), [searchMatches, filterMatches]);
   // The dialogue (spec assistant §7): collapsed until asked. The view it compares is kept in a ref and
   // copied to state only while the panel is open, so a pan re-renders the page only for a reader who is asking.
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -446,7 +450,8 @@ export function App({ loadArxiv }: AppProps = {}) {
     setCorpusId(id);
     viewStore.set(null);
     setSelectedId(null);
-    setMatches(null);
+    setSearchMatches(null);
+    setFilterMatches(null);
     setLinkApplies(false);
     linkReference.current = { corpus: id, view: null, selected: null };
     hashWriter.schedule(linkReference.current);
@@ -590,9 +595,15 @@ export function App({ loadArxiv }: AppProps = {}) {
         search={{
           // While the corpus loads there is nothing to search: an empty spec keeps the box (and the bar's height) in place.
           spec: current?.spec ?? NOTHING_TO_SEARCH,
-          onMatches: setMatches,
+          onMatches: setSearchMatches,
           onShow: () => mapReference.current?.revealAll(matches ?? []),
         }}
+        filter={
+          // Like the search, mounted with an empty spec while the corpus loads, so a retry clears it.
+          activeEntry.filter
+            ? { spec: current?.spec ?? NOTHING_TO_SEARCH, attribute: activeEntry.filter, onMatches: setFilterMatches }
+            : undefined
+        }
       />
       <div ref={mapShellReference} tabIndex={-1} data-map-shell style={{ ...mapShellStyle, top: topBarHeight }}>
         {current ? (
@@ -680,7 +691,7 @@ export function App({ loadArxiv }: AppProps = {}) {
         // Closed, the dialogue is not watching the view: an answer that lands then never frames.
         view={assistantOpen ? assistantView : undefined}
         width={assistantWidth}
-        onMatches={setMatches}
+        onMatches={setSearchMatches}
         onReveal={(ids) => mapReference.current?.revealAll(ids)}
         onRestore={(view) => mapReference.current?.setView(view)}
         onSelect={(id) => {

@@ -2396,6 +2396,163 @@ describe("App (showcase Task 5)", () => {
     });
   });
 
+  describe("the filter beside the map (spec filter §6)", () => {
+    const category = (id: string, name: string) => ({ category: { id, name } });
+    const FILTER_SPEC: MapSpec = {
+      version: "1",
+      territories: [
+        { id: "cs.AI", name: "Artificial Intelligence", members: ["p1", "p2", "west", "east"], centroid: [0, 0] },
+      ],
+      nodes: [
+        {
+          id: "p1",
+          label: "Graph colouring",
+          x: -0.0001,
+          y: 0,
+          territory: "cs.AI",
+          meta: category("cs.DS", "Data Structures"),
+        },
+        {
+          id: "p2",
+          label: "Graph matching",
+          x: 0.0001,
+          y: 0,
+          territory: "cs.AI",
+          meta: category("cs.LG", "Machine Learning"),
+        },
+        {
+          id: "west",
+          label: "West filler",
+          x: -1,
+          y: 0,
+          territory: "cs.AI",
+          meta: category("cs.DS", "Data Structures"),
+        },
+        {
+          id: "east",
+          label: "East filler",
+          x: 1,
+          y: 0,
+          territory: "cs.AI",
+          meta: category("cs.LG", "Machine Learning"),
+        },
+      ],
+    };
+    const filterButton = () => screen.getByRole("button", { name: /^Filter/ });
+    const categoryBox = (name: string) => screen.getByRole("checkbox", { name });
+    const LEARNING = "cs.LG: Machine Learning (2)";
+    function zoomToNear(): void {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+      }
+    }
+    // The dialogue lists the items it cites as buttons of the same name: only the map's own count here.
+    const isMatch = async (name: string) =>
+      (await screen.findAllByRole("button", { name }))
+        .find((button) => !button.closest("[data-assistant-panel]"))
+        ?.getAttribute("aria-description") === "match";
+
+    it("lists the categories with their counts for the arXiv corpus", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(filterButton());
+      expect(categoryBox("cs.DS: Data Structures (2)")).toBeTruthy();
+      expect(categoryBox(LEARNING)).toBeTruthy();
+    });
+
+    it("dims what a picked category excludes", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      zoomToNear();
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
+      expect(await isMatch("Graph colouring")).toBe(false);
+    });
+
+    it("intersects with a search typed after it, and each clears on its own", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      zoomToNear();
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "graph" } });
+      await screen.findByText("2 results");
+      await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
+      expect(await isMatch("Graph colouring")).toBe(false);
+      fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+      await waitFor(async () => expect(await isMatch("Graph colouring")).toBe(true));
+      expect(await isMatch("Graph matching")).toBe(true);
+    });
+
+    it("lights nothing when the search finds only what the filter excludes (an intersection, not a winner)", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      zoomToNear();
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "colouring" } });
+      await screen.findByText("1 result");
+      await waitFor(async () => expect(await isMatch("Graph matching")).toBe(false));
+      expect(await isMatch("Graph colouring")).toBe(false);
+    });
+
+    it("composes with the dialogue's answer: picking narrows it, clearing brings the answer back", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      zoomToNear();
+      fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+      const question = screen.getByRole("textbox", { name: "Assistant" });
+      fireEvent.change(question, { target: { value: "graph" } });
+      fireEvent.submit(question.closest("form") as HTMLFormElement);
+      await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      await waitFor(async () => expect(await isMatch("Graph colouring")).toBe(false));
+      expect(await isMatch("Graph matching")).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+      await waitFor(async () => expect(await isMatch("Graph colouring")).toBe(true));
+      expect(await isMatch("Graph matching")).toBe(true);
+    });
+
+    it("clears the filter when the corpus changes, and the other corpora show none", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      expect(filterButton().textContent).toBe("Filter (1)");
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "elements" } });
+      await waitFor(() => expect(screen.queryByRole("button", { name: /^Filter/ })).toBeNull());
+      fireEvent.change(screen.getByLabelText("Corpus"), { target: { value: "arxiv" } });
+      await waitFor(() => expect(filterButton().textContent).toBe("Filter"));
+    });
+
+    it("keeps the open panel in the floating-control overflow check", async () => {
+      const { container } = await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      checkAllFloatingControls(container);
+    });
+
+    describe("a narrow window", () => {
+      const originalInnerWidth = window.innerWidth;
+      afterEach(() => {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: originalInnerWidth });
+      });
+
+      it("puts the Filter in the Menu, where a picked category still counts", async () => {
+        Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 375 });
+        await renderApp(FILTER_SPEC);
+        await screen.findByText(/1\.0×/);
+        fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+        fireEvent.click(filterButton());
+        fireEvent.click(categoryBox(LEARNING));
+        expect(filterButton().textContent).toBe("Filter (1)");
+      });
+    });
+  });
+
   describe("the dialogue beside the map (spec assistant §7)", () => {
     const ASSISTANT_SPEC: MapSpec = {
       version: "1",

@@ -4,6 +4,7 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { auditAccessibility, violationIds } from "../../test/audit";
 import { gallery } from "../corpora";
+import { arxivCategory } from "../corpora/arxivFilter";
 import { TopBar } from "./TopBar";
 
 describe("TopBar (showcase Task 5)", () => {
@@ -452,5 +453,64 @@ describe("TopBar search (spec search §6)", () => {
     wide.unmount();
     const narrow = bar({ narrow: true });
     expect(violationIds(await auditAccessibility(narrow.container))).toEqual([]);
+  });
+});
+
+describe("TopBar filter (spec filter §6)", () => {
+  const spec: MapSpec = {
+    version: "1",
+    territories: [],
+    nodes: [
+      { id: "a", label: "A", x: 0, y: 0, territory: null, meta: { category: { id: "cs.AI", name: "AI" } } },
+      { id: "b", label: "B", x: 1, y: 0, territory: null, meta: { category: { id: "cs.LG", name: "ML" } } },
+    ],
+  };
+  const bar = (extra: Partial<Parameters<typeof TopBar>[0]> = {}) =>
+    render(
+      <TopBar
+        corpora={gallery}
+        activeId="arxiv"
+        onChange={() => {}}
+        tuningOpen={false}
+        onToggleTuning={() => {}}
+        onCopyLink={() => {}}
+        linkStatus={null}
+        filter={{ spec, attribute: arxivCategory, onMatches: () => {} }}
+        {...extra}
+      />,
+    );
+
+  it("shows no Filter without the prop", () => {
+    bar({ filter: undefined });
+    expect(screen.queryByRole("button", { name: /^Filter/ })).toBeNull();
+  });
+
+  it("puts the Filter after the search on a wide bar", () => {
+    bar({ search: { spec, onMatches: () => {}, onShow: () => {} } });
+    const search = document.querySelector("search") as HTMLElement;
+    const filter = screen.getByRole("button", { name: "Filter" });
+    expect(search.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps the Filter out of the one-row narrow bar: it lives in the Menu, first, with 44 px targets", () => {
+    bar({ narrow: true });
+    const menu = screen.getByRole("button", { name: "Menu" });
+    fireEvent.click(menu);
+    const popover = document.getElementById(menu.getAttribute("aria-controls") ?? "") as HTMLElement;
+    const filter = screen.getByRole("button", { name: "Filter" });
+    expect(popover.contains(filter)).toBe(true);
+    expect(filter.style.minHeight).toBe("44px");
+    expect(popover.firstElementChild?.contains(filter)).toBe(true);
+  });
+
+  it("keeps its selection when the Menu closes and opens again", () => {
+    bar({ narrow: true });
+    const menu = screen.getByRole("button", { name: "Menu" });
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "cs.AI: AI (1)" }));
+    fireEvent.click(menu);
+    fireEvent.click(menu);
+    expect(screen.getByRole("button", { name: "Filter (1)" })).toBeTruthy();
   });
 });
