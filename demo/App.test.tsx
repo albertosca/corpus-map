@@ -2325,7 +2325,8 @@ describe("App (showcase Task 5)", () => {
       const { container } = await renderApp();
       // Item buttons render at near: open Carbon's territory from the tree.
       const openNonmetals = async () => {
-        await screen.findByText(/1\.0×/);
+        // The drawer is open from the start (a linked selection), so the first fit sits below 1.0×.
+        await screen.findByText(/\d+\.\d×/);
         act(() => screen.getByRole("button", { name: /^Reactive Nonmetals,/ }).click());
         await screen.findByRole("button", { name: "C" });
       };
@@ -2339,7 +2340,8 @@ describe("App (showcase Task 5)", () => {
 
     describe("the drawer and the map share one selection (2026-10-24 browser pass)", () => {
       const openNonmetals = async () => {
-        await screen.findByText(/1\.0×/);
+        // The drawer is open from the start (a linked selection), so the first fit sits below 1.0×.
+        await screen.findByText(/\d+\.\d×/);
         act(() => screen.getByRole("button", { name: /^Reactive Nonmetals,/ }).click());
         await screen.findByRole("button", { name: "C" });
       };
@@ -2869,15 +2871,18 @@ describe("App (showcase Task 5)", () => {
           ctrlKey: false,
         });
         await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(fit));
+        const zoomed = screen.getByText(/\d+\.\d×/).textContent;
         fireEvent.click(screen.getByRole("button", { name: "Tuning" }));
         fireEvent.change(screen.getByLabelText(/Synthetic size/), { target: { value: "9000" } });
-        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(fit));
+        // The tuning panel is open (an inset), so the regenerated map's own fit sits below the first one.
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(zoomed));
+        const regeneratedFit = screen.getByText(/\d+\.\d×/).textContent;
 
         await openAndAsk("graph");
         await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
-        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(fit));
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(regeneratedFit));
         fireEvent.click(within(dialogue()).getByRole("button", { name: "Back to previous view" }));
-        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(fit));
+        await waitFor(() => expect(screen.getByText(/\d+\.\d×/).textContent).toBe(regeneratedFit));
       } finally {
         vi.doUnmock("../fixtures/synthetic/generate");
       }
@@ -2931,7 +2936,8 @@ describe("App (showcase Task 5)", () => {
       it("narrows the panel so it never reaches under the drawer", async () => {
         Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 620 });
         const { container } = await renderApp(ASSISTANT_SPEC);
-        await screen.findByText(/1\.0×/);
+        // The window's bottom strip is an inset, so the first fit may sit below 1.0×.
+        await screen.findByText(/\d+\.\d×/);
         await openAndAsk("graph");
         await screen.findByText(/Found 2 items/, {}, { timeout: 3000 });
         fireEvent.click(within(dialogue()).getByRole("button", { name: "Graph matching" }));
