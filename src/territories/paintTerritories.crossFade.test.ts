@@ -26,6 +26,7 @@ const scene = {
   ]),
   groupShapes: new Map([["family", [triangle(0), triangle(10)]]]),
   groupColours: new Map([["family", "#00cc00"]]),
+  visitedShare: new Map(),
   groups: [{ id: "family", members: ["a", "b"] }],
 } as unknown as Scene;
 

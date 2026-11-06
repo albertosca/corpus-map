@@ -6,6 +6,7 @@ import { toScreen, type Viewport } from "../viewport/viewport";
 import { largestFirst } from "./colour";
 import { levelsOf } from "./familyFocus";
 import type { Ring } from "./shape";
+import { visitedFactor } from "./visitedFactor";
 
 /** Territory outline width in CSS pixels (spec slice D §3). */
 export const TERRITORY_OUTLINE_WIDTH = 1.5;
@@ -81,7 +82,7 @@ function outlines(surface: Surface, projected: readonly Projected[], width: numb
   if (current !== 1) surface.globalAlpha(1);
 }
 
-/** The projected shapes grouped by their level, in order of first appearance; a level of 0 draws nothing. */
+/** The projected shapes grouped by their value, in order of first appearance; a value of 0 or less draws nothing. */
 function byLevel(projected: readonly Projected[], levels: readonly number[]): Array<[number, Projected[]]> {
   const groups = new Map<number, Projected[]>();
   projected.forEach((shape, position) => {
@@ -133,8 +134,11 @@ export function paintTerritories(
     (id) => dimmed.has(id),
     viewport,
   );
+  const boost = (id: string) => visitedFactor(scene.visitedShare.get(id) ?? 0);
   if (scene.groupShapes.size === 0) {
-    fillLayer(surface, leaves, fillAlpha);
+    // Territories at one visited step share a layer; with none visited this is the one layer at `fillAlpha`.
+    const alphas = scene.paintOrder.map((id) => fillAlpha * boost(id));
+    for (const [alpha, group] of byLevel(leaves, alphas)) fillLayer(surface, group, alpha);
     outlines(surface, leaves, TERRITORY_OUTLINE_WIDTH, 1);
     return;
   }
@@ -153,13 +157,19 @@ export function paintTerritories(
     (id) => levelsOf(familyAlpha, focus?.get(familyOfLeaf.get(id) ?? "") ?? 1).leaf,
   );
   const familyLevels = familyOrder.map((id) => levelsOf(familyAlpha, focus?.get(id) ?? 1).family);
+  // A shape's fill alpha is the base times its visited factor times its level; shapes at one alpha share a layer.
+  const leafAlphas = scene.paintOrder.map((id, position) => fillAlpha * boost(id) * (leafLevels[position] as number));
+  for (const [alpha, group] of byLevel(leaves, leafAlphas)) fillLayer(surface, group, alpha);
   const leafGroups = byLevel(leaves, leafLevels);
-  for (const [level, group] of leafGroups) fillLayer(surface, group, fillAlpha * level);
   // The family layer goes over its leaves' layer, so it is drawn at the alpha that leaves the pair as opaque as
   // `fillAlpha` itself: 1 - (1 - fillAlpha * leaf) * (1 - alpha) = fillAlpha. Without it a mid transition showed
   // a lighter fill than either end (review M-6). At level 1 (no leaf layer under it) this is `fillAlpha`.
-  for (const [level, group] of byLevel(families, familyLevels))
-    fillLayer(surface, group, (fillAlpha * level) / (1 - fillAlpha * (1 - level)));
+  const familyAlphas = familyOrder.map((id, position) => {
+    const boosted = fillAlpha * boost(id);
+    const level = familyLevels[position] as number;
+    return level <= 0 ? 0 : (boosted * level) / (1 - boosted * (1 - level));
+  });
+  for (const [alpha, group] of byLevel(families, familyAlphas)) fillLayer(surface, group, alpha);
   for (const [level, group] of leafGroups) outlines(surface, group, TERRITORY_OUTLINE_WIDTH, level);
   outlines(surface, families, GROUP_OUTLINE_WIDTH, 1);
 }

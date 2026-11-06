@@ -22,6 +22,7 @@ function sceneOf(territories: Array<{ id: string; colour: string; rings: Ring[] 
     colours: new Map(territories.map((territory) => [territory.id, territory.colour])),
     groupShapes: new Map(),
     groupColours: new Map(),
+    visitedShare: new Map(),
     groups: [],
   } as unknown as Scene;
 }

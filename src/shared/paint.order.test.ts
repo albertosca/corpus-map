@@ -30,8 +30,12 @@ const spec = validateSpec({
   ],
 });
 const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+// The fill order and the pre-families pin are about spec-order independence with no visited share: a visited node
+// raises its territory's fill alpha (spec far-visited), which is pinned in paintTerritories.visited.test.ts.
+const plainSpec = { ...spec, nodes: spec.nodes.map(({ state: _state, ...node }) => node) };
+const plainScene = buildScene(plainSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
-function painted(): RecordingSurface {
+function painted(withScene = scene, withSpec = spec): RecordingSurface {
   const surface = new RecordingSurface();
   const viewport = { scale: 40, tx: 0, ty: 0 };
   const frame = {
@@ -42,13 +46,13 @@ function painted(): RecordingSurface {
     focusedTerritory: "large",
     focusedNode: "b",
   };
-  paint(surface, scene, spec, viewport, frame, DEFAULT_THEME);
+  paint(surface, withScene, withSpec, viewport, frame, DEFAULT_THEME);
   return surface;
 }
 
 describe("paint order (slice D)", () => {
   it("paints the fill layer, then outlines, then points, then focus, then names", () => {
-    const calls = painted().calls;
+    const calls = painted(plainScene, plainSpec).calls;
     const layerEnd = calls.indexOf("layerEnd");
     const pointsStart = calls.indexOf("alpha");
     const pointsEnd = calls.lastIndexOf("alpha");
@@ -62,7 +66,7 @@ describe("paint order (slice D)", () => {
   });
 
   it("fills the largest territory first, so the smaller one stays visible on top", () => {
-    const surface = painted();
+    const surface = painted(plainScene, plainSpec);
     expect(surface.polygons.map((polygon) => polygon.fill)).toEqual([
       scene.colours.get("large"),
       scene.colours.get("small"),
@@ -172,8 +176,8 @@ describe("a spec without groups", () => {
     const surface = new RecordingSurface();
     paint(
       surface,
-      scene,
-      spec,
+      plainScene,
+      plainSpec,
       { scale: 40, tx: 0, ty: 0 },
       { regime: "far", pointAlpha: 0, width: 400, height: 400, groupAlpha: 1 },
       DEFAULT_THEME,
