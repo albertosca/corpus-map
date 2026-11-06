@@ -115,19 +115,29 @@ function isScored(entry: unknown): entry is ScoredId {
  * Anything else (a mix, a missing score, a number) throws a `TypeError`.
  */
 export function orderAnswer(spec: MapSpec, found: readonly (string | ScoredId)[], rule: RankRule): string[] {
-  if (found.length === 0) return [];
-  if (found.every((entry) => typeof entry === "string")) return [...new Set(found as readonly string[])];
-  if (!found.every(isScored)) throw new TypeError("search answers must be all ids or all { id, score }");
+  // Any iterable of entries (a Set, a generator) is an answer; a string or a number is not.
+  if (
+    typeof found !== "object" ||
+    found === null ||
+    typeof (found as Iterable<unknown>)[Symbol.iterator] !== "function"
+  )
+    throw new TypeError("search answers must be a list");
+  const entries = Array.from(found);
+  if (entries.length === 0) return [];
+  if (entries.every((entry) => typeof entry === "string")) return [...new Set(entries as string[])];
+  if (!entries.every(isScored)) throw new TypeError("search answers must be all ids or all { id, score }");
   const scores = new Map<string, number>();
-  for (const entry of found as readonly ScoredId[]) {
+  const ruleScores = new Map<string, number>();
+  for (const entry of entries as ScoredId[]) {
     if (!scores.has(entry.id)) {
       scores.set(entry.id, Number.isFinite(entry.score) ? entry.score : Number.NEGATIVE_INFINITY);
+      ruleScores.set(entry.id, scoreOf(spec, entry.id, rule));
     }
   }
   return [...scores.keys()].sort(
     (left, right) =>
       byScoreDescending(scores.get(left) as number, scores.get(right) as number) ||
-      byScoreDescending(scoreOf(spec, left, rule), scoreOf(spec, right, rule)) ||
+      byScoreDescending(ruleScores.get(left) as number, ruleScores.get(right) as number) ||
       tieBreak(spec, left, right),
   );
 }

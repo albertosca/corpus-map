@@ -49,11 +49,13 @@ const IDLE: Status = { kind: "idle" };
 
 /** The ranked results under the input: the newest answer's ids, the active row (-1 for none) and whether the list is showing. */
 interface Results {
+  /** The trimmed query these ids answer, so an Enter can tell a stale list from a current one. */
+  query: string;
   ids: readonly string[];
   active: number;
   open: boolean;
 }
-const NO_RESULTS: Results = { ids: [], active: -1, open: false };
+const NO_RESULTS: Results = { query: "", ids: [], active: -1, open: false };
 const TOUCH_TARGET = 44;
 
 const VISUALLY_HIDDEN: CSSProperties = {
@@ -131,10 +133,12 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   const hintIdentifier = useId();
   const listIdentifier = useId();
   // The newest props for the timer and the answer, which outlive the render that scheduled them.
-  const latest = useRef({ spec, search, rank, onMatches });
+  const latest = useRef({ spec, search, rank, onMatches, onGo });
   useEffect(() => {
-    latest.current = { spec, search, rank, onMatches };
+    latest.current = { spec, search, rank, onMatches, onGo };
   });
+  // An Enter pressed before the answer to the current query arrived: it goes to that answer's first result, never to an older list.
+  const pendingGo = useRef(false);
   // Bumped by every change that makes an answer in flight out of date.
   const generation = useRef(0);
   const touched = useRef(false);
@@ -151,6 +155,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
 
   useEffect(() => {
     generation.current += 1;
+    pendingGo.current = false;
     if (query !== "") touched.current = true;
     else if (!touched.current) return;
     const trimmed = query.trim();
@@ -183,6 +188,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         releaseFocus();
         setStatus((previous) => announced(previous, { kind: "failed" }));
         setResults(NO_RESULTS);
+        pendingGo.current = false;
         holding.current = false;
         latest.current.onMatches(null);
         return;
@@ -190,9 +196,12 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
       if (generation.current !== mine) return;
       if (ids.length === 0) releaseFocus();
       setStatus((previous) => announced(previous, { kind: "found", count: ids.length }));
-      setResults(ids.length === 0 ? NO_RESULTS : { ids, active: -1, open: true });
+      const goNow = pendingGo.current && ids.length > 0 && current.onGo !== undefined;
+      pendingGo.current = false;
+      setResults(ids.length === 0 ? NO_RESULTS : { query: trimmed, ids, active: -1, open: !goNow });
       holding.current = true;
       latest.current.onMatches(ids);
+      if (goNow) current.onGo?.(ids[0] as string);
     }, SEARCH_DEBOUNCE_MILLISECONDS);
     return () => clearTimeout(timer);
   }, [query]);
@@ -210,6 +219,13 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   };
   const showing = results.open && results.ids.length > 0;
   const optionIdentifier = (position: number) => `${listIdentifier}-${position}`;
+  // The keyboard moves the highlight inside a list that scrolls: keep it in sight.
+  useEffect(() => {
+    if (showing && results.active >= 0)
+      document.getElementById(`${listIdentifier}-${results.active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [showing, results.active, listIdentifier]);
+  const reopen = () =>
+    setResults((previous) => (previous.ids.length > 0 && !previous.open ? { ...previous, open: true } : previous));
   const target: CSSProperties = touchTargets ? { minHeight: TOUCH_TARGET, minWidth: TOUCH_TARGET } : {};
   const control: CSSProperties = {
     font: "inherit",
@@ -253,7 +269,16 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         aria-describedby={hint === undefined ? undefined : hintIdentifier}
         value={query}
         onChange={(event: ChangeEvent<HTMLInputElement>) => changeQuery(event.target.value)}
+        onFocus={reopen}
+        onClick={reopen}
+        onBlur={(event) => {
+          const container = event.currentTarget.parentElement;
+          if (event.relatedTarget instanceof Node && container?.contains(event.relatedTarget)) return;
+          setResults((previous) => (previous.open ? { ...previous, open: false } : previous));
+        }}
         onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+          // An input method is choosing a candidate: its keys are not ours.
+          if (event.nativeEvent.isComposing) return;
           if (event.key === "Escape") {
             if (query === "") return;
             event.preventDefault();
@@ -273,9 +298,11 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
             setResults({ ...results, active: Math.min(Math.max(results.active + step, 0), last) });
             return;
           }
-          if (event.key === "Enter" && showing && onGo !== undefined) {
+          if (event.key === "Enter" && onGo !== undefined && query.trim() !== "") {
             event.preventDefault();
-            goToResult(results.ids[Math.max(results.active, 0)] as string);
+            if (showing && results.query === query.trim())
+              goToResult(results.ids[Math.max(results.active, 0)] as string);
+            else pendingGo.current = true;
           }
         }}
         style={{ ...control, flex: "1 1 4rem", minWidth: 0 }}
@@ -334,7 +361,8 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
             </div>
           ))}
           {results.ids.length > SEARCH_RESULTS_VISIBLE ? (
-            <div role="presentation" style={MORE_STYLE}>
+            // The status line already announces the total, so the line is for the eye only.
+            <div aria-hidden="true" style={MORE_STYLE}>
               {`and ${results.ids.length - SEARCH_RESULTS_VISIBLE} more`}
             </div>
           ) : null}

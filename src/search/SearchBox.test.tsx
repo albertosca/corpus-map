@@ -57,7 +57,7 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(input().hasAttribute("id")).toBe(false);
   });
 
-  it("waits the debounce, then reports the local matches in spec order", async () => {
+  it("waits the debounce, then reports the local matches (no edges: alphabetical)", async () => {
     const { onMatches } = mount();
     type("graphs");
     await settle(SEARCH_DEBOUNCE_MILLISECONDS - 1);
@@ -570,5 +570,103 @@ describe("SearchBox results list (spec ranking §4)", () => {
     type("graphs");
     await settle();
     expect((options()[0] as HTMLElement).style.minHeight).toBe("44px");
+  });
+
+  describe("the list's lifecycle (whole-branch review)", () => {
+    it("Enter typed before the debounce settles goes to the new query's first result once it arrives", async () => {
+      const onGo = vi.fn();
+      mount({ onGo });
+      type("graphs");
+      await settle();
+      onGo.mockClear();
+      type("trees");
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(onGo).not.toHaveBeenCalled();
+      await settle();
+      expect(onGo).toHaveBeenCalledTimes(1);
+      expect(onGo).toHaveBeenCalledWith("beta");
+    });
+
+    it("a pending Enter is dropped when the query is typed on, cleared or fails", async () => {
+      const onGo = vi.fn();
+      mount({ onGo });
+      type("graphs");
+      fireEvent.keyDown(input(), { key: "Enter" });
+      type("trees");
+      await settle();
+      expect(onGo).not.toHaveBeenCalled();
+      type("graphs");
+      fireEvent.keyDown(input(), { key: "Enter" });
+      fireEvent.keyDown(input(), { key: "Escape" });
+      await settle();
+      expect(onGo).not.toHaveBeenCalled();
+    });
+
+    it("closes on blur and reopens on focus or a click on the input, while a row press still goes", async () => {
+      const onGo = vi.fn();
+      mount({ onGo });
+      input().focus();
+      type("graphs");
+      await settle();
+      expect(screen.queryByRole("listbox")).not.toBeNull();
+      fireEvent.blur(input());
+      expect(screen.queryByRole("listbox")).toBeNull();
+      fireEvent.focus(input());
+      expect(screen.queryByRole("listbox")).not.toBeNull();
+      fireEvent.keyDown(input(), { key: "Escape" });
+      type("graphs");
+      await settle();
+      fireEvent.click(screen.getAllByRole("option")[1] as HTMLElement);
+      expect(onGo).toHaveBeenCalledWith("gamma");
+      expect(screen.queryByRole("listbox")).toBeNull();
+      fireEvent.click(input());
+      expect(screen.queryByRole("listbox")).not.toBeNull();
+    });
+
+    it("keeps the active option in view", async () => {
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      mount({ onGo: vi.fn() });
+      type("graphs");
+      await settle();
+      fireEvent.keyDown(input(), { key: "ArrowDown" });
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    });
+
+    it("leaves keys alone while an IME is composing", async () => {
+      const onGo = vi.fn();
+      mount({ onGo });
+      type("graphs");
+      await settle();
+      const prevented = !fireEvent.keyDown(input(), { key: "ArrowDown", isComposing: true });
+      fireEvent.keyDown(input(), { key: "Enter", isComposing: true });
+      expect(prevented).toBe(false);
+      expect(onGo).not.toHaveBeenCalled();
+    });
+
+    it("keeps the 'and N more' line out of the listbox's options and the accessibility tree", async () => {
+      const many = {
+        ...spec,
+        nodes: Array.from({ length: 60 }, (_, index) => ({
+          id: `n${index}`,
+          label: `Node ${index}`,
+          x: index,
+          y: 0,
+          territory: null,
+        })),
+      };
+      mount({ spec: many });
+      type("node");
+      await settle();
+      const line = screen.getByText("and 10 more");
+      expect(line.getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("accepts a Set as the consumer's answer", async () => {
+      const { onMatches } = mount({ search: () => new Set(["beta", "alpha"]) as unknown as string[] });
+      type("x");
+      await settle();
+      expect(lastCall(onMatches)).toEqual(["beta", "alpha"]);
+    });
   });
 });

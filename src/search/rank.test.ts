@@ -125,3 +125,16 @@ describe("labelOf", () => {
     expect(labelOf(spec, "ghost")).toBe("ghost");
   });
 });
+
+describe("orderAnswer calls a rank function once per id (whole-branch review)", () => {
+  it("scores each tied id once, not once per comparison", () => {
+    const calls: string[] = [];
+    const ids = Array.from({ length: 20 }, (_, index) => ({ id: `n${index}`, score: 1 }));
+    const nodes = ids.map((entry, index) => ({ id: entry.id, label: entry.id, x: index, y: 0, territory: null }));
+    orderAnswer({ version: "1", territories: [], nodes }, ids, (item) => {
+      calls.push(item.id);
+      return 0;
+    });
+    expect(calls.length).toBeLessThanOrEqual(ids.length);
+  });
+});
