@@ -7,8 +7,13 @@ import { generateCorpus } from "../fixtures/synthetic/generate";
 import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { DRAWER_MAXIMUM_WIDTH, Drawer } from "./components/Drawer";
-import { Footer } from "./components/Footer";
-import { ASSISTANT_PANEL_WIDTH, assistantPanelHeight, GUTTER } from "./components/floatingLayout";
+import { Footer, footerClearance } from "./components/Footer";
+import {
+  ASSISTANT_PANEL_WIDTH,
+  assistantPanelHeight,
+  GUTTER,
+  STRIP_HEIGHT_ESTIMATE,
+} from "./components/floatingLayout";
 import { createViewStore, Indicator } from "./components/Indicator";
 import { sheetCollapsedHeight, useNarrowWindow, useViewportHeight, useViewportWidth } from "./components/narrow";
 import { type LinkStatus, TopBar } from "./components/TopBar";
@@ -672,13 +677,16 @@ export function App({ loadArxiv }: AppProps = {}) {
             insets={
               narrow
                 ? {
-                    bottom: itemSheetShown ? collapsedSheetHeight : 0,
+                    // The strip with the credit is always there; the sheet covers it while an item is open.
+                    bottom: Math.max(STRIP_HEIGHT_ESTIMATE, itemSheetShown ? collapsedSheetHeight : 0),
                     // The dialogue sheet hangs under the top bar while it is open.
                     top: assistantOpen ? assistantPanelHeight(windowHeight, true) + GUTTER : 0,
                   }
                 : {
                     right: selected !== null || panelOpen ? Math.min(0.9 * viewportWidth, DRAWER_MAXIMUM_WIDTH) : 0,
                     left: assistantOpen ? assistantWidth + 2 * GUTTER : 0,
+                    // A lifted credit covers the bottom edge above the minimap's row: the legend stops above it.
+                    bottom: footerClearance(corpusId, viewportWidth, selected !== null || panelOpen),
                   }
             }
           />

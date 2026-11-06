@@ -4,6 +4,7 @@ import { token } from "../tokens";
 import {
   BOTTOM_LEFT_COLUMN_WIDTH,
   BOTTOM_ROW_HEIGHT,
+  FOOTER_LIFT_ESTIMATE,
   FOOTER_MAXIMUM_WIDTH,
   FOOTER_MINIMUM_BAND_WIDTH,
   GUTTER,
@@ -53,6 +54,20 @@ export function footerPlacement(viewportWidth: number, drawerOpen: boolean): Foo
     return { left, right, bottom: GUTTER, lifted: false };
   }
   return { left: GUTTER, right: zoomRight, bottom: BOTTOM_ROW_HEIGHT + GUTTER, lifted: true };
+}
+
+/**
+ * How far up from the window's bottom edge the credit reaches, for the map's
+ * `insets.bottom` (2026-11-06: the lifted footer covered the legend's last
+ * rows). Only a lifted footer reaches above the bottom row, whose band the
+ * legend already clears for the minimap; in the bottom row, or for a corpus
+ * without a credit, nothing extra is reserved. The footer's height is its
+ * three-line ceiling (`FOOTER_LIFT_ESTIMATE`), so the legend never needs a
+ * measured box.
+ */
+export function footerClearance(corpusId: CorpusId, viewportWidth: number, drawerOpen: boolean): number {
+  if (!DISCLOSURE[corpusId]) return 0;
+  return footerPlacement(viewportWidth, drawerOpen).lifted ? BOTTOM_ROW_HEIGHT + GUTTER + FOOTER_LIFT_ESTIMATE : 0;
 }
 
 const style: CSSProperties = {

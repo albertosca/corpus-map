@@ -1590,6 +1590,35 @@ describe("App (showcase Task 5)", () => {
         expect(checked).toBeGreaterThan(0);
       });
 
+      it("the expanded legend at its height ceiling never reaches the footer or the bottom strip at any swept width (2026-11-06: it ran under the lifted credit at 600 px and 27 px into the strip at 500 px)", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        let checked = 0;
+        for (const width of SWEEP_WIDTHS) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+          act(() => FakeResizeObserver.fireAll());
+
+          const legend = screen.getByRole("region", { name: "Map legend" });
+          if (within(legend).queryAllByRole("checkbox").length === 0)
+            fireEvent.click(within(legend).getByRole("button", { name: "Legend" }));
+          expect(within(legend).queryAllByRole("checkbox").length, `legend not expanded at ${width}`).toBeGreaterThan(
+            0,
+          );
+          const legendOutline = legendBox(container, width) as Box;
+          // Wide, the credit is its own box; narrow, it is part of the strip.
+          const credit = footerBox(container, width) ?? stripBox(container, width);
+          expect(credit, `no credit box at ${width}`).not.toBeNull();
+          const creditOutline = credit as Box;
+          expect(
+            boxesIntersect(legendOutline, creditOutline),
+            `legend yFromBottom ${legendOutline.yFromBottom0}..${legendOutline.yFromBottom1} reaches the ${creditOutline.label} at ${creditOutline.yFromBottom0}..${creditOutline.yFromBottom1} at viewport width ${width}`,
+          ).toBe(false);
+          checked += 1;
+        }
+        expect(checked).toBe(SWEEP_WIDTHS.length);
+      });
+
       it("the open dialogue panel clears every other floating box at every swept width, with the drawer open or closed", async () => {
         const { container } = await renderApp(SELECT_SPEC);
         await screen.findByText(territoryButtonText(SELECT_SPEC));

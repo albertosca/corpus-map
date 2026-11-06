@@ -20,7 +20,7 @@ export interface LegendProps {
   corner: Corner;
   /** A CSS height ceiling (`legendMaximumHeight`), so the expanded list never runs over the minimap. */
   maximumHeight: string;
-  /** The area a consumer overlay covers: the legend sits clear of it on its own two sides (spec assistant, `insets`). */
+  /** The area a consumer overlay covers: the legend sits clear of it on its own side and, on the far side, of the larger of that inset and the minimap's reserve (spec assistant, `insets`). */
   insets?: Insets | undefined;
   theme: Pick<Theme, "cardBackground" | "cardBorder" | "territoryLabel" | "pointNeutral">;
   /** The map's box is narrower than 480 px: start collapsed in every presentation (spec categories §6). */

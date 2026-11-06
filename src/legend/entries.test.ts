@@ -77,9 +77,24 @@ describe("legendMaximumHeight", () => {
     expect(legendMaximumHeight("top-left", null, 110)).toBe("calc(100% - 24px)");
   });
 
-  it("also leaves free the overlay's inset on the legend's own vertical side, and ignores the other", () => {
+  it("leaves free the overlay's inset on the legend's own vertical side, and on the other side too (a footer or a sheet at the far edge)", () => {
     const insets = { top: 50, right: 0, bottom: 30, left: 0 };
-    expect(legendMaximumHeight("top-left", null, 110, insets)).toBe("calc(100% - 74px)");
-    expect(legendMaximumHeight("bottom-right", null, 110, insets)).toBe("calc(100% - 54px)");
+    // Own side 50 + both margins 24 + the far side's 30; and the mirror.
+    expect(legendMaximumHeight("top-left", null, 110, insets)).toBe("calc(100% - 104px)");
+    expect(legendMaximumHeight("bottom-right", null, 110, insets)).toBe("calc(100% - 104px)");
+  });
+
+  it("clears a far-edge overlay that reaches higher than the minimap, instead of adding the two", () => {
+    // The minimap's 122 px (110 + a gap) is the far edge's reserve until an overlay there reaches higher.
+    const higher = { top: 0, right: 0, bottom: 198, left: 0 };
+    expect(legendMaximumHeight("top-left", "bottom-left", 110, higher)).toBe("calc(100% - 222px)");
+    expect(legendMaximumHeight("bottom-left", "top-left", 110, { ...higher, top: 198, bottom: 0 })).toBe(
+      "calc(100% - 222px)",
+    );
+  });
+
+  it("keeps the minimap's own reserve when the far-edge overlay is shorter than it", () => {
+    const lower = { top: 0, right: 0, bottom: 50, left: 0 };
+    expect(legendMaximumHeight("top-left", "bottom-left", 110, lower)).toBe("calc(100% - 146px)");
   });
 });

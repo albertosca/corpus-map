@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Footer, footerPlacement } from "./Footer";
-import { BOTTOM_ROW_HEIGHT, FOOTER_MINIMUM_BAND_WIDTH, GUTTER } from "./floatingLayout";
+import { Footer, footerClearance, footerPlacement } from "./Footer";
+import { BOTTOM_ROW_HEIGHT, FOOTER_LIFT_ESTIMATE, FOOTER_MINIMUM_BAND_WIDTH, GUTTER } from "./floatingLayout";
 
 describe("Footer (showcase Task 5)", () => {
   it("shows the exact arXiv attribution sentence for arxiv", () => {
@@ -22,6 +22,19 @@ describe("Footer (showcase Task 5)", () => {
   it("shows nothing for constellations", () => {
     const { container } = render(<Footer corpusId="constellations" />);
     expect(container.firstChild).toBeNull();
+  });
+
+  describe("footerClearance — how far up from the bottom edge the credit reaches, for the map's insets (2026-11-06)", () => {
+    it("is the lifted footer's top edge: the bottom row, a gutter and the footer's three-line height", () => {
+      expect(footerClearance("arxiv", 600, false)).toBe(BOTTOM_ROW_HEIGHT + GUTTER + FOOTER_LIFT_ESTIMATE);
+      expect(footerClearance("synthetic", 700, false)).toBe(BOTTOM_ROW_HEIGHT + GUTTER + FOOTER_LIFT_ESTIMATE);
+    });
+
+    it("is nothing for a corpus without a credit, and nothing while the footer sits in the bottom row (the legend already clears the minimap)", () => {
+      expect(footerClearance("elements", 600, false)).toBe(0);
+      expect(footerClearance("constellations", 375, false)).toBe(0);
+      expect(footerClearance("arxiv", 1440, false)).toBe(0);
+    });
   });
 
   describe("footerPlacement — in the bottom row when the band is wide enough, else lifted above it (2026-09-25 review, B9)", () => {

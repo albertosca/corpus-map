@@ -219,7 +219,8 @@ export interface CorpusMapProps {
    * toolbar); a missing, negative or non-finite side is 0. Edge markers stay
    * in the uncovered area, an item under an overlay counts as off screen,
    * and `reveal` (or a marker press) centres in that area; the legend sits
-   * clear of it on its own two sides. The fit ignores
+   * clear of it on its own side and, on the far side, of the larger of that
+   * inset and the minimap's reserve. The fit ignores
    * insets, so an overlay opening or closing never moves the zoom ratio.
    */
   insets?: Partial<Insets> | undefined;
