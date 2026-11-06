@@ -25,6 +25,12 @@ export interface Surface {
   strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
   /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
   line(start: [number, number], end: [number, number], colour: string, width: number): void;
+  /**
+   * Removes everything under the filled `rings` (to fully transparent), whatever the current alpha, so a shape drawn
+   * next replaces what was there instead of blending with it. Only meaningful inside a `layer`: without an offscreen
+   * canvas it does nothing, since the target holds more than the layer.
+   */
+  erase(rings: Array<Array<[number, number]>>): void;
   /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
   plate(left: number, top: number, width: number, height: number, radius: number, fill: string): void;
   /**
@@ -45,6 +51,7 @@ export class RecordingSurface implements Surface {
   outlines: Array<{ rings: Array<Array<[number, number]>>; color: string; width: number }> = [];
   rings: Array<{ x: number; y: number; r: number; color: string; width: number }> = [];
   layers: number[] = [];
+  erased: Array<Array<Array<[number, number]>>> = [];
   hollowCircles: Array<{ id: string; x: number; y: number; r: number; colour: string; width: number }> = [];
   lines: Array<{ from: [number, number]; to: [number, number]; colour: string; width: number }> = [];
   plates: Array<{ left: number; top: number; width: number; height: number; radius: number; fill: string }> = [];
@@ -53,6 +60,7 @@ export class RecordingSurface implements Surface {
   calls: Array<
     | "clear"
     | "polygon"
+    | "erase"
     | "circle"
     | "hollowCircle"
     | "text"
@@ -72,6 +80,10 @@ export class RecordingSurface implements Surface {
   polygon(points: Array<[number, number]>, fill: string, stroke: string) {
     this.calls.push("polygon");
     this.polygons.push({ points, fill, stroke });
+  }
+  erase(rings: Array<Array<[number, number]>>) {
+    this.calls.push("erase");
+    this.erased.push(rings);
   }
   fillCircles(marks: readonly PointMark[], radius: number, fill: string) {
     this.pointBatches.push({ kind: "fill", colour: fill, ids: marks.map((mark) => mark.id) });
@@ -152,6 +164,22 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
       context.fill();
       context.strokeStyle = stroke;
       context.stroke();
+    },
+    erase(rings) {
+      context.save();
+      context.globalAlpha = 1;
+      context.globalCompositeOperation = "destination-out";
+      context.beginPath();
+      for (const ring of rings) {
+        const [first, ...rest] = ring;
+        if (!first) continue;
+        context.moveTo(first[0], first[1]);
+        for (const [horizontal, vertical] of rest) context.lineTo(horizontal, vertical);
+        context.closePath();
+      }
+      context.fillStyle = "#000";
+      context.fill();
+      context.restore();
     },
     fillCircles(marks, radius, fill) {
       if (marks.length === 0) return;
@@ -246,7 +274,11 @@ export function canvasSurface(context: CanvasRenderingContext2D): Surface {
         // Straight onto the target: an alpha set inside is relative to the
         // layer's, as it would be inside an offscreen layer composited at `alpha`.
         const previous = context.globalAlpha;
-        const relative: Surface = { ...surface, globalAlpha: (inner) => surface.globalAlpha(inner * alpha) };
+        const relative: Surface = {
+          ...surface,
+          globalAlpha: (inner) => surface.globalAlpha(inner * alpha),
+          erase: () => {},
+        };
         context.globalAlpha = alpha;
         draw(relative);
         context.globalAlpha = previous;

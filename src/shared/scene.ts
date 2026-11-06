@@ -45,10 +45,12 @@ export interface Scene {
   /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
   maximumEdgeWeight: number;
   /**
-   * Visited nodes over all nodes, per leaf and per family id (spec far-visited §3); a territory with no visited
-   * node is absent. Empty when no node is visited, so such a spec paints exactly what it painted before.
+   * Visited nodes over all nodes, per leaf territory id (spec far-visited §3); a territory with no visited node is
+   * absent. Empty when no node is visited, so such a spec paints exactly what it painted before.
    */
   visitedShare: ReadonlyMap<string, number>;
+  /** The same per family id, over all its leaves' nodes; a separate map because family ids are not territory ids. */
+  groupVisitedShare: ReadonlyMap<string, number>;
 }
 
 /** Each territory's share of nodes marked visited, a family's over all its leaves' nodes; zero shares are left out. */
@@ -56,8 +58,9 @@ function visitedShares(
   territories: ReadonlyMap<string, Territory>,
   groups: readonly TerritoryGroup[],
   byId: ReadonlyMap<string, MapNode>,
-): Map<string, number> {
+): { leaves: Map<string, number>; families: Map<string, number> } {
   const shares = new Map<string, number>();
+  const familyShares = new Map<string, number>();
   const counts = new Map<string, { visited: number; total: number }>();
   for (const [id, territory] of territories) {
     const count = { visited: 0, total: territory.members.length };
@@ -72,9 +75,9 @@ function visitedShares(
       visited += counts.get(member)?.visited ?? 0;
       total += counts.get(member)?.total ?? 0;
     }
-    if (visited > 0) shares.set(group.id, visited / total);
+    if (visited > 0) familyShares.set(group.id, visited / total);
   }
-  return shares;
+  return { leaves: shares, families: familyShares };
 }
 
 function largestRing(rings: readonly Ring[]): Ring | undefined {
@@ -162,6 +165,7 @@ export const EMPTY_SCENE: Scene = {
   related: new Map(),
   maximumEdgeWeight: 0,
   visitedShare: new Map(),
+  groupVisitedShare: new Map(),
 };
 
 /**
@@ -286,6 +290,7 @@ export function* buildingScene(
     spaced,
   );
   yield;
+  const shares = visitedShares(territoriesById, groups, byId);
   return {
     byId,
     shapes,
@@ -303,6 +308,7 @@ export function* buildingScene(
     related: buildRelated(spec),
     // A fold, not a spread: spreading a long edge list into Math.max overflows the call stack.
     maximumEdgeWeight: (spec.edges ?? []).reduce((heaviest, edge) => Math.max(heaviest, edge.weight ?? 0), 0),
-    visitedShare: visitedShares(territoriesById, groups, byId),
+    visitedShare: shares.leaves,
+    groupVisitedShare: shares.families,
   };
 }

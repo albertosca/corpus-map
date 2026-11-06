@@ -23,6 +23,7 @@ function sceneOf(territories: Array<{ id: string; colour: string; rings: Ring[] 
     groupShapes: new Map(),
     groupColours: new Map(),
     visitedShare: new Map(),
+    groupVisitedShare: new Map(),
     groups: [],
   } as unknown as Scene;
 }

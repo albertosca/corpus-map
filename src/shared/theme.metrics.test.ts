@@ -83,6 +83,21 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
       }
   });
 
+  it("metric 15: the keyboard focus outline reaches 3:1 over the visited ceiling, on every palette colour and tint", () => {
+    // The focus outline is the only visible focus at far, where the boost is at full strength (review I1).
+    const direction = tintDirection(theme);
+    const band = tintBand(theme.palette, direction);
+    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
+    for (const page of pages.map(parseColor))
+      for (const colour of [...theme.palette, ...tints]) {
+        const background = over(withAlpha(parseColor(colour), strongest), page);
+        expect(
+          contrastRatio(parseColor(theme.focusOutline), background),
+          `${colour} at ${strongest}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+  });
+
   it("metric 16: territory names reach 4.5:1 over the strongest fill, guided and dense", () => {
     const label = parseColor(theme.territoryLabel);
     for (const page of pages.map(parseColor)) {

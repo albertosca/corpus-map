@@ -725,7 +725,7 @@ describe("visited subset (arXiv, painted)", () => {
   const plainScene = buildScene(shippedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
   const visitedScene = buildScene(visitedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
-  const layersAt = (scene: Scene, spec: MapSpec, regime: "far" | "near", pointAlpha: number): number[] => {
+  const paintedAt = (scene: Scene, spec: MapSpec, regime: "far" | "near", pointAlpha: number): RecordingSurface => {
     const surface = new RecordingSurface();
     const fit = fitAt(spec, scene, 1440, 900);
     paint(
@@ -736,7 +736,7 @@ describe("visited subset (arXiv, painted)", () => {
       { regime, pointAlpha, width: 1440, height: 900, groupAlpha: 0, compactGroupNames: false },
       DEFAULT_THEME,
     );
-    return surface.layers;
+    return surface;
   };
 
   it("measures a visited share on the subset's leaves and none elsewhere", () => {
@@ -745,17 +745,20 @@ describe("visited subset (arXiv, painted)", () => {
     expect(plainScene.visitedShare.size).toBe(0);
   });
 
-  it("fills in at most five distinct levels at far, the full leaf above the base alpha", () => {
-    const layers = layersAt(visitedScene, visitedSpec, "far", 0);
-    const distinct = new Set(layers.map((alpha) => alpha.toFixed(6)));
-    expect(distinct.size).toBeGreaterThan(1);
-    expect(distinct.size).toBeLessThanOrEqual(5);
-    expect(Math.max(...layers)).toBeCloseTo(DEFAULT_THEME.territoryFillAlpha * 1.75, 6);
+  it("fills in one layer at the strongest alpha, in at most five distinct steps, erasing under each shape", () => {
+    const surface = paintedAt(visitedScene, visitedSpec, "far", 0);
+    expect(surface.layers).toHaveLength(1);
+    expect(surface.layers[0]).toBeCloseTo(DEFAULT_THEME.territoryFillAlpha * 1.5, 6);
+    const steps = new Set(surface.alphas.map((alpha) => alpha.toFixed(6)));
+    expect(steps.size).toBeGreaterThan(1);
+    expect(steps.size).toBeLessThanOrEqual(5);
+    expect(surface.erased).toHaveLength(leafIds.length);
   });
 
   it("draws the base alpha only at near, where the points carry the state", () => {
-    const layers = layersAt(visitedScene, visitedSpec, "near", 1);
-    expect(Math.max(...layers)).toBeCloseTo(DEFAULT_THEME.territoryFillAlpha, 6);
+    const surface = paintedAt(visitedScene, visitedSpec, "near", 1);
+    expect(surface.layers).toEqual([DEFAULT_THEME.territoryFillAlpha]);
+    expect(surface.erased).toHaveLength(0);
   });
 
   it("draws the same names with and without visited nodes (the fill never moves a name)", () => {

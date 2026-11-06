@@ -41,6 +41,7 @@ const scene = {
     ["B", "#00cb00"],
   ]),
   visitedShare: new Map(),
+  groupVisitedShare: new Map(),
   groups: [
     { id: "A", members: ["a1", "a2"] },
     { id: "B", members: ["b1", "b2"] },

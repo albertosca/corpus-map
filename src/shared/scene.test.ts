@@ -442,13 +442,15 @@ describe("buildScene visitedShare", () => {
 
   it("is empty when no node is visited", () => {
     expect(build(nestedSpec()).visitedShare.size).toBe(0);
+    expect(build(nestedSpec()).groupVisitedShare.size).toBe(0);
   });
 
   it("holds each leaf's visited nodes over its nodes, and a family's over all its leaves' nodes", () => {
     const scene = build(visit(nestedSpec(), ["a0", "a1", "a2"]));
     expect(scene.visitedShare.get("a")).toBe(0.5);
     expect(scene.visitedShare.has("b")).toBe(false);
-    expect(scene.visitedShare.get("p")).toBe(0.25);
+    expect(scene.groupVisitedShare.get("p")).toBe(0.25);
+    expect(scene.visitedShare.has("p")).toBe(false);
   });
 
   it("ignores a node that is not marked visited, and a territory with no members has no share", () => {

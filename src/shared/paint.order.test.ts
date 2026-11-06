@@ -32,6 +32,8 @@ const spec = validateSpec({
 const scene = buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 // The fill order and the pre-families pin are about spec-order independence with no visited share: a visited node
 // raises its territory's fill alpha (spec far-visited), which is pinned in paintTerritories.visited.test.ts.
+// The point-layer tests count the calls inside it; the fill's per-step erases are not what they are about.
+const pointScene = { ...scene, visitedShare: new Map<string, number>() };
 const plainSpec = { ...spec, nodes: spec.nodes.map(({ state: _state, ...node }) => node) };
 const plainScene = buildScene(plainSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
 
@@ -88,7 +90,7 @@ describe("paint order (slice D)", () => {
     const surface = new RecordingSurface();
     paint(
       surface,
-      scene,
+      pointScene,
       spec,
       { scale: 40, tx: 0, ty: 0 },
       { regime: "mid", pointAlpha: 0.5, width: 400, height: 400, selected: "b" },
@@ -105,7 +107,7 @@ describe("paint order (slice D)", () => {
     const surface = new RecordingSurface();
     paint(
       surface,
-      scene,
+      pointScene,
       spec,
       { scale: 40, tx: 0, ty: 0 },
       { regime: "far", pointAlpha: 0, width: 400, height: 400, selected: "b" },
@@ -129,7 +131,7 @@ describe("edges in the point layer (spec slice E §6)", () => {
     const surface = new RecordingSurface();
     paint(
       surface,
-      edgeScene,
+      { ...edgeScene, visitedShare: new Map<string, number>() },
       withEdges,
       { scale: 40, tx: 0, ty: 0 },
       { regime: "mid", pointAlpha: 0.5, width: 400, height: 400, ...frame },
@@ -267,7 +269,7 @@ describe("search matches in the point layer (spec search §2)", () => {
   const frame = { regime: "mid" as const, pointAlpha: 1, width: 400, height: 400 };
   const run = (extra: object) => {
     const surface = new RecordingSurface();
-    paint(surface, scene, spec, { scale: 40, tx: 0, ty: 0 }, { ...frame, ...extra }, DEFAULT_THEME);
+    paint(surface, pointScene, spec, { scale: 40, tx: 0, ty: 0 }, { ...frame, ...extra }, DEFAULT_THEME);
     return surface;
   };
 

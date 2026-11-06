@@ -1571,10 +1571,12 @@ export interface Scene {
     /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
     maximumEdgeWeight: number;
     /**
-     * Visited nodes over all nodes, per leaf and per family id (spec far-visited §3); a territory with no visited
-     * node is absent. Empty when no node is visited, so such a spec paints exactly what it painted before.
+     * Visited nodes over all nodes, per leaf territory id (spec far-visited §3); a territory with no visited node is
+     * absent. Empty when no node is visited, so such a spec paints exactly what it painted before.
      */
     visitedShare: ReadonlyMap<string, number>;
+    /** The same per family id, over all its leaves' nodes; a separate map because family ids are not territory ids. */
+    groupVisitedShare: ReadonlyMap<string, number>;
 }
 /** Below this box width, in CSS pixels, the family names are the compact ones (spec mobile §4). */
 export declare const NARROW_BOX_WIDTH = 600;
@@ -1725,6 +1727,12 @@ export interface Surface {
     strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
     /** Strokes a straight line from `start` to `end` at `width`, leaving later calls untouched. */
     line(start: [number, number], end: [number, number], colour: string, width: number): void;
+    /**
+     * Removes everything under the filled `rings` (to fully transparent), whatever the current alpha, so a shape drawn
+     * next replaces what was there instead of blending with it. Only meaningful inside a `layer`: without an offscreen
+     * canvas it does nothing, since the target holds more than the layer.
+     */
+    erase(rings: Array<Array<[number, number]>>): void;
     /** Fills a rounded rectangle (an item label's plate), leaving later calls untouched. */
     plate(left: number, top: number, width: number, height: number, radius: number, fill: string): void;
     /**
@@ -1771,6 +1779,7 @@ export declare class RecordingSurface implements Surface {
         width: number;
     }>;
     layers: number[];
+    erased: Array<Array<Array<[number, number]>>>;
     hollowCircles: Array<{
         id: string;
         x: number;
@@ -1799,9 +1808,10 @@ export declare class RecordingSurface implements Surface {
         colour: string;
         ids: string[];
     }>;
-    calls: Array<"clear" | "polygon" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "plate" | "layer" | "layerEnd">;
+    calls: Array<"clear" | "polygon" | "erase" | "circle" | "hollowCircle" | "text" | "alpha" | "outline" | "ring" | "line" | "plate" | "layer" | "layerEnd">;
     clear(): void;
     polygon(points: Array<[number, number]>, fill: string, stroke: string): void;
+    erase(rings: Array<Array<[number, number]>>): void;
     fillCircles(marks: readonly PointMark[], radius: number, fill: string): void;
     strokeCircles(marks: readonly PointMark[], radius: number, colour: string, width: number): void;
     text(text: string, horizontal: number, vertical: number, color: string, font: string, letterSpacing?: string): void;
@@ -1859,7 +1869,7 @@ export interface Theme {
     palette: string[];
     /** Colour of a point with no territory, and of a territory the palette left uncoloured. */
     pointNeutral: string;
-    /** Alpha at which the single territory fill layer is composited (guided presentation). */
+    /** Alpha at which the territory fill layer is composited (guided presentation); a visited territory is filled at up to 1.5 times it. */
     territoryFillAlpha: number;
 }
 /** The family names' font below a 600 px box when the theme names none. */
@@ -2125,7 +2135,9 @@ export declare const GROUP_OUTLINE_WIDTH = 2.5;
  * 1, it draws exactly what it drew before; a leaf in no family counts as 1.
  *
  * A territory's fill alpha is also multiplied by its visited factor (spec far-visited), scaled by `visitedStrength`
- * (1 where no point is drawn, 0 where the points are fully drawn); no visited node leaves the calls unchanged.
+ * (1 where no point is drawn, 0 where the points are fully drawn) and capped at 1; no visited node leaves the calls
+ * unchanged. Territories at different visited steps share the layer (each erases what is under it, `fillLayer`), so
+ * the smallest-on-top rule holds across steps.
  */
 export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>, visitedStrength?: number): void;
 
@@ -2204,8 +2216,8 @@ export declare function tooltipPosition(cursorHorizontal: number, cursorVertical
 /** The visited share is rounded to the nearest 1/`VISITED_STEPS` (spec far-visited §2). */
 export declare const VISITED_STEPS = 4;
 /** A territory with every node visited is filled at `1 + VISITED_MAXIMUM_BOOST` times the base alpha. */
-export declare const VISITED_MAXIMUM_BOOST = 0.75;
-/** The factor a territory's fill alpha is multiplied by: 1 for no visited node, 1.75 for all (spec far-visited §2). */
+export declare const VISITED_MAXIMUM_BOOST = 0.5;
+/** The factor a territory's fill alpha is multiplied by: 1 for no visited node, 1.5 for all (spec far-visited §2). */
 export declare function visitedFactor(share: number): number;
 
 // viewport/fit.d.ts

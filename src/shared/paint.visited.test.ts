@@ -7,7 +7,7 @@ import { RecordingSurface } from "./surface";
 import { DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
-// The visited boost is for where points are not drawn: names reach 4.5:1 over the 0.35 fill, but the palette's
+// The visited boost is for where points are not drawn: names reach 4.5:1 over the 0.30 fill, but the palette's
 // points reach 3:1 only up to about 0.204 (measured, spec far-visited §5), so the boost fades out as points fade in.
 
 const spec: MapSpec = validateSpec({
@@ -49,7 +49,7 @@ function fillAlpha(frame: Record<string, unknown>): number {
 
 describe("paint's visited boost", () => {
   it("is full at far, where no point is drawn", () => {
-    expect(fillAlpha({})).toBeCloseTo(BASE * 1.75, 12);
+    expect(fillAlpha({})).toBeCloseTo(BASE * 1.5, 12);
   });
 
   it("is gone once the points are fully drawn (mid and near)", () => {
@@ -58,7 +58,7 @@ describe("paint's visited boost", () => {
   });
 
   it("fades out as the points fade in", () => {
-    expect(fillAlpha({ regime: "mid", pointAlpha: 0.5 })).toBeCloseTo(BASE * 1.375, 12);
+    expect(fillAlpha({ regime: "mid", pointAlpha: 0.5 })).toBeCloseTo(BASE * 1.25, 12);
   });
 
   it("is gone at far while a search draws the points at full strength", () => {

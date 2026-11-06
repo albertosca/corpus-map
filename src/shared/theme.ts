@@ -41,7 +41,7 @@ export interface Theme {
   palette: string[];
   /** Colour of a point with no territory, and of a territory the palette left uncoloured. */
   pointNeutral: string;
-  /** Alpha at which the single territory fill layer is composited (guided presentation). */
+  /** Alpha at which the territory fill layer is composited (guided presentation); a visited territory is filled at up to 1.5 times it. */
   territoryFillAlpha: number;
 }
 
