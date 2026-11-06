@@ -1276,7 +1276,7 @@ export interface SearchBoxProps {
     /** The corpus the local search runs over; a new spec object clears the box. */
     spec: MapSpec;
     /**
-     * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it.
+     * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the spec does not know are dropped.
      * Return ids to keep the order you ranked them in, or `{ id, score }` entries to have them sorted by score (highest first, equal scores by `rank`, then alphabetically).
      */
     search?: ((query: string) => readonly (string | ScoredId)[] | Promise<readonly (string | ScoredId)[]>) | undefined;
@@ -1353,10 +1353,14 @@ export interface ScoredId {
     id: string;
     score: number;
 }
+/** Whether the spec has a node with this id. */
+export declare function knows(spec: MapSpec, id: string): boolean;
 /** The node's label, or the id itself for an id the spec does not have. */
 export declare function labelOf(spec: MapSpec, id: string): string;
 /** Orders found ids best first by `rule`; ties by folded label, then id. */
 export declare function orderLocal(spec: MapSpec, ids: readonly string[], rule: RankRule): string[];
+/** A consumer's answer as a list: any iterable of entries (a Set, a generator) is one; a string or a number is not (a `TypeError`). */
+export declare function answerEntries(found: readonly (string | ScoredId)[]): (string | ScoredId)[];
 /**
  * Orders a consumer's answer. Plain ids keep the order they came in (the back
  * end ranked them); `{ id, score }` entries sort by score descending, equal

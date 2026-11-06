@@ -221,12 +221,21 @@ describe("SearchBox (spec search §4, §5)", () => {
     expect(document.activeElement).not.toBe(input());
   });
 
-  it("passes a consumer's ids through de-duplicated, unknown ids included (the map ignores them)", async () => {
+  it("passes a consumer's ids through de-duplicated and drops the ids the spec does not know (review M3)", async () => {
     const { onMatches } = mount({ search: () => ["beta", "ghost", "beta"] });
     type("anything");
     await settle();
-    expect(lastCall(onMatches)).toEqual(["beta", "ghost"]);
-    expect(screen.getByRole("status").textContent).toBe("2 results");
+    expect(lastCall(onMatches)).toEqual(["beta"]);
+    expect(screen.getByRole("status").textContent).toBe("1 result");
+  });
+
+  it("an answer of only unknown ids is an empty result, not rows labelled by id (review M3)", async () => {
+    const { onMatches } = mount({ search: () => ["ghost"] });
+    type("anything");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("No results");
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(lastCall(onMatches)).toEqual([]);
   });
 
   it("clears the input and reports null when the spec changes, dropping a pending answer", async () => {
@@ -573,6 +582,41 @@ describe("SearchBox results list (spec ranking §4)", () => {
   });
 
   describe("the list's lifecycle (whole-branch review)", () => {
+    it("re-orders the shown list and the reported ids when the rank rule changes, without searching again (review M8)", async () => {
+      const { onMatches, rerender } = mount({ rank: "alphabetical" });
+      type("graphs");
+      await settle();
+      const labels = () => screen.getAllByRole("option").map((option) => option.textContent);
+      expect(labels()).toEqual(["Alpha graphs", "Gamma graphs"]);
+      const calls = onMatches.mock.calls.length;
+      rerender(<SearchBox spec={spec} onMatches={onMatches} rank={(item) => (item.id === "gamma" ? 10 : 0)} />);
+      expect(labels()).toEqual(["Gamma graphs", "Alpha graphs"]);
+      expect(lastCall(onMatches)).toEqual(["gamma", "alpha"]);
+      expect(onMatches.mock.calls.length).toBe(calls + 1);
+    });
+
+    it("a rank function recreated every render that orders the same does not report again (review M8)", async () => {
+      const { onMatches, rerender } = mount({ rank: () => 0 });
+      type("graphs");
+      await settle();
+      const calls = onMatches.mock.calls.length;
+      for (let round = 0; round < 3; round += 1)
+        rerender(<SearchBox spec={spec} onMatches={onMatches} rank={() => 0} />);
+      expect(onMatches.mock.calls.length).toBe(calls);
+    });
+
+    it("a consumer's plain-id answer keeps its order when the rank rule changes (review M8)", async () => {
+      const search = () => ["gamma", "alpha"];
+      const { onMatches, rerender } = mount({ search, rank: "alphabetical" });
+      type("graphs");
+      await settle();
+      rerender(<SearchBox spec={spec} onMatches={onMatches} search={search} rank="connections" />);
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+        "Gamma graphs",
+        "Alpha graphs",
+      ]);
+    });
+
     it("Enter typed before the debounce settles goes to the new query's first result once it arrives", async () => {
       const onGo = vi.fn();
       mount({ onGo });

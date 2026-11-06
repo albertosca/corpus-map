@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { MapSpec } from "../shared/spec";
 import { localSearch, searchIndexAsync } from "./localSearch";
-import { labelOf, orderAnswer, orderLocal, type RankRule, type ScoredId } from "./rank";
+import { answerEntries, knows, labelOf, orderAnswer, orderLocal, type RankRule, type ScoredId } from "./rank";
 
 /** How long the query must rest before it is searched (spec search §4). */
 export const SEARCH_DEBOUNCE_MILLISECONDS = 200;
@@ -21,7 +21,7 @@ export interface SearchBoxProps {
   /** The corpus the local search runs over; a new spec object clears the box. */
   spec: MapSpec;
   /**
-   * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it.
+   * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the spec does not know are dropped.
    * Return ids to keep the order you ranked them in, or `{ id, score }` entries to have them sorted by score (highest first, equal scores by `rank`, then alphabetically).
    */
   search?: ((query: string) => readonly (string | ScoredId)[] | Promise<readonly (string | ScoredId)[]>) | undefined;
@@ -137,6 +137,14 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   useEffect(() => {
     latest.current = { spec, search, rank, onMatches, onGo };
   });
+  // The newest answer as it came (before ordering) and the rank rule its order was made with, so a new rule can re-order the shown list without searching again.
+  const answer = useRef<{
+    spec: MapSpec;
+    query: string;
+    entries: readonly (string | ScoredId)[];
+    consumer: boolean;
+  } | null>(null);
+  const orderedWith = useRef(rank);
   // An Enter pressed before the answer to the current query arrived: it goes to that answer's first result, never to an older list.
   const pendingGo = useRef(false);
   // Bumped by every change that makes an answer in flight out of date.
@@ -180,9 +188,15 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
           : searchIndexAsync(current.spec).then((index) => localSearch(index, trimmed)));
         // Nothing at all is a broken search, not an empty result; a value that is not a list, or a mixed one, throws in the ordering.
         if (found === undefined || found === null) throw new TypeError("search returned nothing");
-        ids = current.search
-          ? orderAnswer(current.spec, found, current.rank)
-          : orderLocal(current.spec, found as readonly string[], current.rank);
+        const entries = current.search ? answerEntries(found) : (found as readonly string[]);
+        // An id the spec does not know has no place on the map to go to: it is no result (as the assistant also drops it).
+        ids = (
+          current.search
+            ? orderAnswer(current.spec, entries, current.rank)
+            : orderLocal(current.spec, entries as readonly string[], current.rank)
+        ).filter((id) => knows(current.spec, id));
+        answer.current = { spec: current.spec, query: trimmed, entries, consumer: current.search !== undefined };
+        orderedWith.current = current.rank;
       } catch {
         if (generation.current !== mine) return;
         releaseFocus();
@@ -205,6 +219,20 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
     }, SEARCH_DEBOUNCE_MILLISECONDS);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // A new rank rule re-orders the list on screen from the answer it was made of; the same order again reports nothing.
+  useEffect(() => {
+    if (rank === orderedWith.current) return;
+    orderedWith.current = rank;
+    const held = answer.current;
+    if (held === null || held.spec !== spec || held.query !== results.query || results.ids.length === 0) return;
+    const ordered = (
+      held.consumer ? orderAnswer(spec, held.entries, rank) : orderLocal(spec, held.entries as readonly string[], rank)
+    ).filter((id) => knows(spec, id));
+    if (ordered.length === results.ids.length && ordered.every((id, index) => id === results.ids[index])) return;
+    setResults({ ...results, ids: ordered, active: -1 });
+    onMatches(ordered);
+  }, [rank, spec, results, onMatches]);
 
   const changeQuery = (next: string) => {
     setQuery(next);

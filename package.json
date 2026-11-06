@@ -59,7 +59,7 @@
     "maximumGzipBytes": 36420,
     "search": {
       "file": "dist/search.js",
-      "maximumGzipBytes": 3915
+      "maximumGzipBytes": 4110
     },
     "assistant": {
       "file": "dist/assistant.js",

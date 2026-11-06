@@ -56,6 +56,11 @@ function factsOf(spec: MapSpec): Facts {
   return built;
 }
 
+/** Whether the spec has a node with this id. */
+export function knows(spec: MapSpec, id: string): boolean {
+  return factsOf(spec).items.has(id);
+}
+
 /** The node's label, or the id itself for an id the spec does not have. */
 export function labelOf(spec: MapSpec, id: string): string {
   return factsOf(spec).items.get(id)?.label ?? id;
@@ -108,6 +113,17 @@ function isScored(entry: unknown): entry is ScoredId {
   );
 }
 
+/** A consumer's answer as a list: any iterable of entries (a Set, a generator) is one; a string or a number is not (a `TypeError`). */
+export function answerEntries(found: readonly (string | ScoredId)[]): (string | ScoredId)[] {
+  if (
+    typeof found !== "object" ||
+    found === null ||
+    typeof (found as Iterable<unknown>)[Symbol.iterator] !== "function"
+  )
+    throw new TypeError("search answers must be a list");
+  return Array.from(found);
+}
+
 /**
  * Orders a consumer's answer. Plain ids keep the order they came in (the back
  * end ranked them); `{ id, score }` entries sort by score descending, equal
@@ -115,14 +131,7 @@ function isScored(entry: unknown): entry is ScoredId {
  * Anything else (a mix, a missing score, a number) throws a `TypeError`.
  */
 export function orderAnswer(spec: MapSpec, found: readonly (string | ScoredId)[], rule: RankRule): string[] {
-  // Any iterable of entries (a Set, a generator) is an answer; a string or a number is not.
-  if (
-    typeof found !== "object" ||
-    found === null ||
-    typeof (found as Iterable<unknown>)[Symbol.iterator] !== "function"
-  )
-    throw new TypeError("search answers must be a list");
-  const entries = Array.from(found);
+  const entries = answerEntries(found);
   if (entries.length === 0) return [];
   if (entries.every((entry) => typeof entry === "string")) return [...new Set(entries as string[])];
   if (!entries.every(isScored)) throw new TypeError("search answers must be all ids or all { id, score }");
