@@ -29,7 +29,7 @@ export interface SearchBoxProps {
   rank?: RankRule | undefined;
   /** The matches to draw, best first: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
   onMatches: (ids: readonly string[] | null) => void;
-  /** Called with an item's id when the reader presses Enter or picks a result; pair it with `CorpusMapHandle.reveal`. Typing never calls it. */
+  /** Called with an item's id when the reader presses Enter or picks a result; pair it with `CorpusMapHandle.reveal` (centres at the current zoom; zoom in first with `setView` if items should be readable). Typing never calls it. */
   onGo?: ((id: string) => void) | undefined;
   /** When given, a "Show on map" button appears beside a non-empty result; pair it with `CorpusMapHandle.revealAll`. */
   onShow?: (() => void) | undefined;

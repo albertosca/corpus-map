@@ -1267,15 +1267,25 @@ export declare function paintSelection(surface: Surface, scene: Scene, viewport:
 // search/SearchBox.d.ts
 import { type CSSProperties, type ReactElement } from "react";
 import type { MapSpec } from "../shared/spec";
+import { type RankRule, type ScoredId } from "./rank";
 /** How long the query must rest before it is searched (spec search §4). */
 export declare const SEARCH_DEBOUNCE_MILLISECONDS = 200;
+/** How many results the list renders; the rest is one "and N more" line (spec ranking §4). */
+export declare const SEARCH_RESULTS_VISIBLE = 50;
 export interface SearchBoxProps {
     /** The corpus the local search runs over; a new spec object clears the box. */
     spec: MapSpec;
-    /** Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it. */
-    search?: ((query: string) => readonly string[] | Promise<readonly string[]>) | undefined;
-    /** The matches to draw: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
+    /**
+     * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it.
+     * Return ids to keep the order you ranked them in, or `{ id, score }` entries to have them sorted by score (highest first, equal scores by `rank`, then alphabetically).
+     */
+    search?: ((query: string) => readonly (string | ScoredId)[] | Promise<readonly (string | ScoredId)[]>) | undefined;
+    /** How local matches are ordered, and how ties among a consumer's scores are broken: "connections" (default, most edges first), "alphabetical", or a score function (higher first). Ties are always alphabetical. A consumer's plain id list keeps its own order. */
+    rank?: RankRule | undefined;
+    /** The matches to draw, best first: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
     onMatches: (ids: readonly string[] | null) => void;
+    /** Called with an item's id when the reader presses Enter or picks a result; pair it with `CorpusMapHandle.reveal` (centres at the current zoom; zoom in first with `setView` if items should be readable). Typing never calls it. */
+    onGo?: ((id: string) => void) | undefined;
     /** When given, a "Show on map" button appears beside a non-empty result; pair it with `CorpusMapHandle.revealAll`. */
     onShow?: (() => void) | undefined;
     /** The accessible name of the search landmark and the input; "Search" by default. */
@@ -1297,6 +1307,7 @@ export interface SearchBoxProps {
 export declare function SearchBox(properties: SearchBoxProps): ReactElement;
 
 // search/index.d.ts
+export type { RankContext, RankItem, RankRule, ScoredId } from "./rank";
 export { SearchBox, type SearchBoxProps } from "./SearchBox";
 
 // search/localSearch.d.ts
@@ -1321,6 +1332,38 @@ export declare function searchIndexOf(spec: MapSpec): SearchIndex;
 export declare function searchIndexAsync(spec: MapSpec): Promise<SearchIndex>;
 /** Ids of the items whose label or `meta` contains every word of `query`, in spec order; no words, no ids. */
 export declare function localSearch(index: SearchIndex, query: string): string[];
+
+// search/rank.d.ts
+import type { MapSpec } from "../shared/spec";
+/** What a rank function is shown of an item. */
+export interface RankItem {
+    id: string;
+    label: string;
+    meta?: unknown;
+}
+/** What a rank function can ask of the corpus besides the item. */
+export interface RankContext {
+    /** How many edges the item has (0 for an item without any, or an id the spec does not have). */
+    connections: (id: string) => number;
+}
+/** "connections" (default): most edges first; "alphabetical": the label only; or a score, highest first. Ties are always alphabetical. */
+export type RankRule = "connections" | "alphabetical" | ((item: RankItem, context: RankContext) => number);
+/** A consumer's answer entry that carries its own relevance. */
+export interface ScoredId {
+    id: string;
+    score: number;
+}
+/** The node's label, or the id itself for an id the spec does not have. */
+export declare function labelOf(spec: MapSpec, id: string): string;
+/** Orders found ids best first by `rule`; ties by folded label, then id. */
+export declare function orderLocal(spec: MapSpec, ids: readonly string[], rule: RankRule): string[];
+/**
+ * Orders a consumer's answer. Plain ids keep the order they came in (the back
+ * end ranked them); `{ id, score }` entries sort by score descending, equal
+ * scores by `rule`, then the tie-break. A repeated id keeps its first place.
+ * Anything else (a mix, a missing score, a number) throws a `TypeError`.
+ */
+export declare function orderAnswer(spec: MapSpec, found: readonly (string | ScoredId)[], rule: RankRule): string[];
 
 // shared/compareIds.d.ts
 /** Orders ids by code unit, the tie-break every sorted list in the map uses so the order never depends on the input's. */
