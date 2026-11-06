@@ -5,6 +5,7 @@ import { drawnItemLabels, itemLabelRect, paintItemLabels } from "../../src/label
 import { estimateText, LABEL_PADDING, type PlacedLabel } from "../../src/labels/placement";
 import { DEFAULT_THRESHOLDS } from "../../src/lod/lod";
 import { fade, groupNameAlpha, regimeAt } from "../../src/lod/regime";
+import { usableArea } from "../../src/shared/insets";
 import { paint } from "../../src/shared/paint";
 import { buildScene, GROUP_LETTER_SPACING, groupLabelsFor, NARROW_BOX_WIDTH, type Scene } from "../../src/shared/scene";
 import type { MapNode, MapSpec, Territory } from "../../src/shared/spec";
@@ -377,6 +378,27 @@ describe("acceptance 2: the fitted arXiv view", () => {
       expect(missing.length).toBeLessThanOrEqual(allowedMissing);
     });
   }
+
+  // Spec fit-insets §5.1 and §5.4: a fit beside the demo's drawer (400 px) keeps the corpus whole inside the area the
+  // drawer leaves free, in the far regime, with every family name drawn whole there and none overlapping.
+  it("at 1440x900 beside a 400 px drawer the fit sits inside the free area, far, with every family name whole", () => {
+    const area = usableArea(1440, 900, { top: 0, right: 400, bottom: 0, left: 0 });
+    const labelled = { ...scene, groupLabels: groupLabelsFor(scene, 1440) };
+    const whole = fitScene(spec, labelled, 1440, 900, 24);
+    const beside = fitScene(spec, labelled, 1440, 900, 24, { groupNames: true }, area);
+    const ratio = beside.scale / whole.scale;
+    expect(ratio).toBeLessThanOrEqual(1);
+    expect(regimeAt(ratio, DEFAULT_THRESHOLDS, "far", DEFAULT_TUNING.hysteresis)).toBe("far");
+    const boxes = drawnBoxes(spec, scene, beside, 1440, 900, ratio);
+    const drawn = new Set(boxes.map((box) => box.text));
+    expect(
+      familiesOf(spec)
+        .filter((family) => !drawn.has(family.name))
+        .map((family) => family.name),
+    ).toEqual([]);
+    expect(boxes.filter((box) => box.x + box.width / 2 > area.left + area.width).map((box) => box.text)).toEqual([]);
+    expect(overlappingPairs(boxes)).toEqual([]);
+  });
 
   for (const [width, height] of [
     [1440, 900],

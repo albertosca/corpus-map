@@ -156,11 +156,13 @@ export interface CorpusMapProps {
      * and `reveal` (or a marker press) centres in that area; the legend sits
      * clear of it on its own side and, on the far side, of the larger of that
      * inset and the minimap's reserve. Every fit (the first view, a new `spec`,
-     * `fit()`, Back to overview) scales and centres the map into the box less
-     * `insets`, read at the moment of the fit, so a fit beside a drawer reports
-     * a `ratio` below 1 (ratio 1 stays the fit of the whole box); a free area
-     * under 120 px on either axis is ignored. An `insets` change alone moves
-     * nothing: the next fit does.
+     * `fit()`, the fit key, Back to overview) scales and centres the map into
+     * the box less `insets`, read at the moment of the fit, so a fit beside a
+     * drawer reports a `ratio` below 1 (ratio 1 stays the fit of the whole
+     * box); a free area under 120 px on either axis, or one that would need a
+     * zoom below the 1/8 band, is ignored. An `insets` change alone moves
+     * nothing: the next fit does. A controlled `viewport` that is invalid
+     * draws the whole-box fit, as its default.
      */
     insets?: Partial<Insets> | undefined;
     /**

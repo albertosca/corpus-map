@@ -221,11 +221,13 @@ export interface CorpusMapProps {
    * and `reveal` (or a marker press) centres in that area; the legend sits
    * clear of it on its own side and, on the far side, of the larger of that
    * inset and the minimap's reserve. Every fit (the first view, a new `spec`,
-   * `fit()`, Back to overview) scales and centres the map into the box less
-   * `insets`, read at the moment of the fit, so a fit beside a drawer reports
-   * a `ratio` below 1 (ratio 1 stays the fit of the whole box); a free area
-   * under 120 px on either axis is ignored. An `insets` change alone moves
-   * nothing: the next fit does.
+   * `fit()`, the fit key, Back to overview) scales and centres the map into
+   * the box less `insets`, read at the moment of the fit, so a fit beside a
+   * drawer reports a `ratio` below 1 (ratio 1 stays the fit of the whole
+   * box); a free area under 120 px on either axis, or one that would need a
+   * zoom below the 1/8 band, is ignored. An `insets` change alone moves
+   * nothing: the next fit does. A controlled `viewport` that is invalid
+   * draws the whole-box fit, as its default.
    */
   insets?: Partial<Insets> | undefined;
   /**
@@ -534,13 +536,28 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const groupNamesAtFit = regimeAt(1, thresholds, "far", tuning.hysteresis) === "far";
   // A box narrower than `NARROW_BOX_WIDTH` draws the compact family names, so it fits those (spec mobile §4).
   const compactGroupNames = width < NARROW_BOX_WIDTH;
+  // The fit into a free area (spec fit-insets). Its names are counted for the regime it lands in, not the whole-box
+  // one: a ratio below 1 can be far where ratio 1 is mid (`midAt` under 1), so the first pass decides the names and a
+  // second one refits when they differ. A fit below the zoom band could not be drawn again, so it keeps `whole`.
+  const fitFree = (labelled: typeof scene, whole: Viewport, area: NonNullable<ReturnType<typeof freeArea>>) => {
+    let free = fitScene(spec, labelled, width, height, FIT_PADDING, { groupNames: groupNamesAtFit }, area);
+    const namesAtFree = regimeAt(free.scale / whole.scale, thresholds, "far", tuning.hysteresis) === "far";
+    if (namesAtFree !== groupNamesAtFit) {
+      free = fitScene(spec, labelled, width, height, FIT_PADDING, { groupNames: namesAtFree }, area);
+    }
+    return free.scale < whole.scale * ZOOM_BAND.minimum ? whole : free;
+  };
   const [ownViewport, setOwnViewport] = useState<Viewport>(() => {
     const labelled = { ...scene, groupLabels: groupLabelsFor(scene, width) };
-    const options = { groupNames: groupNamesAtFit };
-    const wholeBox = fitScene(spec, labelled, width, height, FIT_PADDING, options);
+    const wholeBox = fitScene(spec, labelled, width, height, FIT_PADDING, { groupNames: groupNamesAtFit });
     const area = freeArea(width, height, insets);
-    const free = area === null ? wholeBox : fitScene(spec, labelled, width, height, FIT_PADDING, options, area);
-    return startingView(properties.defaultViewport, wholeBox, free, width, height);
+    return startingView(
+      properties.defaultViewport,
+      wholeBox,
+      area === null ? wholeBox : fitFree(labelled, wholeBox, area),
+      width,
+      height,
+    );
   });
   // A theme or font change rebuilds the scene and so moves `fitted` (and
   // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
@@ -558,15 +575,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const fitNow = (): Viewport => {
     const area = freeArea(width, height, insets);
     if (area === null) return fitted;
-    return fitScene(
-      spec,
-      { ...scene, groupLabels: groupLabelsFor(scene, width) },
-      width,
-      height,
-      FIT_PADDING,
-      { groupNames: groupNamesAtFit },
-      area,
-    );
+    return fitFree({ ...scene, groupLabels: groupLabelsFor(scene, width) }, fitted, area);
   };
   // The controlled view, rebuilt from primitives so a fresh object literal
   // with the same numbers costs nothing (spec slice C §5).
