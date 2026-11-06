@@ -1,5 +1,5 @@
-import type { Scene } from "../shared/scene";
 import type { FreeArea } from "../shared/insets";
+import type { Scene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
 import { fitBounds, sceneBounds } from "./fit";
 import type { Viewport } from "./viewport";

@@ -92,7 +92,7 @@ describe("CorpusMap insets (an overlay covering part of the box)", () => {
     expect(changes[0]?.[0].zoom).toBeCloseTo(20, 9);
   });
 
-  it("leaves the fit alone, so an overlay opening never moves the zoom ratio", () => {
+  it("a fit beside the overlay lands inside the uncovered area, below zoom 1 (spec fit-insets)", () => {
     const changes: Change[] = [];
     const handle = createRef<CorpusMapHandle>();
     render(
@@ -108,7 +108,9 @@ describe("CorpusMap insets (an overlay covering part of the box)", () => {
       />,
     );
     act(() => handle.current?.fit());
-    expect(changes[changes.length - 1]?.[0].zoom).toBeCloseTo(1, 9);
+    const zoom = changes[changes.length - 1]?.[0].zoom as number;
+    expect(zoom).toBeLessThan(1);
+    expect(zoom).toBeGreaterThan(0.5);
   });
   describe("an overlay growing over the selected item (spec mobile §5)", () => {
     const scale = fitScale * 20;

@@ -264,6 +264,8 @@ describe("walking the map with the keyboard (spec spatial keys)", () => {
     const { root } = renderMap({
       defaultSelectedId: "c2",
       insets: { right: 200 },
+      // The whole-box fit (zoom 1): this test is about a covered neighbour, not about where a fit lands.
+      defaultViewport: { centre: [200, 200], zoom: 1 },
       onViewportChange: (view) => views.push(view),
     });
     fireEvent.keyDown(root, { key: "ArrowRight" });

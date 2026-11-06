@@ -35,7 +35,7 @@ import { visibleNodes } from "./lod/visible";
 import { MINIMAP_SIZE, Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
 import { NO_DIMMED } from "./shared/dimmed";
-import { type Insets, normaliseInsets, usableArea } from "./shared/insets";
+import { freeArea, type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { toMatchSet } from "./shared/matchSet";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
@@ -250,14 +250,19 @@ const MAXIMUM_ZOOM_IN = 64;
 /** The wheel's own zoom band, relative to the fit: what a public `zoom` is clamped to (spec slice C §3). */
 const ZOOM_BAND = { minimum: 1 / MAXIMUM_ZOOM_OUT, maximum: MAXIMUM_ZOOM_IN };
 
-/** The view to open on: a valid `defaultViewport`, else the fit. */
+/**
+ * The view to open on: a valid `defaultViewport` (its zoom is read against `reference`, the whole-box fit, which is
+ * what zoom 1 means), else `fallback`, the fit a fit moment draws (into the free area, spec fit-insets).
+ */
 function startingView(
   defaultViewport: MapViewport | undefined,
-  fit: Viewport,
+  reference: Viewport,
+  fallback: Viewport,
   width: number,
   height: number,
 ): Viewport {
-  return drawableView(sanitise(defaultViewport, ZOOM_BAND), fit, width, height);
+  const drawn = drawableView(sanitise(defaultViewport, ZOOM_BAND), reference, width, height);
+  return drawn === reference ? fallback : drawn;
 }
 
 type ViewportUpdate = Viewport | ((previous: Viewport) => Viewport);
@@ -525,16 +530,14 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const groupNamesAtFit = regimeAt(1, thresholds, "far", tuning.hysteresis) === "far";
   // A box narrower than `NARROW_BOX_WIDTH` draws the compact family names, so it fits those (spec mobile §4).
   const compactGroupNames = width < NARROW_BOX_WIDTH;
-  const [ownViewport, setOwnViewport] = useState<Viewport>(() =>
-    startingView(
-      properties.defaultViewport,
-      fitScene(spec, { ...scene, groupLabels: groupLabelsFor(scene, width) }, width, height, FIT_PADDING, {
-        groupNames: groupNamesAtFit,
-      }),
-      width,
-      height,
-    ),
-  );
+  const [ownViewport, setOwnViewport] = useState<Viewport>(() => {
+    const labelled = { ...scene, groupLabels: groupLabelsFor(scene, width) };
+    const options = { groupNames: groupNamesAtFit };
+    const wholeBox = fitScene(spec, labelled, width, height, FIT_PADDING, options);
+    const area = freeArea(width, height, insets);
+    const free = area === null ? wholeBox : fitScene(spec, labelled, width, height, FIT_PADDING, options, area);
+    return startingView(properties.defaultViewport, wholeBox, free, width, height);
+  });
   // A theme or font change rebuilds the scene and so moves `fitted` (and
   // `fitScale`, `ratio`) without refitting the view: only a new `spec` refits.
   const fitted = useMemo(
@@ -545,6 +548,22 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
     [spec, scene, width, height, groupNamesAtFit],
   );
   const fitScale = fitted.scale;
+  // The fit a fit moment draws (first view, a new spec, `fit()`, back to overview): into the area `insets` leaves
+  // free, read now (spec fit-insets). `fitted` stays the whole-box fit and the zoom reference, so the ratio of this
+  // view is at most 1; an `insets` change alone never reaches it, since nothing here is memoized on them.
+  const fitNow = (): Viewport => {
+    const area = freeArea(width, height, insets);
+    if (area === null) return fitted;
+    return fitScene(
+      spec,
+      { ...scene, groupLabels: groupLabelsFor(scene, width) },
+      width,
+      height,
+      FIT_PADDING,
+      { groupNames: groupNamesAtFit },
+      area,
+    );
+  };
   // The controlled view, rebuilt from primitives so a fresh object literal
   // with the same numbers costs nothing (spec slice C §5).
   const viewportControlled = properties.viewport !== undefined;
@@ -621,7 +640,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       if (fitBasis !== null) setSpecChanges((count) => count + 1);
       if (!viewportControlled) {
         if (fitBasis !== null) setRefits((count) => count + 1);
-        const initial = fitBasis === null ? startingView(properties.defaultViewport, fitted, width, height) : fitted;
+        const initial =
+          fitBasis === null ? startingView(properties.defaultViewport, fitted, fitNow(), width, height) : fitNow();
         setOwnViewport(initial);
         setRegime(regimeAt(initial.scale / fitted.scale, thresholds, "far", tuning.hysteresis));
       }
@@ -638,6 +658,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useLayoutEffect(() => {
     fitScaleReference.current = fitScale;
   }, [fitScale]);
+  // The fit moment's view, read by the spec proposal below from the render that committed the change.
+  const fitNowReference = useRef(fitNow);
+  useLayoutEffect(() => {
+    fitNowReference.current = fitNow;
+  });
   const tuningReference = useRef(tuning);
   useLayoutEffect(() => {
     tuningReference.current = tuning;
@@ -723,9 +748,13 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   useEffect(() => {
     if (specChanges === 0 || firedSpecChange.current === specChanges) return;
     firedSpecChange.current = specChanges;
-    const fitPublic = toPublic(fitted, fitted.scale, width, height);
+    const proposed = fitNowReference.current();
+    const fitPublic = toPublic(proposed, fitted.scale, width, height);
     if (viewportControlled) {
-      const reset = { regime: regimeAt(1, thresholds, "far", tuning.hysteresis), refit: true };
+      const reset = {
+        regime: regimeAt(proposed.scale / fitted.scale, thresholds, "far", tuning.hysteresis),
+        refit: true,
+      };
       const drawn = drawnReference.current;
       if (sameView(fitPublic, toPublic(drawn.viewport, drawn.fitScale, drawn.width, drawn.height))) {
         pendingResetReference.current = null;
@@ -1271,7 +1300,11 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // is "fit" for an explicit fit (the handle, the fit key, back to overview)
   // and "interaction" when Escape's regime-out happens to land on the fit.
   const fitView = (reason: ViewportChangeReason = "fit") => {
-    requestViewport(fitted, reason, { regime: regimeAt(1, thresholds, "far", tuning.hysteresis), refit: true });
+    const view = fitNow();
+    requestViewport(view, reason, {
+      regime: regimeAt(view.scale / fitScale, thresholds, "far", tuning.hysteresis),
+      refit: true,
+    });
   };
 
   // React 19 ref-as-prop (spec 4 §1): no deps array, so the handle is

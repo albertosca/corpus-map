@@ -266,6 +266,8 @@ describe("CorpusMap item labels and the one card", () => {
         height={300}
         thresholds={NEAR}
         insets={{ right: 200 }}
+        // The view of the whole-box fit (zoom 1 is that fit): this test is about a card under a drawer, not about where a fit lands.
+        defaultViewport={{ centre: [5, 5], zoom: 1 }}
         defaultSelectedId={selected}
       />
     );
