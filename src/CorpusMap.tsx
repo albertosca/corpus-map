@@ -220,8 +220,12 @@ export interface CorpusMapProps {
    * in the uncovered area, an item under an overlay counts as off screen,
    * and `reveal` (or a marker press) centres in that area; the legend sits
    * clear of it on its own side and, on the far side, of the larger of that
-   * inset and the minimap's reserve. The fit ignores
-   * insets, so an overlay opening or closing never moves the zoom ratio.
+   * inset and the minimap's reserve. Every fit (the first view, a new `spec`,
+   * `fit()`, Back to overview) scales and centres the map into the box less
+   * `insets`, read at the moment of the fit, so a fit beside a drawer reports
+   * a `ratio` below 1 (ratio 1 stays the fit of the whole box); a free area
+   * under 120 px on either axis is ignored. An `insets` change alone moves
+   * nothing: the next fit does.
    */
   insets?: Partial<Insets> | undefined;
   /**

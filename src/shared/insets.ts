@@ -1,7 +1,8 @@
 /**
  * Pixels of the map's box that a consumer overlay covers on each side (a
  * drawer, a toolbar). Edge markers and `reveal` treat the rest as the usable
- * area; the fit does not, so opening an overlay never moves the zoom ratio.
+ * area, and so does the fit (`freeArea`), but only at a fit: an overlay opening
+ * or closing alone never moves the view.
  */
 export interface Insets {
   top: number;

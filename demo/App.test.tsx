@@ -1319,6 +1319,20 @@ describe("App (showcase Task 5)", () => {
         expect(zoomRight).toBeGreaterThan(drawerLeftFromViewportRight);
       });
 
+      it("Fit with the drawer open fits into the area the drawer leaves free: the ratio lands below 1.0×, and 1.0× once the drawer is closed (spec fit-insets)", async () => {
+        setViewportWidth(1280);
+        await renderApp(SELECT_SPEC);
+        await openDrawer();
+        const ratio = () =>
+          Number.parseFloat(/(\d+\.\d)×/.exec(screen.getByText(/\d+\.\d×/).textContent ?? "")?.[1] ?? "");
+        fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+        await waitFor(() => expect(ratio()).toBeLessThan(1));
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "A Tiny Paper About Testing" })).toBeNull());
+        fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+        await waitFor(() => expect(ratio()).toBe(1));
+      });
+
       it("at 375px the drawer is a bottom sheet and Fit stays at its default right offset, lifted above the sheet (spec mobile §6)", async () => {
         const { container } = await renderApp(SELECT_SPEC);
         await screen.findByText(territoryButtonText(SELECT_SPEC));

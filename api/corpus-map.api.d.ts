@@ -155,8 +155,12 @@ export interface CorpusMapProps {
      * in the uncovered area, an item under an overlay counts as off screen,
      * and `reveal` (or a marker press) centres in that area; the legend sits
      * clear of it on its own side and, on the far side, of the larger of that
-     * inset and the minimap's reserve. The fit ignores
-     * insets, so an overlay opening or closing never moves the zoom ratio.
+     * inset and the minimap's reserve. Every fit (the first view, a new `spec`,
+     * `fit()`, Back to overview) scales and centres the map into the box less
+     * `insets`, read at the moment of the fit, so a fit beside a drawer reports
+     * a `ratio` below 1 (ratio 1 stays the fit of the whole box); a free area
+     * under 120 px on either axis is ignored. An `insets` change alone moves
+     * nothing: the next fit does.
      */
     insets?: Partial<Insets> | undefined;
     /**
@@ -1406,7 +1410,8 @@ export declare const NO_DIMMED: ReadonlySet<string>;
 /**
  * Pixels of the map's box that a consumer overlay covers on each side (a
  * drawer, a toolbar). Edge markers and `reveal` treat the rest as the usable
- * area; the fit does not, so opening an overlay never moves the zoom ratio.
+ * area, and so does the fit (`freeArea`), but only at a fit: an overlay opening
+ * or closing alone never moves the view.
  */
 export interface Insets {
     top: number;
@@ -1424,6 +1429,11 @@ export declare function usableArea(width: number, height: number, insets: Insets
     width: number;
     height: number;
 };
+/** A free area under this many px on either axis is not worth fitting into: the fit keeps the whole box (spec fit-insets §4). */
+export declare const MINIMUM_FREE_AREA = 120;
+export type FreeArea = ReturnType<typeof usableArea>;
+/** The area a fit should use, or `null` when the insets are all 0 or leave less than `MINIMUM_FREE_AREA` on an axis. */
+export declare function freeArea(width: number, height: number, insets: Insets): FreeArea | null;
 
 // shared/matchSet.d.ts
 /**
@@ -2232,6 +2242,7 @@ export interface FitArea {
 export declare function fitIds(nodesById: ReadonlyMap<string, MapNode>, ids: Iterable<string>, area: FitArea, padding: number, minimumScale: number, maximumScale: number): Viewport | null;
 
 // viewport/fitScene.d.ts
+import type { FreeArea } from "../shared/insets";
 import type { Scene } from "../shared/scene";
 import type { MapSpec } from "../shared/spec";
 import type { Viewport } from "./viewport";
@@ -2253,7 +2264,7 @@ export declare const LABEL_FIT_PASSES = 3;
  */
 export declare function fitScene(spec: MapSpec, scene: Pick<Scene, "shapes" | "labels" | "groupLabels">, width: number, height: number, padding: number, options?: {
     groupNames: boolean;
-}): Viewport;
+}, area?: FreeArea): Viewport;
 
 // viewport/follow.d.ts
 import { type Viewport } from "./viewport";
