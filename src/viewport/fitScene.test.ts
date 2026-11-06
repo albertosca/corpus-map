@@ -137,3 +137,31 @@ it("counts the territory names, not the group names, when the fitted view is not
   const shapesOnly = fitScene(emptySpec, { shapes, labels: [], groupLabels: [] }, 400, 400, 0);
   expect(notFar.scale).toBeCloseTo(shapesOnly.scale);
 });
+
+describe("fitScene into a free area", () => {
+  const scene = { shapes: new Map<string, Ring[]>(), labels: [], groupLabels: [] };
+  const groupNames = { groupNames: true };
+
+  it("with the whole box as the area is the same view as without one", () => {
+    const base = fitScene(spec, scene, 1000, 800, 40);
+    expect(fitScene(spec, scene, 1000, 800, 40, groupNames, { left: 0, top: 0, width: 1000, height: 800 })).toEqual(
+      base,
+    );
+  });
+
+  it("scales to the area: a 400 px right inset keeps the map inside the left 600 px, smaller than the box fit", () => {
+    const view = fitScene(spec, scene, 1000, 800, 40, groupNames, { left: 0, top: 0, width: 600, height: 800 });
+    const [leftEdge] = toScreen(view, 0, 0);
+    const [rightEdge] = toScreen(view, 10, 10);
+    expect(leftEdge).toBeGreaterThanOrEqual(40 - 1e-6);
+    expect(rightEdge).toBeLessThanOrEqual(600 - 40 + 1e-6);
+    expect(view.scale).toBeLessThan(fitScene(spec, scene, 1000, 800, 40).scale);
+  });
+
+  it("offsets by the area's left and top", () => {
+    const view = fitScene(spec, scene, 1000, 800, 40, groupNames, { left: 300, top: 100, width: 600, height: 600 });
+    const [centreHorizontal, centreVertical] = toScreen(view, 5, 5);
+    expect(centreHorizontal).toBeCloseTo(600, 6);
+    expect(centreVertical).toBeCloseTo(400, 6);
+  });
+});

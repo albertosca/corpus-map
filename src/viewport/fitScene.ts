@@ -1,4 +1,5 @@
 import type { Scene } from "../shared/scene";
+import type { FreeArea } from "../shared/insets";
 import type { MapSpec } from "../shared/spec";
 import { fitBounds, sceneBounds } from "./fit";
 import type { Viewport } from "./viewport";
@@ -27,15 +28,18 @@ export function fitScene(
   height: number,
   padding: number,
   options: { groupNames: boolean } = { groupNames: true },
+  area?: FreeArea,
 ): Viewport {
+  // The area a consumer overlay leaves free (spec fit-insets): scale and centre come from it, the names are tested against it.
+  const box = area ?? { left: 0, top: 0, width, height };
   const base = sceneBounds(spec, scene.shapes);
-  let viewport = fitBounds(base, width, height, padding);
+  let viewport = fitBounds(base, box.width, box.height, padding);
   // With groups, a far fitted view (ratio 1, below `groupNamesUntil`) shows
   // group names, not territory names: those are the ones to keep whole. A
   // fitted view that is already mid (`midAt <= 1`) shows territory names.
   const names = options.groupNames && scene.groupLabels.length > 0 ? scene.groupLabels : scene.labels;
   const counted = names.filter(
-    (label) => viewport.scale >= label.activeFromScale && label.width <= width && label.height <= height,
+    (label) => viewport.scale >= label.activeFromScale && label.width <= box.width && label.height <= box.height,
   );
   for (let pass = 0; pass < LABEL_FIT_PASSES; pass += 1) {
     let left = base.minX;
@@ -50,7 +54,7 @@ export function fitScene(
       top = Math.min(top, label.anchor[1] - halfHeight);
       bottom = Math.max(bottom, label.anchor[1] + halfHeight);
     }
-    viewport = fitBounds({ minX: left, minY: top, maxX: right, maxY: bottom }, width, height, padding);
+    viewport = fitBounds({ minX: left, minY: top, maxX: right, maxY: bottom }, box.width, box.height, padding);
   }
-  return viewport;
+  return area === undefined ? viewport : { ...viewport, tx: viewport.tx + box.left, ty: viewport.ty + box.top };
 }

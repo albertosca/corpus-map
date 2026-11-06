@@ -37,3 +37,15 @@ export function usableArea(
     height: Math.max(0, height - insets.top - insets.bottom),
   };
 }
+
+/** A free area under this many px on either axis is not worth fitting into: the fit keeps the whole box (spec fit-insets §4). */
+export const MINIMUM_FREE_AREA = 120;
+
+export type FreeArea = ReturnType<typeof usableArea>;
+
+/** The area a fit should use, or `null` when the insets are all 0 or leave less than `MINIMUM_FREE_AREA` on an axis. */
+export function freeArea(width: number, height: number, insets: Insets): FreeArea | null {
+  if (insets === NO_INSETS) return null;
+  const area = usableArea(width, height, insets);
+  return area.width < MINIMUM_FREE_AREA || area.height < MINIMUM_FREE_AREA ? null : area;
+}
