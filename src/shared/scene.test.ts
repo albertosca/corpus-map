@@ -432,3 +432,37 @@ describe("buildScene: edges", () => {
     expect(scene.maximumEdgeWeight).toBe(0.97);
   });
 });
+
+describe("buildScene visitedShare", () => {
+  const visit = (spec: MapSpec, ids: readonly string[]): MapSpec => ({
+    ...spec,
+    nodes: spec.nodes.map((node) => (ids.includes(node.id) ? { ...node, state: "visited" as const } : node)),
+  });
+  const build = (spec: MapSpec) => buildScene(spec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+
+  it("is empty when no node is visited", () => {
+    expect(build(nestedSpec()).visitedShare.size).toBe(0);
+  });
+
+  it("holds each leaf's visited nodes over its nodes, and a family's over all its leaves' nodes", () => {
+    const scene = build(visit(nestedSpec(), ["a0", "a1", "a2"]));
+    expect(scene.visitedShare.get("a")).toBe(0.5);
+    expect(scene.visitedShare.has("b")).toBe(false);
+    expect(scene.visitedShare.get("p")).toBe(0.25);
+  });
+
+  it("ignores a node that is not marked visited, and a territory with no members has no share", () => {
+    const spec = nestedSpec();
+    const marked = {
+      ...spec,
+      nodes: spec.nodes.map((node) => (node.id === "a0" ? { ...node, state: "unvisited" as const } : node)),
+    };
+    expect(build(marked).visitedShare.size).toBe(0);
+    const empty = validateSpec({
+      version: "1",
+      territories: [{ id: "none", name: "None", members: [], centroid: [0, 0] }],
+      nodes: [],
+    });
+    expect(build(empty).visitedShare.size).toBe(0);
+  });
+});
