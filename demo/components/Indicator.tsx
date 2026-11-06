@@ -37,8 +37,9 @@ interface IndicatorProps {
   inline?: boolean | undefined;
 }
 
-// Sits in the library minimap's bottom-left corner, stacked above it with
-// one gutter between them. The minimap's size and margin come from
+// Sits beside the library minimap's bottom-left corner, one gutter to its
+// right on the same baseline, so the expanded legend above the minimap has
+// nothing under it to run into. The minimap's size and margin come from
 // `floatingLayout.ts`, the demo's one copy of that private geometry, which
 // `ZoomControls` and the collision test read too.
 const style: CSSProperties = {
@@ -59,7 +60,7 @@ const style: CSSProperties = {
 };
 
 /**
- * "regime · ratio× · N items" ("1 item" for one), bottom-left above the minimap (spec 4 §2),
+ * "regime · ratio× · N items" ("1 item" for one), bottom-left beside the minimap (spec 4 §2),
  * read straight from `CorpusMap`'s own `onViewChange` payload — nothing
  * computed here.
  */

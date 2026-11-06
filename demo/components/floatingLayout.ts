@@ -27,8 +27,15 @@ export const MINIMAP_HEIGHT = 110;
  */
 export const MINIMAP_MARGIN = 12;
 
-/** The indicator's `left`, used by `Indicator.tsx` itself. */
-export const INDICATOR_LEFT = MINIMAP_MARGIN;
+/** Breathing room between any two of these boxes, or between one of them and the viewport edge. */
+export const GUTTER = 12;
+
+/**
+ * The indicator's `left`: one gutter to the right of the minimap, on the same baseline. It used to sit stacked above
+ * the minimap, where an expanded legend (whose ceiling clears the minimap and one margin, not the indicator) ran
+ * ~26 px over it at any window size (backlog 2026-10-26); beside the minimap it is out of the legend's column.
+ */
+export const INDICATOR_LEFT = MINIMAP_MARGIN + MINIMAP_WIDTH + GUTTER;
 
 /**
  * `Indicator.tsx` sets no fixed pixel `width` — only `maxWidth: "55vw"` on
@@ -51,13 +58,11 @@ export const INDICATOR_LEFT = MINIMAP_MARGIN;
  */
 export const INDICATOR_MAXIMUM_CONTENT_WIDTH = 210;
 
-/** Breathing room between any two of these boxes, or between one of them and the viewport edge. */
-export const GUTTER = 12;
-
 /**
- * How far the bottom-left column (the minimap, and the indicator stacked
- * above it) reaches from the viewport's left edge — the greater of the
- * two, since either could be the one a shifted control needs to clear.
+ * How far the bottom-left run (the minimap, and the indicator beside it)
+ * reaches from the viewport's left edge: the indicator's right edge, which
+ * is the farther of the two — kept as a `max` so a change to either cannot
+ * leave the shifted controls clearing only one of them.
  */
 export const BOTTOM_LEFT_COLUMN_WIDTH = Math.max(
   MINIMAP_MARGIN + MINIMAP_WIDTH,
@@ -75,15 +80,17 @@ export const BOTTOM_LEFT_COLUMN_WIDTH = Math.max(
 export const ZOOM_CONTROLS_HEIGHT_ESTIMATE = 101;
 export const INDICATOR_HEIGHT_ESTIMATE = 26;
 
-/** The indicator's `bottom`: stacked one gutter above the minimap. */
-export const INDICATOR_BOTTOM = MINIMAP_MARGIN + MINIMAP_HEIGHT + GUTTER;
+/** The indicator's `bottom`: the minimap's own, so the two share a baseline. */
+export const INDICATOR_BOTTOM = MINIMAP_MARGIN;
 
 /**
- * How far the bottom row (minimap + indicator on the left, zoom controls on
- * the right, all anchored `bottom: 12`) reaches up from the viewport's bottom
- * edge — the taller of its two columns.
+ * How far the bottom row (minimap and the indicator beside it on the left,
+ * zoom controls on the right, all anchored `bottom: 12`) reaches up from the
+ * viewport's bottom edge — the tallest of the three. The minimap is in the
+ * list itself: it used to be hidden under the indicator stacked above it.
  */
 export const BOTTOM_ROW_HEIGHT = Math.max(
+  MINIMAP_MARGIN + MINIMAP_HEIGHT,
   INDICATOR_BOTTOM + INDICATOR_HEIGHT_ESTIMATE,
   MINIMAP_MARGIN + ZOOM_CONTROLS_HEIGHT_ESTIMATE,
 );

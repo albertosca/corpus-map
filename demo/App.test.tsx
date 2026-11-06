@@ -461,6 +461,27 @@ function minimapBox(): Box {
 }
 
 /**
+ * The legend expanded to its height ceiling, read from its own inline style: `top`/`left`, `maxWidth`, and
+ * `maxHeight: calc(100% - Npx)` where N reserves both margins and the minimap (`legendMaximumHeight`), so its bottom
+ * edge sits `N - top` above the map's bottom, which is the viewport's. The map starts under the top bar.
+ */
+function legendBox(container: HTMLElement, viewportWidth: number): Box | null {
+  const element = container.querySelector<HTMLElement>("[data-legend]");
+  if (!element) return null;
+  const reserved = /^calc\(100% - ([\d.]+)px\)$/.exec(element.style.maxHeight);
+  if (!reserved) throw new Error(`"${element.style.maxHeight}" is not a calc(100% - Npx) ceiling — extend legendBox`);
+  const top = toPx(element.style.top, viewportWidth);
+  const left = toPx(element.style.left, viewportWidth);
+  return {
+    label: "legend (at its ceiling)",
+    x0: left,
+    x1: left + toPx(element.style.maxWidth, viewportWidth),
+    yFromBottom0: Number(reserved[1]) - top,
+    yFromBottom1: VIEWPORT_HEIGHT_PX - FakeResizeObserver.topBarHeight(viewportWidth) - top,
+  };
+}
+
+/**
  * `[data-assistant-panel]`'s box, present only while open: wide, a column at `left` above the bottom row (`bottom` +
  * `maxHeight`); narrow, a sheet under the top bar (`top` + `maxHeight`), spanning `left`/`right`.
  */
@@ -1536,6 +1557,37 @@ describe("App (showcase Task 5)", () => {
           fireEvent.keyDown(document, { key: "Escape" });
           expect(screen.queryByRole("dialog")).toBeNull();
         }
+      });
+
+      it("the expanded legend at its height ceiling never reaches the indicator (backlog 2026-10-26: it covered the bottom ~25 px of a full legend)", async () => {
+        const { container } = await renderApp(SELECT_SPEC);
+        await screen.findByText(territoryButtonText(SELECT_SPEC));
+        let checked = 0;
+        for (const width of SWEEP_WIDTHS.filter((candidate) => candidate >= NARROW_WINDOW_WIDTH)) {
+          setViewportWidth(width);
+          fireEvent(window, new Event("resize"));
+          act(() => FakeResizeObserver.fireAll());
+
+          const legend = screen.getByRole("region", { name: "Map legend" });
+          // Collapsed it is only a toggle, far below its ceiling: the ceiling matters when it is open.
+          if (within(legend).queryAllByRole("checkbox").length === 0)
+            fireEvent.click(within(legend).getByRole("button", { name: "Legend" }));
+          expect(within(legend).queryAllByRole("checkbox").length, `legend not expanded at ${width}`).toBeGreaterThan(
+            0,
+          );
+          const legendRect = legendBox(container, width);
+          const indicatorRect = indicatorBox(container, width);
+          expect(legendRect, `no legend box at ${width}`).not.toBeNull();
+          expect(indicatorRect, `no indicator box at ${width}`).not.toBeNull();
+          const legendOutline = legendRect as Box;
+          const indicatorOutline = indicatorRect as Box;
+          expect(
+            boxesIntersect(legendOutline, indicatorOutline),
+            `legend yFromBottom ${legendOutline.yFromBottom0}..${legendOutline.yFromBottom1} reaches the indicator at ${indicatorOutline.yFromBottom0}..${indicatorOutline.yFromBottom1} at viewport width ${width}`,
+          ).toBe(false);
+          checked += 1;
+        }
+        expect(checked).toBeGreaterThan(0);
       });
 
       it("the open dialogue panel clears every other floating box at every swept width, with the drawer open or closed", async () => {

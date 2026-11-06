@@ -38,8 +38,8 @@ export interface FooterPlacement {
 /**
  * Where the footer sits (2026-09-25 browser review, B9 — the old centred
  * footer covered the minimap at 375-600px and Fit at 768px with the drawer
- * open). The rule: in the bottom row, between the bottom-left column
- * (minimap + indicator) and the zoom controls in whichever position they are
+ * open). The rule: in the bottom row, between the bottom-left run
+ * (minimap, then the indicator beside it) and the zoom controls in whichever position they are
  * in, when that band is at least `FOOTER_MINIMUM_BAND_WIDTH` wide; otherwise
  * lifted one gutter above the whole bottom row, from the left gutter to the
  * zoom controls' right edge. Either way the band clears every other bottom

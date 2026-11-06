@@ -28,8 +28,8 @@ export const BUTTON_WIDTH = 84;
  * The shifted position's own footprint (a gutter, the button width,
  * another gutter) plus the drawer's own width ceiling plus the gutter
  * between them, plus — showcase Task 6 fix round 2 — the bottom-left
- * column's own width (the minimap, or the indicator above it if that is
- * wider) plus a gutter past it, since the first version of this shift
+ * run's own width (the minimap and the indicator beside it, whose right
+ * edge is the farther) plus a gutter past it, since the first version of this shift
  * (fix round 1) only cleared the drawer and, for a stretch of
  * intermediate viewport widths, landed the controls directly on top of
  * the minimap and, at those same widths, close enough to the indicator to
