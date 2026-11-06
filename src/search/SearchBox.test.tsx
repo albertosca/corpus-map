@@ -357,3 +357,71 @@ describe("SearchBox (spec search §4, §5)", () => {
       expect((control as HTMLElement).style.minHeight).toBe("44px");
   });
 });
+
+const rankedSpec: MapSpec = {
+  version: "1",
+  territories: [],
+  nodes: [
+    { id: "n1", label: "Delta graphs", x: 0, y: 0, territory: null },
+    { id: "n2", label: "Alpha graphs", x: 1, y: 0, territory: null },
+    { id: "n3", label: "Charlie graphs", x: 2, y: 0, territory: null },
+  ],
+  edges: [
+    { source: "n1", target: "n2" },
+    { source: "n1", target: "n3" },
+    { source: "n3", target: "n2" },
+    { source: "n1", target: "n2", weight: 3 },
+  ],
+};
+
+describe("SearchBox ranking (spec ranking §2, §3)", () => {
+  it("reports local matches by connections, ties alphabetical, by default", async () => {
+    const { onMatches } = mount({ spec: rankedSpec });
+    type("graphs");
+    await settle();
+    // n1 and n2 have 3 edges each and n3 has 2: Alpha (n2) comes before Delta (n1) on the tie.
+    expect(lastCall(onMatches)).toEqual(["n2", "n1", "n3"]);
+  });
+
+  it("reports local matches alphabetically when asked", async () => {
+    const { onMatches } = mount({ spec: rankedSpec, rank: "alphabetical" });
+    type("graphs");
+    await settle();
+    expect(lastCall(onMatches)).toEqual(["n2", "n3", "n1"]);
+  });
+
+  it("orders local matches by a consumer's function", async () => {
+    const { onMatches } = mount({ spec: rankedSpec, rank: (item) => (item.id === "n3" ? 10 : 0) });
+    type("graphs");
+    await settle();
+    expect(lastCall(onMatches)).toEqual(["n3", "n2", "n1"]);
+  });
+
+  it("keeps the order of a consumer's plain id list, dropping a repeat", async () => {
+    const { onMatches } = mount({ spec: rankedSpec, search: () => ["n3", "n1", "n3"] });
+    type("anything");
+    await settle();
+    expect(lastCall(onMatches)).toEqual(["n3", "n1"]);
+  });
+
+  it("sorts a consumer's scored answer by score", async () => {
+    const { onMatches } = mount({
+      spec: rankedSpec,
+      search: () => [
+        { id: "n1", score: 0.2 },
+        { id: "n3", score: 0.9 },
+      ],
+    });
+    type("anything");
+    await settle();
+    expect(lastCall(onMatches)).toEqual(["n3", "n1"]);
+  });
+
+  it("announces 'Search failed' for a mixed answer and reports null", async () => {
+    const { onMatches } = mount({ search: () => ["alpha", { id: "beta", score: 1 }] as never });
+    type("anything");
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe("Search failed");
+    expect(lastCall(onMatches)).toBeNull();
+  });
+});

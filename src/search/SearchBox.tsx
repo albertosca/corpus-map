@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { MapSpec } from "../shared/spec";
 import { localSearch, searchIndexAsync } from "./localSearch";
+import { orderAnswer, orderLocal, type RankRule, type ScoredId } from "./rank";
 
 /** How long the query must rest before it is searched (spec search §4). */
 export const SEARCH_DEBOUNCE_MILLISECONDS = 200;
@@ -17,9 +18,14 @@ export const SEARCH_DEBOUNCE_MILLISECONDS = 200;
 export interface SearchBoxProps {
   /** The corpus the local search runs over; a new spec object clears the box. */
   spec: MapSpec;
-  /** Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it. */
-  search?: ((query: string) => readonly string[] | Promise<readonly string[]>) | undefined;
-  /** The matches to draw: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
+  /**
+   * Finds ids for a query, replacing the local search (a server, a worker, a vector index). May be asynchronous; ids the map does not know are ignored by it.
+   * Return ids to keep the order you ranked them in, or `{ id, score }` entries to have them sorted by score (highest first, equal scores by `rank`, then alphabetically).
+   */
+  search?: ((query: string) => readonly (string | ScoredId)[] | Promise<readonly (string | ScoredId)[]>) | undefined;
+  /** How local matches are ordered, and how ties among a consumer's scores are broken: "connections" (default, most edges first), "alphabetical", or a score function (higher first). Ties are always alphabetical. A consumer's plain id list keeps its own order. */
+  rank?: RankRule | undefined;
+  /** The matches to draw, best first: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
   onMatches: (ids: readonly string[] | null) => void;
   /** When given, a "Show on map" button appears beside a non-empty result; pair it with `CorpusMapHandle.revealAll`. */
   onShow?: (() => void) | undefined;
@@ -74,6 +80,7 @@ function announced(previous: Status, next: Exclude<Status, { kind: "idle" }>): S
  */
 export function SearchBox(properties: SearchBoxProps): ReactElement {
   const { spec, search, onMatches, onShow, hint, touchTargets, style } = properties;
+  const rank = properties.rank ?? "connections";
   const label = properties.label ?? "Search";
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
@@ -88,9 +95,9 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   const showReference = useRef<HTMLButtonElement>(null);
   const hintIdentifier = useId();
   // The newest props for the timer and the answer, which outlive the render that scheduled them.
-  const latest = useRef({ spec, search, onMatches });
+  const latest = useRef({ spec, search, rank, onMatches });
   useEffect(() => {
-    latest.current = { spec, search, onMatches };
+    latest.current = { spec, search, rank, onMatches };
   });
   // Bumped by every change that makes an answer in flight out of date.
   const generation = useRef(0);
@@ -130,9 +137,11 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         const found = await (current.search
           ? current.search(trimmed)
           : searchIndexAsync(current.spec).then((index) => localSearch(index, trimmed)));
-        // Nothing at all is a broken search, not an empty result; a value that is not a list throws in the spread.
+        // Nothing at all is a broken search, not an empty result; a value that is not a list, or a mixed one, throws in the ordering.
         if (found === undefined || found === null) throw new TypeError("search returned nothing");
-        ids = [...new Set(found)];
+        ids = current.search
+          ? orderAnswer(current.spec, found, current.rank)
+          : orderLocal(current.spec, found as readonly string[], current.rank);
       } catch {
         if (generation.current !== mine) return;
         releaseFocus();
