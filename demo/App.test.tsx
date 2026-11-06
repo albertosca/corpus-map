@@ -2579,6 +2579,19 @@ describe("App (showcase Task 5)", () => {
       expect(await isMatch("Graph colouring")).toBe(false);
     });
 
+    it("lists what the filter lights before what it dims, so Enter never centres a dimmed paper while a lit one matches (whole-branch review M2)", async () => {
+      await renderApp(FILTER_SPEC);
+      await screen.findByText(/1\.0×/);
+      fireEvent.click(filterButton());
+      fireEvent.click(categoryBox(LEARNING));
+      fireEvent.change(screen.getByRole("combobox", { name: "Search" }), { target: { value: "graph" } });
+      const listbox = await screen.findByRole("listbox", { name: "Search results" });
+      const names = within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent);
+      expect(names).toEqual(["Graph matching", "Graph colouring"]);
+    });
+
     const scale = () => screen.getByText(/\d+\.\d×/).textContent;
     const showOnMap = async () => {
       await act(async () => {

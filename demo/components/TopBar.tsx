@@ -1,6 +1,6 @@
 import type { MapSpec } from "corpus-map";
 import { type FilterAttribute, FilterBox } from "corpus-map/filter";
-import { SearchBox } from "corpus-map/search";
+import { type RankRule, SearchBox } from "corpus-map/search";
 import type { ChangeEvent, CSSProperties, ReactElement, Ref } from "react";
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from "react";
 import type { GalleryEntry } from "../corpora";
@@ -34,6 +34,8 @@ interface TopBarProps {
         onShow: () => void;
         /** Enter or a click on a result: centre the map on that item. */
         onGo: (id: string) => void;
+        /** How the list orders its results (the library default when absent). */
+        rank?: RankRule | undefined;
       }
     | undefined;
   /** The attribute filter (spec filter §6); absent draws none. Wide: after the search; narrow: first in the Menu. */
@@ -278,6 +280,7 @@ export function TopBar({
             onMatches={search.onMatches}
             onShow={search.onShow}
             onGo={search.onGo}
+            rank={search.rank}
             hint={SEARCH_HINT}
             touchTargets
             style={narrowSearchStyle}
@@ -366,6 +369,7 @@ export function TopBar({
           onMatches={search.onMatches}
           onShow={search.onShow}
           onGo={search.onGo}
+          rank={search.rank}
           hint={SEARCH_HINT}
           style={searchStyle}
         />

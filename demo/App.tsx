@@ -1,6 +1,7 @@
 import type { CorpusMapHandle, LodThresholds, MapSpec, MapViewport, Tuning } from "corpus-map";
 import { CorpusMap, DARK_THEME, DEFAULT_THEME, relatedItems, resolveThresholds, resolveTuning } from "corpus-map";
 import { intersectMatches } from "corpus-map/filter";
+import type { RankRule } from "corpus-map/search";
 import { type CSSProperties, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { generateCorpus } from "../fixtures/synthetic/generate";
 import { CARDS, cardSizeOf, LOADING_CARD_SIZE } from "./cards";
@@ -144,6 +145,8 @@ const NOTHING_HIDDEN: readonly string[] = [];
 const NOTHING_TO_SEARCH: MapSpec = { version: "1", territories: [], nodes: [] };
 /** A picked search result is shown at this multiple of the near threshold, so its label is drawn with a little margin. */
 const NEAR_MARGIN = 1.25;
+// Larger than any item's edge count, so a lit item always outranks a dimmed one.
+const FILTER_LIT_BONUS = 1_000_000;
 
 /**
  * What a search or an answer is framed on: the part of it the filter lets through, so the view lands on what is lit.
@@ -527,6 +530,13 @@ export function App({ loadArxiv }: AppProps = {}) {
     }
   };
 
+  // What the filter lights comes first in the list, then the most connected, so Enter never centres a dimmed paper
+  // while a lit one matches.
+  const searchRank = useMemo<RankRule>(() => {
+    const lit = filterMatches === null ? null : new Set(filterMatches);
+    return (item, context) => (lit === null || lit.has(item.id) ? FILTER_LIT_BONUS : 0) + context.connections(item.id);
+  }, [filterMatches]);
+
   // A result picked from the search list: zoom in to where item labels are drawn when the view is further out (about the
   // current centre, so `insets` stay out of it), then centre on the item inside the area the drawer leaves free.
   const handleGoToResult = (id: string) => {
@@ -620,6 +630,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           onMatches: setSearchMatches,
           onShow: () => mapReference.current?.revealAll(framing(searchMatches ?? [], filterMatches)),
           onGo: handleGoToResult,
+          rank: searchRank,
         }}
         filter={
           // Like the search, mounted with an empty spec while the corpus loads, so a retry clears it.
