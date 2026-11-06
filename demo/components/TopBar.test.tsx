@@ -403,7 +403,7 @@ describe("TopBar search (spec search §6)", () => {
         onToggleTuning={() => {}}
         onCopyLink={() => {}}
         linkStatus={null}
-        search={{ spec, onMatches: () => {}, onShow: () => {} }}
+        search={{ spec, onMatches: () => {}, onShow: () => {}, onGo: () => {} }}
         {...extra}
       />,
     );
@@ -486,7 +486,7 @@ describe("TopBar filter (spec filter §6)", () => {
   });
 
   it("puts the Filter after the search on a wide bar", () => {
-    bar({ search: { spec, onMatches: () => {}, onShow: () => {} } });
+    bar({ search: { spec, onMatches: () => {}, onShow: () => {}, onGo: () => {} } });
     const search = document.querySelector("search") as HTMLElement;
     const filter = screen.getByRole("button", { name: "Filter" });
     expect(search.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

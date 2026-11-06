@@ -32,6 +32,8 @@ interface TopBarProps {
         spec: MapSpec;
         onMatches: (ids: readonly string[] | null) => void;
         onShow: () => void;
+        /** Enter or a click on a result: centre the map on that item. */
+        onGo: (id: string) => void;
       }
     | undefined;
   /** The attribute filter (spec filter §6); absent draws none. Wide: after the search; narrow: first in the Menu. */
@@ -275,6 +277,7 @@ export function TopBar({
             spec={search.spec}
             onMatches={search.onMatches}
             onShow={search.onShow}
+            onGo={search.onGo}
             hint={SEARCH_HINT}
             touchTargets
             style={narrowSearchStyle}
@@ -362,6 +365,7 @@ export function TopBar({
           spec={search.spec}
           onMatches={search.onMatches}
           onShow={search.onShow}
+          onGo={search.onGo}
           hint={SEARCH_HINT}
           style={searchStyle}
         />

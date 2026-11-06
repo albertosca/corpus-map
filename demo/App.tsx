@@ -142,6 +142,8 @@ const NOTHING_HIDDEN: readonly string[] = [];
 
 /** What the search box holds while no corpus is on screen; one object, so the box is not reset by a new spec every render. */
 const NOTHING_TO_SEARCH: MapSpec = { version: "1", territories: [], nodes: [] };
+/** A picked search result is shown at this multiple of the near threshold, so its label is drawn with a little margin. */
+const NEAR_MARGIN = 1.25;
 
 /**
  * What a search or an answer is framed on: the part of it the filter lets through, so the view lands on what is lit.
@@ -525,6 +527,17 @@ export function App({ loadArxiv }: AppProps = {}) {
     }
   };
 
+  // A result picked from the search list: zoom in to where item labels are drawn when the view is further out (about the
+  // current centre, so `insets` stay out of it), then centre on the item inside the area the drawer leaves free.
+  const handleGoToResult = (id: string) => {
+    const handle = mapReference.current;
+    if (!handle) return;
+    const view = handle.getView();
+    const readable = panelValues.appliedThresholds.nearAt * NEAR_MARGIN;
+    if (view !== undefined && view.zoom < readable) handle.setView({ centre: view.centre, zoom: readable });
+    handle.reveal(id);
+  };
+
   // Back to the current corpus's own values; every other corpus keeps its edits.
   const handleReset = () => {
     setEdits(({ [corpusId]: _discarded, ...kept }) => kept);
@@ -606,6 +619,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           spec: current?.spec ?? NOTHING_TO_SEARCH,
           onMatches: setSearchMatches,
           onShow: () => mapReference.current?.revealAll(framing(searchMatches ?? [], filterMatches)),
+          onGo: handleGoToResult,
         }}
         filter={
           // Like the search, mounted with an empty spec while the corpus loads, so a retry clears it.

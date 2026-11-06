@@ -2429,6 +2429,34 @@ describe("App (showcase Task 5)", () => {
       expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before);
     });
 
+    it("never moves the view while typing, and Enter centres the best match (spec ranking §5)", async () => {
+      await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      const before = screen.getByText(/\d+\.\d×/).textContent;
+      typeQuery("matching");
+      await screen.findByText("1 result");
+      expect(screen.getByText(/\d+\.\d×/).textContent).toBe(before);
+      await act(async () => {
+        fireEvent.keyDown(searchBox(), { key: "Enter" });
+      });
+      expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before);
+    });
+
+    it("lists both matches in order and a click on a row centres that item", async () => {
+      await renderApp(SEARCH_SPEC);
+      await screen.findByText(/1\.0×/);
+      const before = screen.getByText(/\d+\.\d×/).textContent;
+      typeQuery("graph");
+      await screen.findByText("2 results");
+      // The corpus select's own options share the role: scope to the results list.
+      const rows = within(screen.getByRole("listbox", { name: "Search results" })).getAllByRole("option");
+      expect(rows.map((row) => row.textContent)).toEqual(["Graph colouring", "Graph matching"]);
+      await act(async () => {
+        fireEvent.click(rows[1] as HTMLElement);
+      });
+      expect(screen.getByText(/\d+\.\d×/).textContent).not.toBe(before);
+    });
+
     it("clears the search when the corpus changes", async () => {
       await renderApp(SEARCH_SPEC);
       await screen.findByText(/1\.0×/);
