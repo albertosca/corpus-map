@@ -418,7 +418,7 @@ describe("TopBar search (spec search §6)", () => {
     const select = screen.getByLabelText("Corpus");
     const search = container.querySelector("search") as HTMLElement;
     expect(select.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const input = screen.getByRole("textbox", { name: "Search" });
+    const input = screen.getByRole("combobox", { name: "Search" });
     const hint = document.getElementById(input.getAttribute("aria-describedby") ?? "");
     expect(hint?.textContent).toBe("Searches titles and details in your browser");
     expect((input as HTMLElement).style.minHeight).toBe("");
@@ -429,7 +429,7 @@ describe("TopBar search (spec search §6)", () => {
     const search = container.querySelector("search") as HTMLElement;
     const menu = screen.getByRole("button", { name: "Menu" });
     expect(search.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Search" }).style.minHeight).toBe("44px");
+    expect(screen.getByRole("combobox", { name: "Search" }).style.minHeight).toBe("44px");
     expect(container.querySelector<HTMLElement>("[data-topbar]")?.style.flexWrap).toBe("nowrap");
   });
 

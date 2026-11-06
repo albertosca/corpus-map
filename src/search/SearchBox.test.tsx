@@ -21,7 +21,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const input = () => screen.getByRole("textbox");
+const input = () => screen.getByRole("combobox");
 const landmark = (): HTMLElement => {
   const element = document.querySelector("search");
   if (!(element instanceof HTMLElement)) throw new Error("no <search> element");
@@ -173,7 +173,7 @@ describe("SearchBox (spec search §4, §5)", () => {
     await settle();
     expect(screen.getByRole("status").textContent).toBe("No results ");
     const failing = mount({ search: () => Promise.reject(new Error("offline")) });
-    const [, secondInput] = screen.getAllByRole("textbox");
+    const [, secondInput] = screen.getAllByRole("combobox");
     fireEvent.change(secondInput as HTMLElement, { target: { value: "a" } });
     await settle();
     fireEvent.change(secondInput as HTMLElement, { target: { value: "b" } });
@@ -423,5 +423,152 @@ describe("SearchBox ranking (spec ranking §2, §3)", () => {
     await settle();
     expect(screen.getByRole("status").textContent).toBe("Search failed");
     expect(lastCall(onMatches)).toBeNull();
+  });
+});
+
+const options = () => screen.queryAllByRole("option");
+const press = (key: string) => fireEvent.keyDown(input(), { key });
+
+describe("SearchBox results list (spec ranking §4)", () => {
+  it("lists the ranked results as options, labels only, and exposes the combobox state", async () => {
+    mount({ spec: rankedSpec });
+    expect(screen.getByRole("combobox").getAttribute("aria-expanded")).toBe("false");
+    type("graphs");
+    await settle();
+    expect(options().map((option) => option.textContent)).toEqual(["Alpha graphs", "Delta graphs", "Charlie graphs"]);
+    expect(screen.getByRole("combobox").getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("listbox")).not.toBeNull();
+  });
+
+  it("never calls onGo while typing", async () => {
+    const onGo = vi.fn();
+    mount({ spec: rankedSpec, onGo });
+    type("graphs");
+    await settle();
+    expect(onGo).not.toHaveBeenCalled();
+  });
+
+  it("Enter goes to the first result and the list closes", async () => {
+    const onGo = vi.fn();
+    mount({ spec: rankedSpec, onGo });
+    type("graphs");
+    await settle();
+    press("Enter");
+    expect(onGo).toHaveBeenCalledTimes(1);
+    expect(onGo).toHaveBeenCalledWith("n2");
+    expect(options()).toHaveLength(0);
+  });
+
+  it("ArrowDown and ArrowUp move the active option, aria-activedescendant follows, Enter goes to it", async () => {
+    const onGo = vi.fn();
+    mount({ spec: rankedSpec, onGo });
+    type("graphs");
+    await settle();
+    press("ArrowDown");
+    press("ArrowDown");
+    const second = options()[1] as HTMLElement;
+    expect(second.getAttribute("aria-selected")).toBe("true");
+    expect(input().getAttribute("aria-activedescendant")).toBe(second.id);
+    press("ArrowUp");
+    expect((options()[0] as HTMLElement).getAttribute("aria-selected")).toBe("true");
+    press("ArrowDown");
+    press("Enter");
+    expect(onGo).toHaveBeenCalledWith("n1");
+  });
+
+  it("a click on an option goes to that result", async () => {
+    const onGo = vi.fn();
+    mount({ spec: rankedSpec, onGo });
+    type("graphs");
+    await settle();
+    fireEvent.click(options()[2] as HTMLElement);
+    expect(onGo).toHaveBeenCalledWith("n3");
+  });
+
+  it("Enter does nothing without onGo, and without results", async () => {
+    mount({ spec: rankedSpec });
+    type("graphs");
+    await settle();
+    press("Enter");
+    expect(options()).toHaveLength(3);
+    type("zzzz");
+    await settle();
+    expect(options()).toHaveLength(0);
+    press("Enter");
+    expect(options()).toHaveLength(0);
+  });
+
+  it("renders at most 50 options plus 'and N more', and onMatches still gets every id", async () => {
+    const many = Array.from({ length: 120 }, (_, number) => `id${String(number).padStart(3, "0")}`);
+    const bigSpec: MapSpec = {
+      version: "1",
+      territories: [],
+      nodes: many.map((id, number) => ({ id, label: `Item ${id}`, x: number, y: 0, territory: null })),
+    };
+    const { onMatches } = mount({ spec: bigSpec, search: () => many });
+    type("item");
+    await settle();
+    expect(options()).toHaveLength(50);
+    expect(screen.getByText("and 70 more")).not.toBeNull();
+    expect((lastCall(onMatches) as string[]).length).toBe(120);
+  });
+
+  it("Escape, the clear button and a new spec empty the list", async () => {
+    const view = mount({ spec: rankedSpec });
+    type("graphs");
+    await settle();
+    press("Escape");
+    expect(options()).toHaveLength(0);
+    type("graphs");
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(options()).toHaveLength(0);
+    type("graphs");
+    await settle();
+    expect(options()).toHaveLength(3);
+    view.rerender(<SearchBox spec={{ ...rankedSpec }} onMatches={vi.fn()} />);
+    expect(options()).toHaveLength(0);
+  });
+
+  it("ArrowDown reopens a closed list that still has results", async () => {
+    mount({ spec: rankedSpec, onGo: vi.fn() });
+    type("graphs");
+    await settle();
+    press("Enter");
+    expect(options()).toHaveLength(0);
+    press("ArrowDown");
+    expect(options()).toHaveLength(3);
+  });
+
+  it("a failed or empty search empties the list", async () => {
+    mount({ spec: rankedSpec });
+    type("graphs");
+    await settle();
+    expect(options()).toHaveLength(3);
+    type("zzzz");
+    await settle();
+    expect(options()).toHaveLength(0);
+    expect(screen.getByRole("combobox").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("a slower older answer never repaints the list", async () => {
+    const slow = deferred<string[]>();
+    let call = 0;
+    mount({ spec: rankedSpec, search: () => (++call === 1 ? slow.promise : ["n3"]) });
+    type("one");
+    await settle();
+    type("two");
+    await settle();
+    await act(async () => {
+      slow.resolve(["n1", "n2"]);
+    });
+    expect(options().map((option) => option.textContent)).toEqual(["Charlie graphs"]);
+  });
+
+  it("gives each option a 44 px target with touchTargets", async () => {
+    mount({ spec: rankedSpec, touchTargets: true });
+    type("graphs");
+    await settle();
+    expect((options()[0] as HTMLElement).style.minHeight).toBe("44px");
   });
 });

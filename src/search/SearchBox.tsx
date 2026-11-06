@@ -10,10 +10,12 @@ import {
 } from "react";
 import type { MapSpec } from "../shared/spec";
 import { localSearch, searchIndexAsync } from "./localSearch";
-import { orderAnswer, orderLocal, type RankRule, type ScoredId } from "./rank";
+import { labelOf, orderAnswer, orderLocal, type RankRule, type ScoredId } from "./rank";
 
 /** How long the query must rest before it is searched (spec search §4). */
 export const SEARCH_DEBOUNCE_MILLISECONDS = 200;
+/** How many results the list renders; the rest is one "and N more" line (spec ranking §4). */
+export const SEARCH_RESULTS_VISIBLE = 50;
 
 export interface SearchBoxProps {
   /** The corpus the local search runs over; a new spec object clears the box. */
@@ -27,6 +29,8 @@ export interface SearchBoxProps {
   rank?: RankRule | undefined;
   /** The matches to draw, best first: a list of ids (empty means no match), or `null` when no search is active. Pass it to `CorpusMap`'s `matches`. */
   onMatches: (ids: readonly string[] | null) => void;
+  /** Called with an item's id when the reader presses Enter or picks a result; pair it with `CorpusMapHandle.reveal`. Typing never calls it. */
+  onGo?: ((id: string) => void) | undefined;
   /** When given, a "Show on map" button appears beside a non-empty result; pair it with `CorpusMapHandle.revealAll`. */
   onShow?: (() => void) | undefined;
   /** The accessible name of the search landmark and the input; "Search" by default. */
@@ -42,6 +46,14 @@ export interface SearchBoxProps {
 /** `pad` alternates a trailing no-break space when an answer repeats the previous text, so a live region speaks it again. */
 type Status = { kind: "idle" } | { kind: "found"; count: number; pad?: boolean } | { kind: "failed"; pad?: boolean };
 const IDLE: Status = { kind: "idle" };
+
+/** The ranked results under the input: the newest answer's ids, the active row (-1 for none) and whether the list is showing. */
+interface Results {
+  ids: readonly string[];
+  active: number;
+  open: boolean;
+}
+const NO_RESULTS: Results = { ids: [], active: -1, open: false };
 const TOUCH_TARGET = 44;
 
 const VISUALLY_HIDDEN: CSSProperties = {
@@ -52,6 +64,27 @@ const VISUALLY_HIDDEN: CSSProperties = {
   clip: "rect(0 0 0 0)",
   whiteSpace: "nowrap",
 };
+
+// The list floats under the input inside the container, so it never grows the page or the bar that holds the box.
+const LIST_STYLE: CSSProperties = {
+  position: "absolute",
+  top: "100%",
+  left: 0,
+  right: 0,
+  zIndex: 20,
+  margin: "4px 0 0",
+  padding: 4,
+  listStyle: "none",
+  maxHeight: "50vh",
+  overflowY: "auto",
+  background: "Canvas",
+  color: "CanvasText",
+  border: "1px solid color-mix(in srgb, currentColor 45%, transparent)",
+  borderRadius: 6,
+};
+const ROW_STYLE: CSSProperties = { padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center" };
+const ACTIVE_ROW_STYLE: CSSProperties = { background: "color-mix(in srgb, currentColor 14%, transparent)" };
+const MORE_STYLE: CSSProperties = { padding: "6px 8px", opacity: 0.8 };
 
 function baseText(status: Status): string {
   if (status.kind === "failed") return "Search failed";
@@ -79,21 +112,24 @@ function announced(previous: Status, next: Exclude<Status, { kind: "idle" }>): S
  * font, so it follows the page's theme.
  */
 export function SearchBox(properties: SearchBoxProps): ReactElement {
-  const { spec, search, onMatches, onShow, hint, touchTargets, style } = properties;
+  const { spec, search, onMatches, onShow, onGo, hint, touchTargets, style } = properties;
   const rank = properties.rank ?? "connections";
   const label = properties.label ?? "Search";
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
+  const [results, setResults] = useState<Results>(NO_RESULTS);
   // A new spec starts a new search: reset while rendering, and the query effect below reports the clear.
   const [knownSpec, setKnownSpec] = useState(spec);
   if (knownSpec !== spec) {
     setKnownSpec(spec);
     setQuery("");
     setStatus(IDLE);
+    setResults(NO_RESULTS);
   }
   const inputReference = useRef<HTMLInputElement>(null);
   const showReference = useRef<HTMLButtonElement>(null);
   const hintIdentifier = useId();
+  const listIdentifier = useId();
   // The newest props for the timer and the answer, which outlive the render that scheduled them.
   const latest = useRef({ spec, search, rank, onMatches });
   useEffect(() => {
@@ -146,6 +182,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         if (generation.current !== mine) return;
         releaseFocus();
         setStatus((previous) => announced(previous, { kind: "failed" }));
+        setResults(NO_RESULTS);
         holding.current = false;
         latest.current.onMatches(null);
         return;
@@ -153,6 +190,7 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
       if (generation.current !== mine) return;
       if (ids.length === 0) releaseFocus();
       setStatus((previous) => announced(previous, { kind: "found", count: ids.length }));
+      setResults(ids.length === 0 ? NO_RESULTS : { ids, active: -1, open: true });
       holding.current = true;
       latest.current.onMatches(ids);
     }, SEARCH_DEBOUNCE_MILLISECONDS);
@@ -161,8 +199,17 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
 
   const changeQuery = (next: string) => {
     setQuery(next);
-    if (next.trim() === "") setStatus(IDLE);
+    if (next.trim() === "") {
+      setStatus(IDLE);
+      setResults(NO_RESULTS);
+    }
   };
+  const goToResult = (id: string) => {
+    setResults((previous) => ({ ...previous, open: false }));
+    onGo?.(id);
+  };
+  const showing = results.open && results.ids.length > 0;
+  const optionIdentifier = (position: number) => `${listIdentifier}-${position}`;
   const target: CSSProperties = touchTargets ? { minHeight: TOUCH_TARGET, minWidth: TOUCH_TARGET } : {};
   const control: CSSProperties = {
     font: "inherit",
@@ -180,7 +227,15 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
   return (
     <search
       aria-label={label}
-      style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", maxWidth: "100%", ...style }}
+      style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+        maxWidth: "100%",
+        ...style,
+      }}
     >
       <input
         ref={inputReference}
@@ -189,15 +244,39 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         inputMode="search"
         autoComplete="off"
         spellCheck={false}
+        role="combobox"
+        aria-expanded={showing}
+        aria-controls={showing ? listIdentifier : undefined}
+        aria-autocomplete="list"
+        aria-activedescendant={showing && results.active >= 0 ? optionIdentifier(results.active) : undefined}
         aria-label={label}
         aria-describedby={hint === undefined ? undefined : hintIdentifier}
         value={query}
         onChange={(event: ChangeEvent<HTMLInputElement>) => changeQuery(event.target.value)}
         onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-          if (event.key !== "Escape" || query === "") return;
-          event.preventDefault();
-          event.stopPropagation();
-          changeQuery("");
+          if (event.key === "Escape") {
+            if (query === "") return;
+            event.preventDefault();
+            event.stopPropagation();
+            changeQuery("");
+            return;
+          }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            if (results.ids.length === 0) return;
+            event.preventDefault();
+            if (!results.open) {
+              setResults({ ...results, open: true });
+              return;
+            }
+            const last = Math.min(results.ids.length, SEARCH_RESULTS_VISIBLE) - 1;
+            const step = event.key === "ArrowDown" ? 1 : -1;
+            setResults({ ...results, active: Math.min(Math.max(results.active + step, 0), last) });
+            return;
+          }
+          if (event.key === "Enter" && showing && onGo !== undefined) {
+            event.preventDefault();
+            goToResult(results.ids[Math.max(results.active, 0)] as string);
+          }
         }}
         style={{ ...control, flex: "1 1 4rem", minWidth: 0 }}
       />
@@ -226,6 +305,40 @@ export function SearchBox(properties: SearchBoxProps): ReactElement {
         <button ref={showReference} type="button" onClick={onShow} style={{ ...control, cursor: "pointer" }}>
           Show on map
         </button>
+      ) : null}
+      {showing ? (
+        // A mouse press on a row must not take focus from the input, so the keyboard keeps working.
+        <div
+          id={listIdentifier}
+          role="listbox"
+          aria-label={`${label} results`}
+          onMouseDown={(event) => event.preventDefault()}
+          style={LIST_STYLE}
+        >
+          {results.ids.slice(0, SEARCH_RESULTS_VISIBLE).map((id, position) => (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the input owns the keyboard (aria-activedescendant); a row is a pointer target only.
+            <div
+              key={id}
+              id={optionIdentifier(position)}
+              role="option"
+              tabIndex={-1}
+              aria-selected={position === results.active}
+              onClick={() => goToResult(id)}
+              style={{
+                ...ROW_STYLE,
+                ...(position === results.active ? ACTIVE_ROW_STYLE : {}),
+                ...(touchTargets ? { minHeight: TOUCH_TARGET } : {}),
+              }}
+            >
+              {labelOf(spec, id)}
+            </div>
+          ))}
+          {results.ids.length > SEARCH_RESULTS_VISIBLE ? (
+            <div role="presentation" style={MORE_STYLE}>
+              {`and ${results.ids.length - SEARCH_RESULTS_VISIBLE} more`}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </search>
   );

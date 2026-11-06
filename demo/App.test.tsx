@@ -2397,7 +2397,7 @@ describe("App (showcase Task 5)", () => {
         { id: "east", label: "East filler", x: 1, y: 0, territory: "cs.AI" },
       ],
     };
-    const searchBox = () => screen.getByRole("textbox", { name: "Search" });
+    const searchBox = () => screen.getByRole("combobox", { name: "Search" });
     const typeQuery = (text: string) => fireEvent.change(searchBox(), { target: { value: text } });
     function zoomToNear(): void {
       for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -2528,7 +2528,7 @@ describe("App (showcase Task 5)", () => {
       zoomToNear();
       fireEvent.click(filterButton());
       fireEvent.click(categoryBox(LEARNING));
-      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "graph" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Search" }), { target: { value: "graph" } });
       await screen.findByText("2 results");
       await waitFor(async () => expect(await isMatch("Graph matching")).toBe(true));
       expect(await isMatch("Graph colouring")).toBe(false);
@@ -2545,7 +2545,7 @@ describe("App (showcase Task 5)", () => {
       zoomToNear();
       fireEvent.click(filterButton());
       fireEvent.click(categoryBox(LEARNING));
-      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "colouring" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Search" }), { target: { value: "colouring" } });
       await screen.findByText("1 result");
       await waitFor(async () => expect(await isMatch("Graph matching")).toBe(false));
       expect(await isMatch("Graph colouring")).toBe(false);
@@ -2563,7 +2563,7 @@ describe("App (showcase Task 5)", () => {
       await screen.findByText(/1\.0×/);
       fireEvent.click(filterButton());
       fireEvent.click(categoryBox(LEARNING));
-      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "filler" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Search" }), { target: { value: "filler" } });
       await screen.findByText("2 results");
       await showOnMap();
       const intersection = scale();
@@ -2573,7 +2573,7 @@ describe("App (showcase Task 5)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Fit" }));
       const fitted = scale();
       fireEvent.click(categoryBox(LEARNING));
-      fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "colouring" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Search" }), { target: { value: "colouring" } });
       await screen.findByText("1 result");
       await showOnMap();
       expect(scale()).not.toBe(fitted);
