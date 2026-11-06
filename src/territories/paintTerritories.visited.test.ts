@@ -51,9 +51,9 @@ function familyOf(visited: Record<string, number>): Scene {
   } as unknown as Scene;
 }
 
-const paintOf = (scene: Scene, dimmed: ReadonlySet<string> = new Set(), familyAlpha = 0) => {
+const paintOf = (scene: Scene, dimmed: ReadonlySet<string> = new Set(), familyAlpha = 0, strength = 1) => {
   const surface = new RecordingSurface();
-  paintTerritories(surface, scene, IDENTITY, DEFAULT_THEME, BASE, dimmed, familyAlpha);
+  paintTerritories(surface, scene, IDENTITY, DEFAULT_THEME, BASE, dimmed, familyAlpha, undefined, strength);
   return surface;
 };
 
@@ -97,5 +97,11 @@ describe("paintTerritories fills by visited share", () => {
     const boosted = paintOf(familyOf({}), new Set(), 0.5);
     const [leaf, family] = boosted.layers as [number, number];
     expect(1 - (1 - leaf) * (1 - family)).toBeCloseTo(BASE, 12);
+  });
+
+  it("scales the boost by its strength: none draws the base alpha, half draws the midway alpha", () => {
+    expect(paintOf(leavesOf({ a: 1 }), new Set(), 0, 0).layers).toEqual([BASE]);
+    const [half] = paintOf(leavesOf({ a: 1, b: 1, c: 1 }), new Set(), 0, 0.5).layers as [number];
+    expect(half).toBeCloseTo(BASE * 1.375, 12);
   });
 });

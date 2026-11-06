@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { RelatedItem } from "../edges/related";
 import type { Regime } from "../lod/lod";
 import { visibleNodes } from "../lod/visible";
@@ -69,6 +69,11 @@ export function itemCount(count: number): string {
   return `${count} ${count === 1 ? "item" : "items"}`;
 }
 
+/** ", N of M visited" once any item of a territory is visited, otherwise nothing (spec far-visited §2). */
+function visitedText(visited: number | undefined, total: number): string {
+  return visited === undefined ? "" : `, ${visited} of ${total} visited`;
+}
+
 /**
  * The canvas is decorative; this is the content (spec slice B §5). It
  * mirrors the regime: at far and mid, territory buttons under their group
@@ -85,6 +90,14 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
   const Heading = properties.heading ?? "h3";
   const theme = properties.theme ?? DEFAULT_THEME;
   const loose = spec.nodes.filter((node) => node.territory === null);
+  // Visited items per territory, once per spec; a territory with none is absent (spec far-visited §2).
+  const visitedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const node of spec.nodes)
+      if (node.state === "visited" && node.territory !== null)
+        counts.set(node.territory, (counts.get(node.territory) ?? 0) + 1);
+    return counts;
+  }, [spec]);
   const related = properties.related ?? NO_RELATED;
   const relatedHeadingId = useId();
   const selectedNode = selectedId == null ? undefined : spec.nodes.find((node) => node.id === selectedId);
@@ -195,7 +208,7 @@ export function AccessibleTree(properties: AccessibleTreeProps): ReactElement {
           territoryFocus(null);
         }}
       >
-        {`${territory.name}, ${itemCount(territory.members.length)}`}
+        {`${territory.name}, ${itemCount(territory.members.length)}${visitedText(visitedCounts.get(territory.id), territory.members.length)}`}
       </button>
     </li>
   );

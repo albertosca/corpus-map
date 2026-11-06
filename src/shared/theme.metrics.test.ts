@@ -3,6 +3,7 @@ import { ciede2000, simulate, type VisionMode } from "../../test/colourVision";
 import { contrastRatio, over, parseColor, type Rgba } from "../labels/contrast";
 import { tintDirection } from "../territories/familyColours";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
+import { visitedFactor } from "../territories/visitedFactor";
 import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { DARK_THEME, DEFAULT_THEME, type Theme } from "./theme";
 
@@ -21,6 +22,9 @@ function withAlpha(colour: Rgba, alpha: number): Rgba {
 }
 
 describe.each(THEMES)("%s theme", (_name, theme, pages) => {
+  // The strongest fill a fully visited territory reaches (spec far-visited). Only names are drawn there: the boost
+  // fades out as points fade in (`paint.visited.test.ts`), because the palette's points reach 3:1 only up to ~0.204.
+  const strongest = theme.territoryFillAlpha * visitedFactor(1);
   const fillAlphas = [theme.territoryFillAlpha, theme.territoryFillAlpha * DENSE_FILL_FACTOR];
 
   it("metric 15: every palette colour and the neutral, as a point, reach 3:1 against what is beneath", () => {
@@ -65,12 +69,27 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
     }
   });
 
+  it("metric 16: names reach 4.5:1 over the visited ceiling, on every palette colour and family tint", () => {
+    const direction = tintDirection(theme);
+    const band = tintBand(theme.palette, direction);
+    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
+    const label = parseColor(theme.territoryLabel);
+    for (const page of pages.map(parseColor))
+      for (const colour of [...theme.palette, ...tints]) {
+        const background = over(withAlpha(parseColor(colour), strongest), page);
+        expect(contrastRatio(over(label, background), background), `${colour} at ${strongest}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+  });
+
   it("metric 16: territory names reach 4.5:1 over the strongest fill, guided and dense", () => {
     const label = parseColor(theme.territoryLabel);
     for (const page of pages.map(parseColor)) {
-      for (const background of backgrounds(theme, page, theme.territoryFillAlpha)) {
-        expect(contrastRatio(over(label, background), background)).toBeGreaterThanOrEqual(4.5);
-      }
+      for (const alpha of [theme.territoryFillAlpha, strongest])
+        for (const background of backgrounds(theme, page, alpha)) {
+          expect(contrastRatio(over(label, background), background), `at fill ${alpha}`).toBeGreaterThanOrEqual(4.5);
+        }
       for (const background of backgrounds(theme, page, theme.territoryFillAlpha * DENSE_FILL_FACTOR)) {
         const muted = over(withAlpha(label, label[3] * DENSE_NAME_ALPHA), background);
         expect(contrastRatio(muted, background)).toBeGreaterThanOrEqual(4.5);

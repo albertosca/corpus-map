@@ -1570,6 +1570,11 @@ export interface Scene {
     related: ReadonlyMap<string, readonly RelatedEdge[]>;
     /** The heaviest edge weight in the spec, so widths scale against it; 0 when no edge carries one. */
     maximumEdgeWeight: number;
+    /**
+     * Visited nodes over all nodes, per leaf and per family id (spec far-visited §3); a territory with no visited
+     * node is absent. Empty when no node is visited, so such a spec paints exactly what it painted before.
+     */
+    visitedShare: ReadonlyMap<string, number>;
 }
 /** Below this box width, in CSS pixels, the family names are the compact ones (spec mobile §4). */
 export declare const NARROW_BOX_WIDTH = 600;
@@ -2118,8 +2123,11 @@ export declare const GROUP_OUTLINE_WIDTH = 2.5;
  * of one level share one layer (and one stroke alpha), so overlaps inside a
  * level never darken and the steady state stays at two layers. Absent, or all
  * 1, it draws exactly what it drew before; a leaf in no family counts as 1.
+ *
+ * A territory's fill alpha is also multiplied by its visited factor (spec far-visited), scaled by `visitedStrength`
+ * (1 where no point is drawn, 0 where the points are fully drawn); no visited node leaves the calls unchanged.
  */
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>, visitedStrength?: number): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
@@ -2191,6 +2199,14 @@ export declare function tooltipPosition(cursorHorizontal: number, cursorVertical
     left: number;
     top: number;
 };
+
+// territories/visitedFactor.d.ts
+/** The visited share is rounded to the nearest 1/`VISITED_STEPS` (spec far-visited §2). */
+export declare const VISITED_STEPS = 4;
+/** A territory with every node visited is filled at `1 + VISITED_MAXIMUM_BOOST` times the base alpha. */
+export declare const VISITED_MAXIMUM_BOOST = 0.75;
+/** The factor a territory's fill alpha is multiplied by: 1 for no visited node, 1.75 for all (spec far-visited §2). */
+export declare function visitedFactor(share: number): number;
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";

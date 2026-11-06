@@ -698,3 +698,70 @@ describe("walking the arXiv corpus with the arrows (spec spatial keys acceptance
     }
   });
 });
+
+/**
+ * Far-regime visited state (spec `2026-11-06-far-visited-design.md`) on the real corpus: a visited subset fills
+ * territories fuller at far in few distinct levels, changes no name, and leaves near at the base alpha.
+ */
+describe("visited subset (arXiv, painted)", () => {
+  const leafIds = leavesOf(shippedSpec).map((territory) => territory.id);
+  // Leaf 0 is entirely visited, leaf 1 half, leaf 2 a quarter, the rest none: every member of a leaf is visited by its position.
+  const visitedShareByLeaf = new Map<string, number>([
+    [leafIds[0] ?? "", 1],
+    [leafIds[1] ?? "", 0.5],
+    [leafIds[2] ?? "", 0.25],
+  ]);
+  const visitedSpec: MapSpec = (() => {
+    const seen = new Map<string, number>();
+    const nodes: MapNode[] = shippedSpec.nodes.map((node) => {
+      const share = node.territory === null ? 0 : (visitedShareByLeaf.get(node.territory) ?? 0);
+      const position = seen.get(node.territory ?? "") ?? 0;
+      seen.set(node.territory ?? "", position + 1);
+      const visited = Math.floor((position + 1) * share) > Math.floor(position * share);
+      return share === 1 || visited ? { ...node, state: "visited" as const } : node;
+    });
+    return { ...shippedSpec, nodes };
+  })();
+  const plainScene = buildScene(shippedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+  const visitedScene = buildScene(visitedSpec, DEFAULT_TUNING, DEFAULT_THEME, estimateText);
+
+  const layersAt = (scene: Scene, spec: MapSpec, regime: "far" | "near", pointAlpha: number): number[] => {
+    const surface = new RecordingSurface();
+    const fit = fitAt(spec, scene, 1440, 900);
+    paint(
+      surface,
+      scene,
+      spec,
+      fit,
+      { regime, pointAlpha, width: 1440, height: 900, groupAlpha: 0, compactGroupNames: false },
+      DEFAULT_THEME,
+    );
+    return surface.layers;
+  };
+
+  it("measures a visited share on the subset's leaves and none elsewhere", () => {
+    expect(visitedScene.visitedShare.get(leafIds[0] ?? "")).toBe(1);
+    expect(visitedScene.visitedShare.get(leafIds[3] ?? "")).toBeUndefined();
+    expect(plainScene.visitedShare.size).toBe(0);
+  });
+
+  it("fills in at most five distinct levels at far, the full leaf above the base alpha", () => {
+    const layers = layersAt(visitedScene, visitedSpec, "far", 0);
+    const distinct = new Set(layers.map((alpha) => alpha.toFixed(6)));
+    expect(distinct.size).toBeGreaterThan(1);
+    expect(distinct.size).toBeLessThanOrEqual(5);
+    expect(Math.max(...layers)).toBeCloseTo(DEFAULT_THEME.territoryFillAlpha * 1.75, 6);
+  });
+
+  it("draws the base alpha only at near, where the points carry the state", () => {
+    const layers = layersAt(visitedScene, visitedSpec, "near", 1);
+    expect(Math.max(...layers)).toBeCloseTo(DEFAULT_THEME.territoryFillAlpha, 6);
+  });
+
+  it("draws the same names with and without visited nodes (the fill never moves a name)", () => {
+    const fit = fitAt(shippedSpec, plainScene, 1440, 900);
+    const without = drawnBoxes(shippedSpec, plainScene, fit, 1440, 900, 1).map((box) => box.text);
+    const withVisited = drawnBoxes(visitedSpec, visitedScene, fit, 1440, 900, 1).map((box) => box.text);
+    expect(withVisited).toEqual(without);
+  });
+});

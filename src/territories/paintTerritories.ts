@@ -115,6 +115,9 @@ function byLevel(projected: readonly Projected[], levels: readonly number[]): Ar
  * of one level share one layer (and one stroke alpha), so overlaps inside a
  * level never darken and the steady state stays at two layers. Absent, or all
  * 1, it draws exactly what it drew before; a leaf in no family counts as 1.
+ *
+ * A territory's fill alpha is also multiplied by its visited factor (spec far-visited), scaled by `visitedStrength`
+ * (1 where no point is drawn, 0 where the points are fully drawn); no visited node leaves the calls unchanged.
  */
 export function paintTerritories(
   surface: Surface,
@@ -125,6 +128,7 @@ export function paintTerritories(
   dimmed: ReadonlySet<string> = NO_DIMMED,
   familyAlpha = 0,
   focus?: ReadonlyMap<string, number>,
+  visitedStrength = 1,
 ): void {
   const leaves = project(
     scene.paintOrder,
@@ -134,7 +138,8 @@ export function paintTerritories(
     (id) => dimmed.has(id),
     viewport,
   );
-  const boost = (id: string) => visitedFactor(scene.visitedShare.get(id) ?? 0);
+  // The visited factor, blended toward 1 by `1 - visitedStrength` (the points fading in take the boost away).
+  const boost = (id: string) => 1 + (visitedFactor(scene.visitedShare.get(id) ?? 0) - 1) * visitedStrength;
   if (scene.groupShapes.size === 0) {
     // Territories at one visited step share a layer; with none visited this is the one layer at `fillAlpha`.
     const alphas = scene.paintOrder.map((id) => fillAlpha * boost(id));

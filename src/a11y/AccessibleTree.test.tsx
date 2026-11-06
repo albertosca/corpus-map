@@ -500,3 +500,23 @@ describe("AccessibleTree: declared parents", () => {
     });
   });
 });
+
+describe("AccessibleTree visited count (spec far-visited §2)", () => {
+  const visited: MapSpec = {
+    ...spec,
+    nodes: spec.nodes.map((node) => (node.id === "a" ? { ...node, state: "visited" as const } : node)),
+  };
+  const farTree = (withSpec: MapSpec) =>
+    render(<AccessibleTree spec={withSpec} regime="far" viewport={viewport} width={400} height={300} cap={200} />);
+
+  it("says how many of a territory's items are visited once any is", () => {
+    farTree(visited);
+    expect(screen.getByRole("button", { name: "North, 2 items, 1 of 2 visited" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "South, 1 item" })).toBeDefined();
+  });
+
+  it("keeps the plain name when nothing is visited", () => {
+    farTree(spec);
+    expect(screen.getByRole("button", { name: "North, 2 items" })).toBeDefined();
+  });
+});

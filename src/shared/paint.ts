@@ -78,11 +78,25 @@ export function paint(
   surface.clear();
   const fillAlpha = theme.territoryFillAlpha * (frame.presentation === "dense" ? DENSE_FILL_FACTOR : 1);
   const dimmed = frame.dimmed ?? NO_DIMMED;
-  paintTerritories(surface, scene, viewport, theme, fillAlpha, dimmed, frame.groupAlpha ?? 0, frame.focus);
   // A search shows its result at every regime, far included (where a corpus opens): the points are drawn at full strength then.
   const searching = frame.matches !== undefined;
   const pointAlpha = searching ? 1 : frame.pointAlpha;
-  if ((frame.regime !== "far" || searching) && pointAlpha > 0) {
+  const drawsPoints = (frame.regime !== "far" || searching) && pointAlpha > 0;
+  // The visited boost is for where no point is drawn: the palette's points reach 3:1 only up to a fill alpha of
+  // about 0.204 (metric 15), so the boost fades out as the points fade in (spec far-visited §5).
+  const visitedStrength = drawsPoints ? 1 - pointAlpha : 1;
+  paintTerritories(
+    surface,
+    scene,
+    viewport,
+    theme,
+    fillAlpha,
+    dimmed,
+    frame.groupAlpha ?? 0,
+    frame.focus,
+    visitedStrength,
+  );
+  if (drawsPoints) {
     surface.globalAlpha(pointAlpha);
     const pointBox = { width: frame.width, height: frame.height };
     paintPoints(surface, scene, spec, viewport, theme, dimmed, pointAlpha, pointBox, frame.matches);
