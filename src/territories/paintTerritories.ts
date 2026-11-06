@@ -43,8 +43,9 @@ function project(
  * then drawn at its alpha relative to the strongest, so a pixel still shows the smallest territory covering it, at
  * that territory's own alpha, and overlaps never darken or reorder across steps.
  */
-function fillLayer(surface: Surface, projected: readonly Projected[], alphas: readonly number[]): void {
-  const strongest = Math.max(...alphas);
+function fillLayer(surface: Surface, projected: readonly Projected[], alphas: readonly number[], empty: number): void {
+  // No shape: the layer is still opened at `empty` (the base alpha), as it always was; Math.max() of nothing is -Infinity.
+  const strongest = alphas.length === 0 ? empty : Math.max(...alphas);
   const mixed = alphas.some((alpha) => alpha !== strongest);
   surface.layer(strongest, (layer) => {
     let current = 1;
@@ -164,6 +165,7 @@ export function paintTerritories(
       surface,
       leaves,
       scene.paintOrder.map((id) => boosted(id, fillAlpha)),
+      fillAlpha,
     );
     outlines(surface, leaves, TERRITORY_OUTLINE_WIDTH, 1);
     return;
@@ -190,6 +192,7 @@ export function paintTerritories(
       surface,
       shapes,
       positions.map((position) => boosted(scene.paintOrder[position] as string, fillAlpha) * level),
+      fillAlpha,
     );
   // The family layer goes over its leaves' layer, so it is drawn at the alpha that leaves the pair as opaque as
   // `fillAlpha` itself: 1 - (1 - fillAlpha * leaf) * (1 - alpha) = fillAlpha. Without it a mid transition showed
@@ -202,6 +205,7 @@ export function paintTerritories(
         const strong = boostedBy(scene.groupVisitedShare.get(familyOrder[position] as string), fillAlpha);
         return (strong * level) / (1 - strong * (1 - level));
       }),
+      fillAlpha,
     );
   for (const { level, shapes } of leafGroups) outlines(surface, shapes, TERRITORY_OUTLINE_WIDTH, level);
   outlines(surface, families, GROUP_OUTLINE_WIDTH, 1);

@@ -95,6 +95,22 @@ describe("paintTerritories fills by visited share", () => {
     expect(ratios[1]).toBeCloseTo(BASE * visitedFactor(0.5), 12);
   });
 
+  it("issues the same calls with a visited node as without when the fill is 0 (review M1)", () => {
+    const calls = (scene: Scene) => {
+      const surface = new RecordingSurface();
+      paintTerritories(surface, scene, IDENTITY, DEFAULT_THEME, 0, new Set(), 0, undefined, 1);
+      return surface.calls;
+    };
+    expect(calls(leavesOf({ a: 1, b: 0.5 }))).toEqual(calls(leavesOf({})));
+  });
+
+  it("issues the same calls with a visited share as without when there is no territory to fill (review M1)", () => {
+    const empty = (visited: Record<string, number>) =>
+      ({ ...leavesOf(visited), paintOrder: [], shapes: new Map(), colours: new Map() }) as unknown as Scene;
+    expect(paintOf(empty({ a: 1 })).calls).toEqual(paintOf(empty({})).calls);
+    for (const alpha of paintOf(empty({ a: 1 })).layers) expect(Number.isFinite(alpha)).toBe(true);
+  });
+
   it("erases nothing when every territory is at one step (the old calls)", () => {
     expect(paintOf(leavesOf({})).erased).toHaveLength(0);
     expect(paintOf(leavesOf({ a: 0.5, b: 0.55, c: 0.5 })).erased).toHaveLength(0);

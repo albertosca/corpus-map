@@ -98,6 +98,30 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
       }
   });
 
+  it("metric 15: a territory outline reaches 3:1 over its own fill at the visited ceiling, and 2.3:1 over a neighbour's", () => {
+    // Review M3. The outline is drawn in the territory's full colour. Over its own boosted fill 3:1 holds. Over a
+    // different palette colour's fill it already falls under 3:1 above the base fill in the dark theme (measured:
+    // the pair floor is 3:1 only up to 0.230 light, 0.200 dark), so the cross-colour bar is the measured 2.3:1
+    // floor, pinned so the boost cannot erode it further; the fills themselves differ in hue where two touch.
+    const direction = tintDirection(theme);
+    const band = tintBand(theme.palette, direction);
+    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
+    const colours = [...theme.palette, ...tints];
+    for (const page of pages.map(parseColor))
+      for (const fill of colours) {
+        const background = over(withAlpha(parseColor(fill), strongest), page);
+        expect(
+          contrastRatio(parseColor(fill), background),
+          `${fill} over itself at ${strongest}`,
+        ).toBeGreaterThanOrEqual(3);
+        for (const outline of colours)
+          expect(
+            contrastRatio(parseColor(outline), background),
+            `${outline} over ${fill} at ${strongest}`,
+          ).toBeGreaterThanOrEqual(2.3);
+      }
+  });
+
   it("metric 16: territory names reach 4.5:1 over the strongest fill, guided and dense", () => {
     const label = parseColor(theme.territoryLabel);
     for (const page of pages.map(parseColor)) {
