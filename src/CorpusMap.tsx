@@ -458,6 +458,9 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const measure = useMeasure();
   // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
   const paletteKey = theme.palette.join("|");
+  // The name style as primitives, for the same reason.
+  const nameUppercase = theme.territoryNameStyle?.uppercase;
+  const nameSpacing = theme.territoryNameStyle?.spacing;
   const sceneBuild = useMemo(
     () => ({
       spec,
@@ -477,6 +480,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
             },
             palette: paletteKey === "" ? [] : paletteKey.split("|"),
             territoryLabel: theme.territoryLabel,
+            territoryNameStyle: { uppercase: nameUppercase, spacing: nameSpacing },
           },
           measure,
         ),
@@ -495,6 +499,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       theme.territoryFonts.compact,
       paletteKey,
       theme.territoryLabel,
+      nameUppercase,
+      nameSpacing,
     ],
   );
 

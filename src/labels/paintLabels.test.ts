@@ -486,3 +486,46 @@ describe("paintLabels with a family focus (spec family focus §4)", () => {
     }
   });
 });
+
+describe("paintLabels with a territory name style (spec serious default §3)", () => {
+  const { scene } = grouped();
+  const styled = (territoryNameStyle: { uppercase?: boolean; spacing?: number }) => ({
+    ...DEFAULT_THEME,
+    territoryNameStyle,
+  });
+  const drawn = (theme: typeof DEFAULT_THEME, groupAlpha: number) => {
+    const surface = new RecordingSurface();
+    paintLabels(surface, scene, VIEWPORT, theme, { ...BOX, groupAlpha });
+    return surface.texts;
+  };
+
+  it("draws exactly what an absent style draws when the style is {}", () => {
+    expect(drawn(styled({}), 0)).toEqual(drawn({ ...DEFAULT_THEME, territoryNameStyle: undefined }, 0));
+    expect(drawn(styled({}), 1)).toEqual(drawn({ ...DEFAULT_THEME, territoryNameStyle: undefined }, 1));
+  });
+
+  it("draws leaf names upper-cased and letter-spaced, the same text the scene measured", () => {
+    const texts = drawn(styled({ uppercase: true, spacing: 0.6 }), 0);
+    expect(texts.length).toBeGreaterThan(0);
+    for (const text of texts) {
+      expect(text.text).toBe(text.text.toLocaleUpperCase());
+      expect(text.letterSpacing).toBe("0.6px");
+    }
+  });
+
+  it("draws family names with the spacing in place of the 1 px, and keeps the 1 px when only uppercase is set", () => {
+    for (const text of drawn(styled({ uppercase: true, spacing: 0.6 }), 1)) expect(text.letterSpacing).toBe("0.6px");
+    for (const text of drawn(styled({ uppercase: true }), 1)) {
+      expect(text.text).toBe(text.text.toLocaleUpperCase());
+      expect(text.letterSpacing).toBe(`${GROUP_LETTER_SPACING}px`);
+    }
+  });
+
+  it("passes no letter spacing for leaf names when only uppercase is set", () => {
+    for (const text of drawn(styled({ uppercase: true }), 0)) expect(text.letterSpacing).toBeUndefined();
+  });
+
+  it("throws a RangeError for an invalid spacing", () => {
+    expect(() => drawn(styled({ spacing: Number.NaN }), 0)).toThrow(RangeError);
+  });
+});

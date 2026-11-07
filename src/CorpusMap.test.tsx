@@ -493,6 +493,30 @@ describe("CorpusMap", () => {
     }
   });
 
+  it("keys the scene memo on the name style's primitive values: new values rebuild, the same values in a new object do not", () => {
+    const spy = vi.spyOn(sceneModule, "buildingScene");
+    try {
+      const element = (territoryNameStyle: { uppercase?: boolean; spacing?: number }) => (
+        <CorpusMap
+          spec={spec}
+          renderCard={() => null}
+          width={width}
+          height={height}
+          theme={{ ...DEFAULT_THEME, territoryNameStyle }}
+        />
+      );
+      const { rerender } = render(element({ uppercase: true, spacing: 0.6 }));
+      for (let index = 0; index < 3; index += 1) rerender(element({ uppercase: true, spacing: 0.6 }));
+      expect(spy).toHaveBeenCalledTimes(1);
+      rerender(element({ uppercase: false, spacing: 0.6 }));
+      expect(spy).toHaveBeenCalledTimes(2);
+      rerender(element({ uppercase: false, spacing: 1 }));
+      expect(spy).toHaveBeenCalledTimes(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("does not rebuild the scene on a resize (activeFromScale is absolute, so fitScale is out of the memo key)", () => {
     const spy = vi.spyOn(sceneModule, "buildingScene");
     try {

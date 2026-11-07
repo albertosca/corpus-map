@@ -468,3 +468,51 @@ describe("buildScene visitedShare", () => {
     expect(build(empty).visitedShare.size).toBe(0);
   });
 });
+
+describe("buildScene with a territory name style (spec serious default §3)", () => {
+  const lengthMeasure = (text: string) => ({ width: text.length * 7, height: 12 });
+  const build = (territoryNameStyle?: { uppercase?: boolean; spacing?: number }) =>
+    buildScene(nestedSpec(), DEFAULT_TUNING, { ...DEFAULT_THEME, territoryNameStyle }, lengthMeasure);
+
+  it("builds the very same scene for an absent style and for {}", () => {
+    expect(build({})).toEqual(build(undefined));
+  });
+
+  it("measures the upper-cased text, so the placed box is the drawn box", () => {
+    const measured: string[] = [];
+    buildScene(nestedSpec(), DEFAULT_TUNING, { ...DEFAULT_THEME, territoryNameStyle: { uppercase: true } }, (text) => {
+      measured.push(text);
+      return lengthMeasure(text);
+    });
+    expect(measured.length).toBeGreaterThan(0);
+    for (const text of measured) expect(text).toBe(text.toLocaleUpperCase());
+  });
+
+  it("adds spacing times the text length to a leaf name and replaces the families' 1 px by it", () => {
+    const plain = build(undefined);
+    const spaced = build({ spacing: 2 });
+    expect(spaced.labels.length).toBeGreaterThan(0);
+    for (const label of spaced.labels) {
+      const before = plain.labels.find((candidate) => candidate.id === label.id) as PlacedLabel;
+      expect(label.width - before.width).toBeCloseTo(2 * label.name.length, 9);
+    }
+    expect(spaced.groupLabels.length).toBeGreaterThan(0);
+    for (const label of spaced.groupLabels) {
+      const before = plain.groupLabels.find((candidate) => candidate.id === label.id) as PlacedLabel;
+      expect(label.width - before.width).toBeCloseTo((2 - GROUP_LETTER_SPACING) * label.name.length, 9);
+    }
+  });
+
+  it("keeps the families' 1 px when only uppercase is set", () => {
+    const upper = build({ uppercase: true });
+    for (const label of upper.groupLabels)
+      expect(label.width).toBeCloseTo(
+        lengthMeasure(label.name.toLocaleUpperCase()).width + GROUP_LETTER_SPACING * label.name.length,
+        9,
+      );
+  });
+
+  it("throws a RangeError for an invalid spacing", () => {
+    expect(() => build({ spacing: -1 })).toThrow(RangeError);
+  });
+});

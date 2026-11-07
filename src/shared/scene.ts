@@ -6,6 +6,7 @@ import { familyColours, tintDirection } from "../territories/familyColours";
 import { deriveTerritoryGroups, type TerritoryGroup } from "../territories/groups";
 import { contains, disksOutline, extent, type Point, type Ring, ringArea, spacing } from "../territories/shape";
 import { type Bounds, ringBounds } from "../viewport/fit";
+import { resolveNameStyle, styledName } from "./nameStyle";
 import { leafTerritories, type MapNode, type MapSpec, parentIds, type Territory } from "./spec";
 import { finish, type Steps } from "./steps";
 import { DEFAULT_COMPACT_GROUP_FONT, type Theme } from "./theme";
@@ -141,7 +142,7 @@ function groupAnchor(
 export function buildScene(
   spec: MapSpec,
   tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
-  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">,
+  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel" | "territoryNameStyle">,
   measure: Measure,
 ): Scene {
   return finish(buildingScene(spec, tuning, theme, measure));
@@ -196,7 +197,7 @@ function* region(points: number): Steps<void> {
 export function* buildingScene(
   spec: MapSpec,
   tuning: Pick<Tuning, "hullPadding" | "labelClasses">,
-  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">,
+  theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel" | "territoryNameStyle">,
   measure: Measure,
 ): Steps<Scene> {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
@@ -237,10 +238,19 @@ export function* buildingScene(
   const groups = deriveTerritoryGroups(spec);
   const groupFont = theme.territoryFonts.large;
   const compactGroupFont = theme.territoryFonts.compact ?? DEFAULT_COMPACT_GROUP_FONT;
-  const spaced: Measure = (text, font) => {
-    const measured = measure(text, font);
-    return { width: measured.width + GROUP_LETTER_SPACING * text.length, height: measured.height };
-  };
+  // The drawn text and spacing are what is measured (spec serious default §3), so a placed box is the drawn box.
+  const nameStyle = resolveNameStyle(theme.territoryNameStyle);
+  const styled =
+    (letterSpacing: number): Measure =>
+    (text, font) => {
+      const drawn = styledName(text, nameStyle.uppercase);
+      const measured = measure(drawn, font);
+      return letterSpacing === 0
+        ? measured
+        : { width: measured.width + letterSpacing * drawn.length, height: measured.height };
+    };
+  const leafMeasure = styled(nameStyle.spacing ?? 0);
+  const spaced = styled(nameStyle.spacing ?? GROUP_LETTER_SPACING);
   const groupInputs = groups.map((group) => ({
     id: group.id,
     name: group.name,
@@ -274,7 +284,7 @@ export function* buildingScene(
       ? familyColours(shapes, groupShapes, groups, leaves, theme.palette, tintDirection(theme))
       : { colours: assignTerritoryColours(shapes, leaves, theme.palette), groupColours: new Map<string, string>() };
   yield;
-  const labels = placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, measure);
+  const labels = placeLabels(inputs, theme.territoryFonts, tuning.labelClasses, leafMeasure);
   yield;
   const groupLabels = placeLabels(
     groupInputs,

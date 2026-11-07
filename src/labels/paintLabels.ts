@@ -1,4 +1,5 @@
 import { DIMMED_ALPHA, NO_DIMMED } from "../shared/dimmed";
+import { resolveNameStyle, styledName } from "../shared/nameStyle";
 import { DENSE_NAME_ALPHA, type Presentation } from "../shared/presentation";
 import { GROUP_LETTER_SPACING, type Scene } from "../shared/scene";
 import type { Surface } from "../shared/surface";
@@ -33,7 +34,7 @@ interface Item {
   anchor: readonly [number, number];
   font: string;
   alpha: number;
-  letterSpacing?: string;
+  letterSpacing?: string | undefined;
 }
 
 /** How far two name boxes must overlap, in screen pixels, before one gives way completely: a smaller overlap fades it in proportion, so a zoom across the edge never pops it. */
@@ -110,6 +111,9 @@ function boxedBy(
  * are drawn at `DIMMED_ALPHA` of their alpha, so after the others.
  */
 export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, theme: Theme, box: LabelBox): void {
+  const nameStyle = resolveNameStyle(theme.territoryNameStyle);
+  const leafSpacing = nameStyle.spacing === undefined || nameStyle.spacing === 0 ? undefined : `${nameStyle.spacing}px`;
+  const groupSpacing = `${nameStyle.spacing ?? GROUP_LETTER_SPACING}px`;
   const hasGroups = scene.groups.length > 0;
   const groupAlpha = hasGroups ? (box.groupAlpha ?? 0) : 0;
   const dimmed = box.dimmed ?? NO_DIMMED;
@@ -146,10 +150,11 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
       fadeOf(dimmed.has(label.id));
     if (alpha > 0) drawnLeaves.push({ label, alpha });
     items.push({
-      name: label.name,
+      name: styledName(label.name, nameStyle.uppercase),
       anchor: label.anchor,
       font: theme.territoryFonts[label.labelClass],
       alpha,
+      letterSpacing: leafSpacing,
     });
   }
   const [groupLabels, groupFont] = box.compactGroupNames
@@ -171,11 +176,11 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
     const clear = underLeaf * underPlate;
     if (clear <= 0) continue;
     items.push({
-      name: label.name,
+      name: styledName(label.name, nameStyle.uppercase),
       anchor: label.anchor,
       font: groupFont,
       alpha: level * clear * fadeOf(isWhollyDimmed(groupsById.get(label.id)?.members ?? [])),
-      letterSpacing: `${GROUP_LETTER_SPACING}px`,
+      letterSpacing: groupSpacing,
     });
   }
   items.sort((first, second) => second.alpha - first.alpha);

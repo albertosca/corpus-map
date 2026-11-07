@@ -43,6 +43,14 @@ export interface Theme {
   pointNeutral: string;
   /** Alpha at which the territory fill layer is composited (guided presentation); a visited territory is filled at up to 1.5 times it. */
   territoryFillAlpha: number;
+  /**
+   * How the canvas draws territory and family names (spec serious default §3):
+   * `uppercase` upper-cases them, `spacing` is the extra space between letters in CSS pixels
+   * (a finite number of at least 0; it replaces the families' 1 px). The transformed text
+   * and the spacing are what is measured and placed as well as drawn. The accessible tree,
+   * tooltip, legend and cards keep the real name. Absent or `{}` draws as before.
+   */
+  territoryNameStyle?: { uppercase?: boolean | undefined; spacing?: number | undefined } | undefined;
 }
 
 /** The family names' font below a 600 px box when the theme names none. */
