@@ -1445,6 +1445,22 @@ export declare function freeArea(width: number, height: number, insets: Insets):
  */
 export declare function toMatchSet(matches: ReadonlySet<string> | readonly string[] | null | undefined): ReadonlySet<string> | undefined;
 
+// shared/nameStyle.d.ts
+import type { Theme } from "./theme";
+/** A theme's territory-name style with its defaults applied; `spacing` stays undefined when the theme names none. */
+export interface ResolvedNameStyle {
+    uppercase: boolean;
+    spacing: number | undefined;
+}
+/**
+ * Validates and resolves `Theme.territoryNameStyle` (spec serious default §3).
+ * Absent or `{}` is today's behaviour. `spacing` must be a finite number of at
+ * least 0: anything else throws, since the theme itself has no validation.
+ */
+export declare function resolveNameStyle(style: Theme["territoryNameStyle"]): ResolvedNameStyle;
+/** The text a territory or family name is measured and drawn as; the page's default locale decides the case. */
+export declare function styledName(name: string, uppercase: boolean): string;
+
 // shared/paint.d.ts
 import type { PlacedItemLabel } from "../labels/itemLabels";
 import type { Regime } from "../lod/lod";
@@ -1591,7 +1607,7 @@ export declare const GROUP_LETTER_SPACING = 1;
  * every render for an inline literal prop) without depending on unstable
  * whole-object identity for fields it never uses.
  */
-export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">, measure: Measure): Scene;
+export declare function buildScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel" | "territoryNameStyle">, measure: Measure): Scene;
 /** The scene of no corpus: what a map reads while its corpus's own scene is still being built. */
 export declare const EMPTY_SCENE: Scene;
 /**
@@ -1611,7 +1627,7 @@ export declare const SCENE_POINTS_PER_STEP = 50;
  * A region's steps come before its work, so a first slice too small for the
  * first region (the one run during the render) does none of it.
  */
-export declare function buildingScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel">, measure: Measure): Steps<Scene>;
+export declare function buildingScene(spec: MapSpec, tuning: Pick<Tuning, "hullPadding" | "labelClasses">, theme: Pick<Theme, "territoryFonts" | "palette" | "territoryLabel" | "territoryNameStyle">, measure: Measure): Steps<Scene>;
 
 // shared/spec.d.ts
 export type NodeState = "visited" | "unvisited";
@@ -1871,9 +1887,20 @@ export interface Theme {
     pointNeutral: string;
     /** Alpha at which the territory fill layer is composited (guided presentation); a visited territory is filled at up to 1.5 times it. */
     territoryFillAlpha: number;
+    /**
+     * How the canvas draws territory and family names (spec serious default §3):
+     * `uppercase` upper-cases them, `spacing` is the extra space between letters in CSS pixels
+     * (a finite number of at least 0; it replaces the families' 1 px). The transformed text
+     * and the spacing are what is measured and placed as well as drawn. The accessible tree,
+     * tooltip, legend and cards keep the real name. Absent or `{}` draws as before.
+     */
+    territoryNameStyle?: {
+        uppercase?: boolean | undefined;
+        spacing?: number | undefined;
+    } | undefined;
 }
 /** The family names' font below a 600 px box when the theme names none. */
-export declare const DEFAULT_COMPACT_GROUP_FONT = "700 14px system-ui, sans-serif";
+export declare const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
 export declare const DEFAULT_THEME: Theme;
 /** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
 export declare const DARK_THEME: Theme;
@@ -2110,9 +2137,9 @@ import type { Surface } from "../shared/surface";
 import type { Theme } from "../shared/theme";
 import { type Viewport } from "../viewport/viewport";
 /** Territory outline width in CSS pixels (spec slice D §3). */
-export declare const TERRITORY_OUTLINE_WIDTH = 1.5;
+export declare const TERRITORY_OUTLINE_WIDTH = 1;
 /** A family's outline width in CSS pixels: the frame its children sit in (spec slice E §4). */
-export declare const GROUP_OUTLINE_WIDTH = 2.5;
+export declare const GROUP_OUTLINE_WIDTH = 1.75;
 /**
  * Fills every territory opaque, largest first, into one layer composited at
  * `fillAlpha`, so each pixel shows the colour of the smallest territory
