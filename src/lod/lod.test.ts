@@ -3,7 +3,7 @@ import { DEFAULT_THRESHOLDS, type LodThresholds, resolveThresholds } from "./lod
 
 describe("DEFAULT_THRESHOLDS", () => {
   it("is fit-relative and ordered, so every corpus opens in the far regime", () => {
-    expect(DEFAULT_THRESHOLDS).toEqual({ midAt: 2, nearAt: 5 });
+    expect(DEFAULT_THRESHOLDS).toEqual({ midAt: 2, nearAt: 4.5 });
     expect(DEFAULT_THRESHOLDS.midAt).toBeLessThan(DEFAULT_THRESHOLDS.nearAt);
   });
 });

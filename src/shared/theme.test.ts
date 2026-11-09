@@ -134,3 +134,22 @@ describe.each([
     expect(parseColor(theme.cardBackground)[3]).toBe(1);
   });
 });
+
+// Spec 2026-11-07-serious-default-design.md §2: the sober "ink and paper" default. These are the shipped values; the
+// metric tests above and in theme.metrics.test.ts are what prove they are usable.
+describe("the default look", () => {
+  it("names upper case with a 0.6 px spacing, a 0.16 fill, 2.4 px points and an eight-colour palette", () => {
+    expect(DEFAULT_THEME.territoryNameStyle).toEqual({ uppercase: true, spacing: 0.6 });
+    expect(DEFAULT_THEME.territoryFillAlpha).toBe(0.16);
+    expect(DEFAULT_THEME.pointRadius).toBe(2.4);
+    expect(DEFAULT_THEME.palette).toHaveLength(8);
+  });
+
+  it("gives the dark theme the same name style, fill and point size, with its own palette", () => {
+    expect(DARK_THEME.territoryNameStyle).toEqual(DEFAULT_THEME.territoryNameStyle);
+    expect(DARK_THEME.territoryFillAlpha).toBe(DEFAULT_THEME.territoryFillAlpha);
+    expect(DARK_THEME.pointRadius).toBe(DEFAULT_THEME.pointRadius);
+    expect(DARK_THEME.palette).toHaveLength(8);
+    expect(DARK_THEME.palette).not.toEqual(DEFAULT_THEME.palette);
+  });
+});

@@ -70,7 +70,7 @@ describe("CorpusMap first view on a narrow box (spec mobile §4)", () => {
   const spec = validateSpec({
     ...base,
     territories: base.territories.map((territory) =>
-      territory.id === "p" ? { ...territory, name: "A family name far wider than its region" } : territory,
+      territory.id === "p" ? { ...territory, name: "A family name far wider than its own region" } : territory,
     ),
   });
 

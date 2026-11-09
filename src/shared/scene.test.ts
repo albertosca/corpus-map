@@ -19,8 +19,12 @@ import {
 import { type MapSpec, validateSpec } from "./spec";
 import { advance } from "./steps";
 import { RecordingSurface } from "./surface";
-import { DARK_THEME, DEFAULT_COMPACT_GROUP_FONT, DEFAULT_THEME } from "./theme";
+import { DARK_THEME, DEFAULT_COMPACT_GROUP_FONT, DEFAULT_THEME as LOOK_THEME, type Theme } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
+
+// These tests are about painting rules, not the look: the style-less theme keeps the real-case text and the
+// 1 px family spacing they assert. The look itself is pinned in theme.test.ts and the name-style tests.
+const DEFAULT_THEME: Theme = { ...LOOK_THEME, territoryNameStyle: undefined };
 
 describe("buildScene", () => {
   it("builds in steps, one per region outlined, one for the colours and one per name set, to the same scene (spec mobile §7)", () => {

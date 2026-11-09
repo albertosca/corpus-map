@@ -129,7 +129,7 @@ Cards are decorative. The overlay they live in is `aria-hidden` and `inert`, so 
 
 `theme` restyles the point field and territory strokes, and the keyboard focus outline (`focusOutline`, `focusOutlineWidth`: the accessible tree is visually hidden, so the territory or item whose button has focus is outlined on the canvas; the default blue reaches at least 3:1 against a white or light-grey page, WCAG 2.2 SC 1.4.11); both the `Theme` type and the library's `DEFAULT_THEME` are exported from `corpus-map`, so a consumer can type a custom theme or start from the default and override individual fields.
 
-`thresholds.midAt` and `thresholds.nearAt` are multiples of the fitted scale — the zoom at which the whole corpus fits the box — not absolute scale values, so `DEFAULT_THRESHOLDS = { midAt: 2, nearAt: 5 }` opens every corpus in the far regime regardless of its own extent, and reaching the mid or near regime only ever takes a 2x or 5x zoom-in from there.
+`thresholds.midAt` and `thresholds.nearAt` are multiples of the fitted scale — the zoom at which the whole corpus fits the box — not absolute scale values, so `DEFAULT_THRESHOLDS = { midAt: 2, nearAt: 4.5 }` opens every corpus in the far regime regardless of its own extent, and reaching the mid or near regime only ever takes a 2x or 4.5x zoom-in from there.
 
 `tuning?: Partial<Tuning>` overrides any of the numbers the literature does not settle without touching code — wheel sensitivity, trackpad pinch gain, the per-event zoom cap, the level-of-detail hysteresis and cross-fade band, territory boundary padding, label size cutoffs, hover radius. `Tuning` and `DEFAULT_TUNING` are exported, so a consumer (or a tuning panel) can start from the defaults and override individual fields the same way as `theme`.
 

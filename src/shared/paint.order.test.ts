@@ -6,8 +6,12 @@ import { paint } from "./paint";
 import { buildScene } from "./scene";
 import { validateSpec } from "./spec";
 import { RecordingSurface } from "./surface";
-import { DEFAULT_THEME } from "./theme";
+import { DEFAULT_THEME as LOOK_THEME, type Theme } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
+
+// These tests are about painting rules, not the look: the style-less theme keeps the real-case text and the
+// 1 px family spacing they assert. The look itself is pinned in theme.test.ts and the name-style tests.
+const DEFAULT_THEME: Theme = { ...LOOK_THEME, territoryNameStyle: undefined };
 
 const square = (left: number, size: number): Array<[number, number]> => [
   [left, left],
@@ -203,7 +207,7 @@ describe("a spec without groups", () => {
           "text",
         ],
         "layers": [
-          0.2,
+          0.16,
         ],
         "outlines": 2,
       }

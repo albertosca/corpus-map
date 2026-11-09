@@ -12,8 +12,12 @@ import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { buildScene } from "./scene";
 import type { MapSpec } from "./spec";
 import { RecordingSurface } from "./surface";
-import { DEFAULT_THEME } from "./theme";
+import { DEFAULT_THEME as LOOK_THEME, type Theme } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
+
+// These tests are about painting rules, not the look: the style-less theme keeps the real-case text and the
+// 1 px family spacing they assert. The look itself is pinned in theme.test.ts and the name-style tests.
+const DEFAULT_THEME: Theme = { ...LOOK_THEME, territoryNameStyle: undefined };
 
 const spec: MapSpec = {
   version: "1",

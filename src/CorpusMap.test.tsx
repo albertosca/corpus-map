@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { drawnName } from "../test/drawnName";
 import { CorpusMap } from "./CorpusMap";
 import { estimateText } from "./labels/placement";
 import * as sceneModule from "./shared/scene";
@@ -675,7 +676,7 @@ describe("spec swap", () => {
       const label = largeScene.labels.find((placed) => placed.id === "u");
       if (!label) throw new Error("expected a placed label for territory 'u'");
       const [expectedLeft, expectedTop] = toScreen(largeVp, label.anchor[0], label.anchor[1]);
-      const largeTexts = texts.filter((drawn) => drawn.text === "Large");
+      const largeTexts = texts.filter((drawn) => drawn.text === drawnName("Large"));
       expect(largeTexts.length).toBeGreaterThan(0);
       for (const drawn of largeTexts) {
         expect(drawn.x).toBeCloseTo(expectedLeft, 6);
@@ -731,7 +732,7 @@ describe("fit with a first view that is not far", () => {
       const label = scene.labels.find((placed) => placed.id === "t");
       if (!label) throw new Error("expected a placed label for territory 't'");
       const [expectedLeft, expectedTop] = toScreen(territoryFit, label.anchor[0], label.anchor[1]);
-      const drawn = texts.filter((text) => text.text === "West");
+      const drawn = texts.filter((text) => text.text === drawnName("West"));
       expect(drawn.length).toBeGreaterThan(0);
       for (const text of drawn) {
         expect(text.x).toBeCloseTo(expectedLeft, 6);

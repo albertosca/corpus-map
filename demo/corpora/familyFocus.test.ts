@@ -14,6 +14,7 @@ import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { familyFocus } from "../../src/territories/familyFocus";
 import { fitScene } from "../../src/viewport/fitScene";
 import type { Viewport } from "../../src/viewport/viewport";
+import { drawnName } from "../../test/drawnName";
 import rawSpecJson from "./arxiv.json";
 import { arxivSpec } from "./index";
 
@@ -137,8 +138,8 @@ describe("metric 19: only the dominant family is drawn as leaves (arXiv, painted
           const focused = drawnNames(viewport, width, height, ratio, new Map(weights));
           const leafNamesOf = (family: string) =>
             scene.labels
-              .filter((label) => familyOfLeaf.get(label.id) === family && unfocused.has(label.name))
-              .map((label) => label.name);
+              .filter((label) => familyOfLeaf.get(label.id) === family && unfocused.has(drawnName(label.name)))
+              .map((label) => drawnName(label.name));
           const largest = Math.max(...counts.values());
           for (const family of scene.groups.map((entry) => entry.id)) {
             if (counts.get(family) === largest && largest > 0)
@@ -207,7 +208,7 @@ describe("risk 2: a family name beside leaf names at mid (arXiv, painted)", () =
   for (const [width, height] of BOXES) {
     it(`a family name and a leaf name that box each other are never both above half alpha, at ${width}x${height}`, () => {
       const fit = fitAt(width, height);
-      const familyNames = new Set(scene.groups.map((group) => group.name));
+      const familyNames = new Set(scene.groups.map((group) => drawnName(group.name)));
       let positions = 0;
       let boxed = 0;
       let strongest = 0;
@@ -370,7 +371,7 @@ describe("review I-2: a family name beside item label plates at near (arXiv, pai
     { font: DEFAULT_ITEM_LABEL_FONT, width: DEFAULT_TUNING.itemLabelWidth, lines: DEFAULT_TUNING.itemLabelLines },
     estimateText,
   );
-  const familyNames = new Set(scene.groups.map((group) => group.name));
+  const familyNames = new Set(scene.groups.map((group) => drawnName(group.name)));
   for (const [width, height] of BOXES)
     it(`no family name above 0.5 alpha overlaps a drawn item label plate, at ${width}x${height}`, () => {
       const fit = fitAt(width, height);

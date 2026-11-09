@@ -15,6 +15,7 @@ import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
 import { fitScene } from "../../src/viewport/fitScene";
 import { toScreen, type Viewport } from "../../src/viewport/viewport";
+import { drawnName } from "../../test/drawnName";
 // Imported as a JSON module (Vite/Vitest resolve these natively, no Node `fs` needed --
 // this package has no `@types/node` dependency, being a browser-only library) rather than
 // typed off the ~1.5 MB literal: `unknown` sidesteps TypeScript inferring a giant type for
@@ -314,7 +315,9 @@ describe("the arXiv family names", () => {
     const tooWide = familiesOf(shippedSpec)
       .map((family) => ({
         name: family.name,
-        width: estimateText(family.name, font).width + GROUP_LETTER_SPACING * family.name.length,
+        width:
+          estimateText(drawnName(family.name), font).width +
+          (DEFAULT_THEME.territoryNameStyle?.spacing ?? GROUP_LETTER_SPACING) * family.name.length,
       }))
       .filter((measured) => measured.width > 320 - 2 * 24);
     expect(tooWide).toEqual([]);
@@ -356,7 +359,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
     const drawn = new Set(boxes.map((box) => box.text));
     expect(
       familiesOf(spec)
-        .filter((family) => !drawn.has(family.name))
+        .filter((family) => !drawn.has(drawnName(family.name)))
         .map((family) => family.name),
     ).toEqual([]);
   });
@@ -373,7 +376,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
         drawnBoxes(spec, scene, fitAt(spec, scene, width, height), width, height, 1).map((box) => box.text),
       );
       const missing = familiesOf(spec)
-        .filter((family) => !drawn.has(family.name))
+        .filter((family) => !drawn.has(drawnName(family.name)))
         .map((family) => family.name);
       expect(missing.length).toBeLessThanOrEqual(allowedMissing);
     });
@@ -393,7 +396,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
     const drawn = new Set(boxes.map((box) => box.text));
     expect(
       familiesOf(spec)
-        .filter((family) => !drawn.has(family.name))
+        .filter((family) => !drawn.has(drawnName(family.name)))
         .map((family) => family.name),
     ).toEqual([]);
     expect(boxes.filter((box) => box.x + box.width / 2 > area.left + area.width).map((box) => box.text)).toEqual([]);
@@ -409,7 +412,7 @@ describe("acceptance 2: the fitted arXiv view", () => {
       const boxes = drawnBoxes(spec, scene, fitAt(spec, scene, width, height), width, height, 1);
       expect(boxes.length).toBeGreaterThan(0);
       // The fitted view names groups.
-      expect(boxes.some((box) => scene.groupLabels.some((label) => label.name === box.text))).toBe(true);
+      expect(boxes.some((box) => scene.groupLabels.some((label) => drawnName(label.name) === box.text))).toBe(true);
       expect(boxes.filter((box) => crossesEdge(box, width, height)).map((box) => box.text)).toEqual([]);
       expect(overlappingPairs(boxes)).toEqual([]);
     });
@@ -439,7 +442,8 @@ describe("no name pops out on pan or zoom (arXiv, painted)", () => {
     for (const placed of names) {
       if (viewport.scale < placed.activeFromScale) continue;
       const [horizontal, vertical] = toScreen(viewport, placed.anchor[0], placed.anchor[1]);
-      if (horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height) out.add(placed.name);
+      if (horizontal >= 0 && horizontal <= width && vertical >= 0 && vertical <= height)
+        out.add(drawnName(placed.name));
     }
     return out;
   };

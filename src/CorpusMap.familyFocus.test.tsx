@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { drawnName } from "../test/drawnName";
 import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
 import { validateSpec } from "./shared/spec";
 
@@ -80,11 +81,11 @@ describe("CorpusMap family focus (spec family focus §3)", () => {
     const handle = mount();
     drawn = [];
     act(() => handle.current?.setView({ centre: [6, 0], zoom: 6 }));
-    expect(names().has("Aone")).toBe(true);
-    expect(names().has("Family B")).toBe(true);
-    expect(names().has("Bone")).toBe(false);
-    expect(names().has("Btwo")).toBe(false);
-    expect(names().has("Family A")).toBe(false);
+    expect(names().has(drawnName("Aone"))).toBe(true);
+    expect(names().has(drawnName("Family B"))).toBe(true);
+    expect(names().has(drawnName("Bone"))).toBe(false);
+    expect(names().has(drawnName("Btwo"))).toBe(false);
+    expect(names().has(drawnName("Family A"))).toBe(false);
   });
 
   it("panning to family B swaps them", () => {
@@ -92,18 +93,18 @@ describe("CorpusMap family focus (spec family focus §3)", () => {
     act(() => handle.current?.setView({ centre: [6, 0], zoom: 6 }));
     drawn = [];
     act(() => handle.current?.setView({ centre: [1006, 0], zoom: 6 }));
-    expect(names().has("Bone")).toBe(true);
-    expect(names().has("Family A")).toBe(true);
-    expect(names().has("Aone")).toBe(false);
-    expect(names().has("Family B")).toBe(false);
+    expect(names().has(drawnName("Bone"))).toBe(true);
+    expect(names().has(drawnName("Family A"))).toBe(true);
+    expect(names().has(drawnName("Aone"))).toBe(false);
+    expect(names().has(drawnName("Family B"))).toBe(false);
   });
 
   it("a spec without groups draws its leaf names everywhere, as before", () => {
     const handle = mount(ungrouped);
     drawn = [];
     act(() => handle.current?.setView({ centre: [6, 0], zoom: 6 }));
-    expect(names().has("Aone")).toBe(true);
-    expect([...names()].some((text) => text.startsWith("Family"))).toBe(false);
+    expect(names().has(drawnName("Aone"))).toBe(true);
+    expect([...names()].some((text) => text.startsWith(drawnName("Family")))).toBe(false);
   });
 });
 
@@ -187,8 +188,8 @@ describe("CorpusMap open territory under the family focus (review I-3)", () => {
     );
     drawn = [];
     act(() => handle.current?.setView({ centre: [0, 0], zoom: 8 }));
-    expect(names().has("Bsmall")).toBe(false);
-    expect(names().has("Family B")).toBe(true);
+    expect(names().has(drawnName("Bsmall"))).toBe(false);
+    expect(names().has(drawnName("Family B"))).toBe(true);
     expect(onOpenTerritoryChange).not.toHaveBeenCalledWith("bsmall");
   });
   it("hovering a leaf whose name is not drawn names its family, as the painted map does", () => {

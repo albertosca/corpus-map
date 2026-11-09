@@ -54,13 +54,13 @@ export interface Theme {
 }
 
 /** The family names' font below a 600 px box when the theme names none. */
-export const DEFAULT_COMPACT_GROUP_FONT = "700 14px system-ui, sans-serif";
+export const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
 
 export const DEFAULT_THEME: Theme = {
   territoryLabel: "#23232d",
   territoryFonts: {
-    large: "700 20px system-ui, sans-serif",
-    medium: "600 15px system-ui, sans-serif",
+    large: "600 18px system-ui, sans-serif",
+    medium: "600 14px system-ui, sans-serif",
     small: "500 12px system-ui, sans-serif",
     compact: DEFAULT_COMPACT_GROUP_FONT,
   },
@@ -68,20 +68,22 @@ export const DEFAULT_THEME: Theme = {
   cardBorder: "rgba(120,120,140,0.45)",
   hoverBackground: "rgba(30,30,40,0.92)",
   hoverText: "#ffffff",
-  pointRadius: 3.5,
+  pointRadius: 2.4,
   focusOutline: "#1d4ed8",
   focusOutlineWidth: 3,
   edge: "#4a4a58",
-  palette: ["#003c96", "#960000", "#005a2d", "#781e5a", "#7a45d6", "#0a7a70", "#876900", "#a53c4b"],
+  // Ink and paper (spec serious default §2): steel blue, ochre, olive, violet, brown, sage, slate, mauve; metric 17 measured, not guessed.
+  palette: ["#065781", "#9a6232", "#525000", "#7466a9", "#603d36", "#5e715f", "#3e4951", "#856e81"],
   pointNeutral: "#5b6170",
-  territoryFillAlpha: 0.2,
+  territoryFillAlpha: 0.16,
+  territoryNameStyle: { uppercase: true, spacing: 0.6 },
 };
 
 /** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
 export const DARK_THEME: Theme = {
   ...DEFAULT_THEME,
   territoryLabel: "#ececf1",
-  palette: ["#0087e1", "#e18769", "#00a500", "#b469a5", "#96a5d2", "#4fd1c5", "#b4c300", "#e14b78"],
+  palette: ["#619c9f", "#e8c270", "#91963f", "#807cc6", "#9d7e73", "#a7cdb0", "#b6abf6", "#d4c5d8"],
   pointNeutral: "#a0a6b4",
   cardBackground: "rgb(28,28,32)",
   cardBorder: "rgba(160,160,180,0.45)",

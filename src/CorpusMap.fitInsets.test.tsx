@@ -236,7 +236,7 @@ describe("CorpusMap fits into the free area", () => {
           id: "p",
           name: "A deliberately long family name",
           members: [],
-          centroid: [11, 5],
+          centroid: [20, 5],
           boundary: square(-2, -2, 26),
         },
         { id: "a", name: "Alpha", members: ["a0"], centroid: [5, 5], boundary: square(0, 0, 10), parent: "p" },

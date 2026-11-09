@@ -103,7 +103,7 @@ export const gallery: GalleryEntry[] = [
     display: { thresholds: { nearAt: 2.5 } },
     filter: arxivCategory,
   },
-  { id: "elements", label: "Chemical elements", spec: elementsSpec, display: { thresholds: { nearAt: 5 } } },
+  { id: "elements", label: "Chemical elements", spec: elementsSpec, display: { thresholds: { nearAt: 4.5 } } },
   { id: "constellations", label: "Constellations", spec: constellationsSpec, display: { thresholds: { nearAt: 3.5 } } },
   {
     id: "synthetic",

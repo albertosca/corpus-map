@@ -10,7 +10,7 @@ export interface LodThresholds {
  * `nearAt` is metric 18's answer over the demo corpora: the earliest zoom at which item labels name nearly as
  * many on-screen items as they do at 6 (demo/corpora/labelledShare.ts, demo/corpora/nearAt.test.ts).
  */
-export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 5 };
+export const DEFAULT_THRESHOLDS: LodThresholds = { midAt: 2, nearAt: 4.5 };
 
 /** The wheel zoom clamp (`CorpusMap`'s `MAXIMUM_ZOOM_IN`): a threshold above it can never be reached by zooming. */
 const MAXIMUM_RATIO = 64;

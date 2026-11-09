@@ -4,7 +4,7 @@ import { DENSE_NAME_ALPHA } from "../shared/presentation";
 import { buildScene, GROUP_LETTER_SPACING, type Scene } from "../shared/scene";
 import { type MapSpec, validateSpec } from "../shared/spec";
 import { RecordingSurface } from "../shared/surface";
-import { DEFAULT_THEME } from "../shared/theme";
+import { DEFAULT_THEME as LOOK_THEME, type Theme } from "../shared/theme";
 import { DEFAULT_TUNING } from "../shared/tuning";
 import type { TerritoryGroup } from "../territories/groups";
 import { paintLabels } from "./paintLabels";
@@ -12,6 +12,10 @@ import { estimateText, type PlacedLabel } from "./placement";
 
 const BOX = { width: 4000, height: 4000 };
 const VIEWPORT = { scale: 1000, tx: 0, ty: 0 };
+
+// These tests are about painting rules, not the look: the style-less theme keeps the real-case text and the
+// 1 px family spacing they assert. The look itself is pinned in theme.test.ts and the name-style tests below.
+const DEFAULT_THEME: Theme = { ...LOOK_THEME, territoryNameStyle: undefined };
 
 function grouped(): { spec: MapSpec; scene: Scene } {
   const territories = Array.from({ length: 12 }, (_, index) => ({
