@@ -192,6 +192,14 @@ describe("paintLabels with a one-member family (backlog 2026-10-26)", () => {
     expect(surface.alphas).toEqual([0.5, 1]);
   });
 
+  it("hands the name over when the two differ only in case and the style upper-cases both (review M6)", () => {
+    const scene = familied("SOLO");
+    const surface = new RecordingSurface();
+    const upper: Theme = { ...DEFAULT_THEME, territoryNameStyle: { uppercase: true } };
+    paintLabels(surface, scene, VIEWPORT, upper, { ...BOX, groupAlpha: 0.5 });
+    expect(surface.texts.filter((drawn) => drawn.text === "SOLO")).toHaveLength(1);
+  });
+
   it("keeps both names when the family's differs from its territory's", () => {
     const scene = familied("Loner");
     expect(namesDrawn(scene, 0.5, "Solo")).toBe(1);
@@ -531,5 +539,16 @@ describe("paintLabels with a territory name style (spec serious default §3)", (
 
   it("throws a RangeError for an invalid spacing", () => {
     expect(() => drawn(styled({ spacing: Number.NaN }), 0)).toThrow(RangeError);
+  });
+
+  it("drops every name, without throwing or a NaN, when the spacing is huge (review M3)", () => {
+    for (const spacing of [1e6, 1e307, Number.MAX_VALUE]) {
+      const theme = styled({ spacing });
+      const huge = buildScene(grouped().spec, DEFAULT_TUNING, theme, estimateText);
+      for (const label of huge.labels) expect(Number.isNaN(label.width)).toBe(false);
+      const surface = new RecordingSurface();
+      expect(() => paintLabels(surface, huge, VIEWPORT, theme, { ...BOX, groupAlpha: 0 })).not.toThrow();
+      expect(surface.texts).toHaveLength(0);
+    }
   });
 });

@@ -126,3 +126,20 @@ describe("CorpusMap with a scene built in slices (spec mobile §7)", () => {
     expect(onViewChange.mock.calls[onViewChange.mock.calls.length - 1]?.[0].ratio).toBeCloseTo(1, 9);
   });
 });
+
+describe("CorpusMap validates the name style in render, not in a later slice (review M1)", () => {
+  it("throws a RangeError during the render of a large corpus for a negative spacing", () => {
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+    const element = (
+      <CorpusMap
+        renderCard={() => <div />}
+        spec={large}
+        width={800}
+        height={600}
+        theme={{ ...DEFAULT_THEME, territoryNameStyle: { spacing: -1 } }}
+      />
+    );
+    expect(() => render(element)).toThrow(RangeError);
+    silence.mockRestore();
+  });
+});

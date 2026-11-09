@@ -23,7 +23,7 @@ function withAlpha(colour: Rgba, alpha: number): Rgba {
 
 describe.each(THEMES)("%s theme", (_name, theme, pages) => {
   // The strongest fill a fully visited territory reaches (spec far-visited). Only names are drawn there: the boost
-  // fades out as points fade in (`paint.visited.test.ts`), because the palette's points reach 3:1 only up to ~0.204.
+  // fades out as points fade in (`paint.visited.test.ts`), because the palette's points reach 3:1 only up to ~0.196 dark (0.218 light).
   const strongest = theme.territoryFillAlpha * visitedFactor(1);
   const fillAlphas = [theme.territoryFillAlpha, theme.territoryFillAlpha * DENSE_FILL_FACTOR];
 

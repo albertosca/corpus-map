@@ -37,6 +37,7 @@ import { nearestWithin } from "./points/hover";
 import { NO_DIMMED } from "./shared/dimmed";
 import { freeArea, type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { toMatchSet } from "./shared/matchSet";
+import { resolveNameStyle } from "./shared/nameStyle";
 import { paint } from "./shared/paint";
 import { type Presentation, type PresentationSetting, resolvePresentation } from "./shared/presentation";
 import { buildingScene, EMPTY_SCENE, groupLabelsFor, NARROW_BOX_WIDTH, SCENE_STEPS_PER_SLICE } from "./shared/scene";
@@ -459,8 +460,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // The palette as one primitive, so an inline `theme` literal with the same colours does not rebuild the scene.
   const paletteKey = theme.palette.join("|");
   // The name style as primitives, for the same reason.
-  const nameUppercase = theme.territoryNameStyle?.uppercase;
-  const nameSpacing = theme.territoryNameStyle?.spacing;
+  // Resolved here, in render, so a bad `spacing` throws where an error boundary can catch it (not in a later slice).
+  const { uppercase: nameUppercase, spacing: nameSpacing } = resolveNameStyle(theme.territoryNameStyle);
   const sceneBuild = useMemo(
     () => ({
       spec,

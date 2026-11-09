@@ -135,7 +135,12 @@ export function paintLabels(surface: Surface, scene: Scene, viewport: Viewport, 
   for (const group of scene.groups) {
     if (levelsOf(groupAlpha, weightOf(group.id)).family <= 0) continue;
     const label = group.members.length === 1 ? labelsById.get(group.members[0] as string) : undefined;
-    if (label && label.id !== group.id && label.name === group.name && fits(label))
+    if (
+      label &&
+      label.id !== group.id &&
+      styledName(label.name, nameStyle.uppercase) === styledName(group.name, nameStyle.uppercase) &&
+      fits(label)
+    )
       handedOver.add(group.id).add(label.id);
   }
   // Each leaf name drawn, at the alpha it is drawn at, so a family name gives way to what is really on screen.

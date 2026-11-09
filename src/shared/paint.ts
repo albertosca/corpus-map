@@ -83,7 +83,7 @@ export function paint(
   const pointAlpha = searching ? 1 : frame.pointAlpha;
   const drawsPoints = (frame.regime !== "far" || searching) && pointAlpha > 0;
   // The visited boost is for where no point is drawn: the palette's points reach 3:1 only up to a fill alpha of
-  // about 0.204 (metric 15), so the boost fades out as the points fade in (spec far-visited §5).
+  // about 0.196 (0.218 light, re-measured on the ink-and-paper palette) (metric 15), so the boost fades out as the points fade in (spec far-visited §5).
   const visitedStrength = drawsPoints ? 1 - pointAlpha : 1;
   paintTerritories(
     surface,

@@ -507,6 +507,36 @@ describe("buildScene with a territory name style (spec serious default §3)", ()
     }
   });
 
+  it("multiplies the spacing by the length of the transformed text (ß becomes SS)", () => {
+    const sharp = validateSpec({
+      version: "1",
+      territories: [{ id: "sharp", name: "straße", members: ["only"], centroid: [0, 0] }],
+      nodes: [{ id: "only", label: "only", x: 0, y: 0, territory: "sharp" }],
+    });
+    const scene = buildScene(
+      sharp,
+      DEFAULT_TUNING,
+      { ...DEFAULT_THEME, territoryNameStyle: { uppercase: true, spacing: 2 } },
+      lengthMeasure,
+    );
+    expect(scene.labels[0]?.width).toBeCloseTo(lengthMeasure("STRASSE").width + 2 * "STRASSE".length, 9);
+  });
+
+  it("adds exactly one spacing to a one-character name (review M3)", () => {
+    const single = validateSpec({
+      version: "1",
+      territories: [{ id: "one", name: "a", members: ["only"], centroid: [0, 0] }],
+      nodes: [{ id: "only", label: "only", x: 0, y: 0, territory: "one" }],
+    });
+    const scene = buildScene(
+      single,
+      DEFAULT_TUNING,
+      { ...DEFAULT_THEME, territoryNameStyle: { spacing: 3 } },
+      lengthMeasure,
+    );
+    expect(scene.labels[0]?.width).toBeCloseTo(lengthMeasure("a").width + 3, 9);
+  });
+
   it("keeps the families' 1 px when only uppercase is set", () => {
     const upper = build({ uppercase: true });
     for (const label of upper.groupLabels)

@@ -8,7 +8,7 @@ import { DEFAULT_THEME } from "./theme";
 import { DEFAULT_TUNING } from "./tuning";
 
 // The visited boost is for where points are not drawn: names reach 4.5:1 over the 0.30 fill, but the palette's
-// points reach 3:1 only up to about 0.204 (measured, spec far-visited §5), so the boost fades out as points fade in.
+// points reach 3:1 only up to about 0.196 (0.218 light, re-measured on the ink-and-paper palette) (measured, spec far-visited §5), so the boost fades out as points fade in.
 
 const spec: MapSpec = validateSpec({
   version: "1",
