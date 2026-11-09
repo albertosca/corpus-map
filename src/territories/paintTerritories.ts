@@ -9,9 +9,9 @@ import type { Ring } from "./shape";
 import { visitedFactor } from "./visitedFactor";
 
 /** Territory outline width in CSS pixels (spec slice D §3). */
-export const TERRITORY_OUTLINE_WIDTH = 1.5;
+export const TERRITORY_OUTLINE_WIDTH = 1;
 /** A family's outline width in CSS pixels: the frame its children sit in (spec slice E §4). */
-export const GROUP_OUTLINE_WIDTH = 2.5;
+export const GROUP_OUTLINE_WIDTH = 1.75;
 
 interface Projected {
   colour: string;

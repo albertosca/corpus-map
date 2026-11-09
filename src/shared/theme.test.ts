@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { contrastRatio, over, parseColor } from "../labels/contrast";
-import { TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
+import { UNVISITED_RING_WIDTH } from "../points/paintPoints";
+import { GROUP_OUTLINE_WIDTH, TERRITORY_OUTLINE_WIDTH } from "../territories/paintTerritories";
 import { DARK_THEME, DEFAULT_THEME } from "./theme";
+import { DEFAULT_TUNING } from "./tuning";
 
 /**
  * Metric 9 (size): the smallest territory name font must stay legible.
@@ -151,5 +153,21 @@ describe("the default look", () => {
     expect(DARK_THEME.pointRadius).toBe(DEFAULT_THEME.pointRadius);
     expect(DARK_THEME.palette).toHaveLength(8);
     expect(DARK_THEME.palette).not.toEqual(DEFAULT_THEME.palette);
+  });
+
+  it("draws a 1 px territory outline and a thinner family outline, still thinner than the keyboard focus ring", () => {
+    expect(TERRITORY_OUTLINE_WIDTH).toBe(1);
+    expect(GROUP_OUTLINE_WIDTH).toBe(1.75);
+    expect(GROUP_OUTLINE_WIDTH).toBeGreaterThan(TERRITORY_OUTLINE_WIDTH);
+    expect(DEFAULT_THEME.focusOutlineWidth).toBeGreaterThan(GROUP_OUTLINE_WIDTH);
+  });
+
+  it("leaves a visible hole in the unvisited ring at 2.4 px, so it reads apart from the visited disc", () => {
+    // The ring is stroked at radius - width / 2 with the full width, so the empty inside is radius - width.
+    expect(DEFAULT_THEME.pointRadius - UNVISITED_RING_WIDTH).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("keeps the pointer hit radius at 12 px, so a smaller point is no smaller a target (WCAG 2.5.8, 24 px)", () => {
+    expect(DEFAULT_TUNING.hoverRadius).toBeGreaterThanOrEqual(12);
   });
 });

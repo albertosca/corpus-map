@@ -87,7 +87,7 @@ describe("paint order (slice D)", () => {
       scene.colours.get("large"),
       scene.colours.get("small"),
     ]);
-    expect(territoryOutlines.every((outline) => outline.width === 1.5)).toBe(true);
+    expect(territoryOutlines.every((outline) => outline.width === 1)).toBe(true);
   });
 
   it("paints the selection ring last inside the point layer, under the focus and the names", () => {
