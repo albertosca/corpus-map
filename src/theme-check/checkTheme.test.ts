@@ -152,3 +152,11 @@ describe("checkTheme on numbers that cannot be measured", () => {
     expect(() => checkTheme({ selectionRingWidth: 0 })).toThrow(RangeError);
   });
 });
+
+describe("checkTheme with short hex colours", () => {
+  it("measures a palette written as #rgb the same as its #rrggbb form", () => {
+    const long = ["#336699", "#996633", "#339966", "#993366"];
+    const short = ["#369", "#963", "#396", "#936"];
+    expect(checkTheme({ palette: short })).toEqual(checkTheme({ palette: long }));
+  });
+});

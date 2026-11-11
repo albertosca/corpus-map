@@ -1945,7 +1945,8 @@ export declare const DARK_THEME: Theme;
 /**
  * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
  * `territoryNameStyle` merged field by field, a field present as `undefined` taking the default.
- * A width that is not a finite number above 0 is a `RangeError` naming the field.
+ * A width that is not a finite number above 0 is a `RangeError` naming the field. A colour written
+ * as `#rgb` is expanded to `#rrggbb` here, so the painters and the checks only meet the long form.
  */
 export declare function resolveTheme(input: ThemeInput | undefined): Theme;
 

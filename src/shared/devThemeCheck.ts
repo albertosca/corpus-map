@@ -18,13 +18,7 @@ export function themeKeyOf(theme: Theme): string {
 }
 
 const warned = new Set<string>();
-
-/** One load shared by every theme: concurrent `import()` calls of the same specifier would each wait on the loader. */
 let loading: Promise<typeof import("corpus-map/theme-check")> | undefined;
-function loadChecks(): Promise<typeof import("corpus-map/theme-check")> {
-  loading ??= import("corpus-map/theme-check");
-  return loading;
-}
 
 /** Test hook: forget which themes already warned. Not exported from the package entry. */
 export function resetThemeWarnings(): void {
@@ -38,20 +32,24 @@ export function resetThemeWarnings(): void {
  */
 export function warnAboutTheme(theme: Theme): void {
   // `typeof` first: native ESM and import maps have no `process`, and a throw in an effect would unmount the map.
-  if (typeof process === "undefined" || process.env.NODE_ENV === "production") return;
-  const key = themeKeyOf(theme);
-  if (warned.has(key)) return;
-  warned.add(key);
-  loadChecks()
-    .then(({ checkTheme }) => {
-      const problems = checkTheme(theme);
-      if (problems.length === 0) return;
-      const lines = problems.map((problem) => `- ${problem.message}`).join("\n");
-      // biome-ignore lint/suspicious/noConsole: the development warning is the feature (consumer styles spec §5)
-      console.warn(
-        `corpus-map theme: ${problems.length} accessibility problem(s), measured on a white or #18181b page ` +
-          `(pass your page to checkTheme from "corpus-map/theme-check" for an exact answer):\n${lines}`,
-      );
-    })
-    .catch(() => undefined);
+  // The import sits inside the positive test, so a bundler that folds `NODE_ENV` has no reachable `import()` left.
+  if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+    const key = themeKeyOf(theme);
+    if (warned.has(key)) return;
+    warned.add(key);
+    // One load shared by every theme: concurrent `import()` calls of the same specifier would each wait on the loader.
+    loading ??= import("corpus-map/theme-check");
+    loading
+      .then(({ checkTheme }) => {
+        const problems = checkTheme(theme);
+        if (problems.length === 0) return;
+        const lines = problems.map((problem) => `- ${problem.message}`).join("\n");
+        // biome-ignore lint/suspicious/noConsole: the development warning is the feature (consumer styles spec §5)
+        console.warn(
+          `corpus-map theme: ${problems.length} accessibility problem(s), measured on a white or #18181b page ` +
+            `(pass your page to checkTheme from "corpus-map/theme-check" for an exact answer):\n${lines}`,
+        );
+      })
+      .catch(() => undefined);
+  }
 }

@@ -75,4 +75,31 @@ describe("resolveTheme", () => {
     expect(resolveTheme({ matchRingWidth: 0.5 }).matchRingWidth).toBe(0.5);
     expect(resolveTheme({}).matchRingWidth).toBeUndefined();
   });
+
+  it("expands #rgb colours to #rrggbb, so the painters and checks only meet the long form", () => {
+    const theme = resolveTheme({
+      palette: ["#f80", "#0A5"],
+      territoryLabel: "#abc",
+      pointNeutral: "#123",
+      focusOutline: "#fff",
+      selectionRing: "#000",
+      edge: "#9ab",
+    });
+    expect(theme.palette).toEqual(["#ff8800", "#00aa55"]);
+    expect([theme.territoryLabel, theme.pointNeutral, theme.focusOutline, theme.selectionRing, theme.edge]).toEqual([
+      "#aabbcc",
+      "#112233",
+      "#ffffff",
+      "#000000",
+      "#99aabb",
+    ]);
+  });
+
+  it("leaves every other notation untouched", () => {
+    expect(resolveTheme({ palette: ["#ff8800", "rgb(1,2,3)", "red"] }).palette).toEqual([
+      "#ff8800",
+      "rgb(1,2,3)",
+      "red",
+    ]);
+  });
 });
