@@ -3,7 +3,7 @@ import { gzipSync } from "node:zlib";
 
 // React and react-dom are external in the Vite build, so this file is
 // exactly what a consumer adds on top of the peers they already have.
-const { file, maximumGzipBytes, search, assistant, filter } = JSON.parse(
+const { file, maximumGzipBytes, search, assistant, filter, themeCheck } = JSON.parse(
   readFileSync("package.json", "utf8"),
 ).sizeLimit;
 const BADGE = "docs/badges/size.svg";
@@ -18,8 +18,8 @@ const gzipBytesOf = (path) => {
 };
 const bytes = gzipBytesOf(file);
 
-// `corpus-map/search`, `corpus-map/assistant` and `corpus-map/filter` are their own files with their own ceilings; the badge stays the main entry's.
-for (const entry of [search, assistant, filter]) {
+// `corpus-map/search`, `corpus-map/assistant`, `corpus-map/filter` and `corpus-map/theme-check` are their own files with their own ceilings; the badge stays the main entry's.
+for (const entry of [search, assistant, filter, themeCheck]) {
   const entryBytes = gzipBytesOf(entry.file);
   console.log(`size: ${entry.file} is ${entryBytes} bytes gzipped (ceiling ${entry.maximumGzipBytes})`);
   if (entryBytes > entry.maximumGzipBytes) {

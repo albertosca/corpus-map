@@ -20,6 +20,10 @@ export default defineConfig({
         find: /^corpus-map\/filter$/,
         replacement: fileURLToPath(new URL("./src/filter/index.ts", import.meta.url)),
       },
+      {
+        find: /^corpus-map\/theme-check$/,
+        replacement: fileURLToPath(new URL("./src/theme-check/index.ts", import.meta.url)),
+      },
       { find: /^corpus-map\/search$/, replacement: fileURLToPath(new URL("./src/search/index.ts", import.meta.url)) },
       { find: /^corpus-map$/, replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
     ],

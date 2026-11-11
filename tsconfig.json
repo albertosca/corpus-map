@@ -18,7 +18,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "paths": { "corpus-map": ["./src/index.ts"] }
+    "paths": { "corpus-map": ["./src/index.ts"], "corpus-map/theme-check": ["./src/theme-check/index.ts"] }
   },
   "include": ["src", "test", "demo", "bench", "fixtures", "tools"]
 }

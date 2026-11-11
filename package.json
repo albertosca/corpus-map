@@ -35,6 +35,10 @@
     "./filter": {
       "types": "./dist/filter/index.d.ts",
       "import": "./dist/filter.js"
+    },
+    "./theme-check": {
+      "types": "./dist/theme-check/index.d.ts",
+      "import": "./dist/theme-check.js"
     }
   },
   "files": [
@@ -42,7 +46,7 @@
   ],
   "scripts": {
     "prepare": "npm run build",
-    "build": "vite build && vite build --config vite.search.config.ts && vite build --config vite.assistant.config.ts && vite build --config vite.filter.config.ts && tsc -p tsconfig.build.json",
+    "build": "vite build && vite build --config vite.search.config.ts && vite build --config vite.assistant.config.ts && vite build --config vite.filter.config.ts && vite build --config vite.theme-check.config.ts && tsc -p tsconfig.build.json",
     "dev": "vite --config vite.demo.config.ts",
     "build:demo": "vite build --config vite.demo.config.ts",
     "test": "vitest run --coverage",
@@ -68,6 +72,10 @@
     "filter": {
       "file": "dist/filter.js",
       "maximumGzipBytes": 2458
+    },
+    "themeCheck": {
+      "file": "dist/theme-check.js",
+      "maximumGzipBytes": 4000
     }
   },
   "devDependencies": {
