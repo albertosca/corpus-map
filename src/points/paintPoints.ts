@@ -60,8 +60,11 @@ export function paintPoints(
       if (batch.visited) surface.fillCircles(batch.marks, theme.pointRadius, batch.colour);
       else {
         const ringWidth = theme.unvisitedRingWidth ?? UNVISITED_RING_WIDTH;
-        // A ring wider than the point has no hole: clamp so the radius is never negative.
-        surface.strokeCircles(batch.marks, Math.max(0, theme.pointRadius - ringWidth / 2), batch.colour, ringWidth);
+        const ringRadius = theme.pointRadius - ringWidth / 2;
+        // A ring at least twice as wide as the point's radius has no hole, and a zero-radius stroke draws nothing
+        // on a canvas: it reads as a filled point instead (`checkTheme` reports the missing hole).
+        if (ringRadius <= 0) surface.fillCircles(batch.marks, theme.pointRadius, batch.colour);
+        else surface.strokeCircles(batch.marks, ringRadius, batch.colour, ringWidth);
       }
     }
   };

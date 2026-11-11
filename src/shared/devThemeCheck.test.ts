@@ -74,6 +74,15 @@ describe("warnAboutTheme", () => {
     expect(probe.calls).toBe(0);
   });
 
+  it("does not throw where there is no `process` at all (native ESM, an import map)", () => {
+    vi.stubGlobal("process", undefined);
+    try {
+      expect(() => warnAboutTheme(BAD)).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("swallows a failing check: no warning and no unhandled rejection", async () => {
     probe.failure = new Error("boom");
     const unhandled = vi.fn();

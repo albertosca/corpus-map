@@ -1906,7 +1906,7 @@ export interface Theme {
      * `uppercase` upper-cases them, `spacing` is the extra space between letters in CSS pixels
      * (a finite number of at least 0; it replaces the families' 1 px). The transformed text
      * and the spacing are what is measured and placed as well as drawn. The accessible tree,
-     * tooltip, legend and cards keep the real name. Absent or `{}` draws as before.
+     * tooltip, legend and cards keep the real name. Absent, `undefined` or `{}` takes the house default (upper case, spacing 0.6) through `resolveTheme`; pass `{ uppercase: false }` for mixed case.
      */
     territoryNameStyle?: {
         uppercase?: boolean | undefined;
@@ -2312,7 +2312,7 @@ export interface CheckThemeOptions {
 }
 /**
  * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
- * Pure and advisory: an empty list means every check passed; nothing here throws except an unreadable `page`.
+ * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page` and an invalid width (a `RangeError` from `resolveTheme`, which runs first).
  */
 export declare function checkTheme(input: ThemeInput, options?: CheckThemeOptions): ThemeProblem[];
 

@@ -130,3 +130,25 @@ describe("checkTheme part two", () => {
     expect(checkTheme(theme)).toEqual([]);
   });
 });
+
+describe("checkTheme on numbers that cannot be measured", () => {
+  it.each([
+    ["a NaN fill alpha", { territoryFillAlpha: Number.NaN }],
+    ["a fill alpha above 1", { territoryFillAlpha: 2 }],
+    ["a negative fill alpha", { territoryFillAlpha: -0.5 }],
+    ["a NaN point radius", { pointRadius: Number.NaN }],
+    ["an infinite point radius", { pointRadius: Number.POSITIVE_INFINITY }],
+  ])("%s is a readable problem with a finite measured value", (_name, partial) => {
+    const problems = checkTheme({ ...DEFAULT_THEME, ...partial });
+    expect(problems.length).toBeGreaterThan(0);
+    for (const problem of problems) {
+      expect(Number.isFinite(problem.measured), JSON.stringify(problem)).toBe(true);
+      expect(problem.measured).toBeGreaterThanOrEqual(0);
+      expect(problem.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("throws a RangeError for an invalid width, since resolveTheme validates it first", () => {
+    expect(() => checkTheme({ selectionRingWidth: 0 })).toThrow(RangeError);
+  });
+});

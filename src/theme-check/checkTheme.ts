@@ -84,6 +84,23 @@ class Findings {
 
 /** The palette and every single colour the checks parse: readable, and the palette opaque with 2 to 10 entries. */
 function checkReadable(theme: ReturnType<typeof resolveTheme>, findings: Findings): void {
+  // `resolveTheme` validates the widths; these two numbers it passes through, and colour maths on them would be NaN.
+  if (!Number.isFinite(theme.territoryFillAlpha) || theme.territoryFillAlpha < 0 || theme.territoryFillAlpha > 1)
+    findings.fail(
+      "15",
+      `territoryFillAlpha (${theme.territoryFillAlpha})`,
+      0,
+      1,
+      `Theme.territoryFillAlpha is ${theme.territoryFillAlpha}; it must be a number between 0 and 1.`,
+    );
+  if (!Number.isFinite(theme.pointRadius) || theme.pointRadius <= 0)
+    findings.fail(
+      "ring",
+      `pointRadius (${theme.pointRadius})`,
+      0,
+      MINIMUM_RING_HOLE,
+      `Theme.pointRadius is ${theme.pointRadius}; it must be a finite number above 0.`,
+    );
   const size = theme.palette.length;
   if (size < MINIMUM_PALETTE_SIZE || size > MAXIMUM_PALETTE_SIZE)
     findings.fail(
@@ -126,7 +143,7 @@ function checkReadable(theme: ReturnType<typeof resolveTheme>, findings: Finding
 
 /**
  * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
- * Pure and advisory: an empty list means every check passed; nothing here throws except an unreadable `page`.
+ * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page` and an invalid width (a `RangeError` from `resolveTheme`, which runs first).
  */
 export function checkTheme(input: ThemeInput, options: CheckThemeOptions = {}): ThemeProblem[] {
   const theme = resolveTheme(input);

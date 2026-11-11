@@ -77,7 +77,7 @@ describe("theme widths in the painters", () => {
     expect((unvisited?.r ?? 0) + 0.5).toBe(DEFAULT_THEME.pointRadius);
   });
 
-  it("an oversized unvisited ring never draws a negative radius", () => {
+  it("a ring too wide to leave a hole draws a solid dot at pointRadius, never a zero-radius stroke that vanishes", () => {
     const surface = new RecordingSurface();
     paintPoints(
       surface,
@@ -89,8 +89,25 @@ describe("theme widths in the painters", () => {
       1,
       box,
     );
-    const unvisited = surface.hollowCircles.find((circle) => circle.id === "a");
-    expect(unvisited?.r).toBe(0);
+    expect(surface.hollowCircles.find((circle) => circle.id === "a")).toBeUndefined();
+    const solid = surface.circles.find((circle) => circle.id === "a");
+    expect(solid?.r).toBe(DEFAULT_THEME.pointRadius);
+  });
+
+  it("a ring exactly twice pointRadius wide is still a solid dot", () => {
+    const surface = new RecordingSurface();
+    paintPoints(
+      surface,
+      scene,
+      spec,
+      { scale: 10, tx: 0, ty: 0 },
+      { ...DEFAULT_THEME, unvisitedRingWidth: DEFAULT_THEME.pointRadius * 2 },
+      new Set(),
+      1,
+      box,
+    );
+    expect(surface.hollowCircles.find((circle) => circle.id === "a")).toBeUndefined();
+    expect(surface.circles.find((circle) => circle.id === "a")?.r).toBe(DEFAULT_THEME.pointRadius);
   });
 
   it("the selection ring reads selectionRingWidth without moving the hit area", () => {

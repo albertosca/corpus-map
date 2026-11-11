@@ -48,7 +48,7 @@ export interface Theme {
    * `uppercase` upper-cases them, `spacing` is the extra space between letters in CSS pixels
    * (a finite number of at least 0; it replaces the families' 1 px). The transformed text
    * and the spacing are what is measured and placed as well as drawn. The accessible tree,
-   * tooltip, legend and cards keep the real name. Absent or `{}` draws as before.
+   * tooltip, legend and cards keep the real name. Absent, `undefined` or `{}` takes the house default (upper case, spacing 0.6) through `resolveTheme`; pass `{ uppercase: false }` for mixed case.
    */
   territoryNameStyle?: { uppercase?: boolean | undefined; spacing?: number | undefined } | undefined;
   /** Line width of a leaf territory's outline, in CSS pixels (spec consumer styles §3); absent is 1. A finite number above 0. */

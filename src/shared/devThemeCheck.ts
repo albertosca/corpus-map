@@ -37,7 +37,8 @@ export function resetThemeWarnings(): void {
  * the branch and the measurement code never enters the core. A failing load or check is swallowed: advisory only.
  */
 export function warnAboutTheme(theme: Theme): void {
-  if (process.env.NODE_ENV === "production") return;
+  // `typeof` first: native ESM and import maps have no `process`, and a throw in an effect would unmount the map.
+  if (typeof process === "undefined" || process.env.NODE_ENV === "production") return;
   const key = themeKeyOf(theme);
   if (warned.has(key)) return;
   warned.add(key);
