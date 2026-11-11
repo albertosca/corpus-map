@@ -1,9 +1,9 @@
-import type { Rgba } from "../src/labels/contrast";
+import type { Rgba } from "../labels/contrast";
 
 /**
  * Colour-vision simulation (Machado, Oliveira and Fernandes 2009, severity
  * 1.0, applied in linear RGB) and the CIEDE2000 colour difference, for
- * metric 17. Test-only: the library never simulates vision at runtime.
+ * metric 17, shipped in the opt-in `corpus-map/theme-check` entry; the core never simulates vision.
  */
 export type VisionMode = "normal" | "protanopia" | "deuteranopia" | "tritanopia";
 

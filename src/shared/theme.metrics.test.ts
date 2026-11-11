@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ciede2000, simulate, type VisionMode } from "../../test/colourVision";
 import { contrastRatio, over, parseColor, type Rgba } from "../labels/contrast";
 import { tintDirection } from "../territories/familyColours";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { visitedFactor } from "../territories/visitedFactor";
+import { ciede2000, simulate, type VisionMode } from "../theme-check/colourVision";
 import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
 import { DARK_THEME, DEFAULT_THEME, type Theme } from "./theme";
 

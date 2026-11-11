@@ -1,4 +1,1 @@
-// Placeholder replaced by the real checkTheme (consumer styles, Task 4).
-export function checkTheme(_theme: unknown): never[] {
-  return [];
-}
+export { type CheckThemeOptions, checkTheme, type ThemeMetric, type ThemeProblem } from "./checkTheme";
