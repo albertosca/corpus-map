@@ -518,6 +518,45 @@ describe("CorpusMap", () => {
     }
   });
 
+  it("takes a partial theme: an inline literal of one field re-created every render never rebuilds the scene", () => {
+    const spy = vi.spyOn(sceneModule, "buildingScene");
+    try {
+      const element = () => (
+        <CorpusMap
+          spec={spec}
+          renderCard={() => null}
+          width={width}
+          height={height}
+          theme={{ palette: ["#065781", "#9a6232"], territoryFonts: { large: "700 20px serif" } }}
+        />
+      );
+      const { rerender } = render(element());
+      for (let index = 0; index < 4; index += 1) rerender(element());
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("throws a RangeError naming the field for a width that is not above 0, in render", () => {
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() =>
+        render(
+          <CorpusMap
+            spec={spec}
+            renderCard={() => null}
+            width={width}
+            height={height}
+            theme={{ matchRingWidth: -1 }}
+          />,
+        ),
+      ).toThrow(/Theme\.matchRingWidth/);
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
   it("does not rebuild the scene on a resize (activeFromScale is absolute, so fitScale is out of the memo key)", () => {
     const spy = vi.spyOn(sceneModule, "buildingScene");
     try {

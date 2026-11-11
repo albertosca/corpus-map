@@ -51,7 +51,32 @@ export interface Theme {
    * tooltip, legend and cards keep the real name. Absent or `{}` draws as before.
    */
   territoryNameStyle?: { uppercase?: boolean | undefined; spacing?: number | undefined } | undefined;
+  /** Line width of a leaf territory's outline, in CSS pixels (spec consumer styles §3); absent is 1. A finite number above 0. */
+  territoryOutlineWidth?: number | undefined;
+  /** Line width of a family's outline; absent is 1.75. A finite number above 0. */
+  groupOutlineWidth?: number | undefined;
+  /** Line width of the ring that marks an unvisited point; absent is 1.5. `pointRadius` minus this must leave a hole (`checkTheme`). */
+  unvisitedRingWidth?: number | undefined;
+  /** Line width of the selected item's ring; absent is 2. */
+  selectionRingWidth?: number | undefined;
+  /** Line width of the ring around a search or filter match; absent is 1.5. */
+  matchRingWidth?: number | undefined;
+  /** Line width of a related item's ring; absent is 1.5. */
+  neighbourRingWidth?: number | undefined;
 }
+
+/**
+ * What a consumer passes as `theme` (spec consumer styles §2): every field optional, and the two
+ * nested ones (`territoryFonts`, `territoryNameStyle`) optional field by field. `resolveTheme`
+ * lays it over `DEFAULT_THEME`.
+ */
+export type ThemeInput = {
+  [Field in Exclude<keyof Theme, "territoryFonts">]?: Theme[Field] | undefined;
+} & {
+  territoryFonts?:
+    | { [Class in keyof Theme["territoryFonts"]]?: Theme["territoryFonts"][Class] | undefined }
+    | undefined;
+};
 
 /** The family names' font below a 600 px box when the theme names none. */
 export const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
@@ -92,3 +117,42 @@ export const DARK_THEME: Theme = {
   focusOutline: "#7aa7ff",
   edge: "#c4c4d0",
 };
+
+const WIDTH_FIELDS = [
+  "territoryOutlineWidth",
+  "groupOutlineWidth",
+  "unvisitedRingWidth",
+  "selectionRingWidth",
+  "matchRingWidth",
+  "neighbourRingWidth",
+] as const;
+
+/** An object without the entries whose value is `undefined`, so a spread never overwrites a default with it. */
+function defined<Shape extends object>(
+  value: Shape | undefined,
+): { [Field in keyof Shape]?: Exclude<Shape[Field], undefined> } {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, entry]) => entry !== undefined)) as {
+    [Field in keyof Shape]?: Exclude<Shape[Field], undefined>;
+  };
+}
+
+/**
+ * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
+ * `territoryNameStyle` merged field by field, a field present as `undefined` taking the default.
+ * A width that is not a finite number above 0 is a `RangeError` naming the field.
+ */
+export function resolveTheme(input: ThemeInput | undefined): Theme {
+  if (input === undefined) return DEFAULT_THEME;
+  const theme: Theme = {
+    ...DEFAULT_THEME,
+    ...defined(input),
+    territoryFonts: { ...DEFAULT_THEME.territoryFonts, ...defined(input.territoryFonts) },
+    territoryNameStyle: { ...DEFAULT_THEME.territoryNameStyle, ...defined(input.territoryNameStyle) },
+  };
+  for (const field of WIDTH_FIELDS) {
+    const width = theme[field];
+    if (width !== undefined && !(Number.isFinite(width) && width > 0))
+      throw new RangeError(`Theme.${field} must be a finite number greater than 0, got ${String(width)}`);
+  }
+  return theme;
+}

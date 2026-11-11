@@ -43,7 +43,7 @@ import { type Presentation, type PresentationSetting, resolvePresentation } from
 import { buildingScene, EMPTY_SCENE, groupLabelsFor, NARROW_BOX_WIDTH, SCENE_STEPS_PER_SLICE } from "./shared/scene";
 import { leafTerritories, type MapNode, type MapSpec, validateSpec } from "./shared/spec";
 import { canvasSurface } from "./shared/surface";
-import { DEFAULT_THEME, type Theme } from "./shared/theme";
+import { resolveTheme, type ThemeInput } from "./shared/theme";
 import { resolveTuning, type Tuning } from "./shared/tuning";
 import { startSlices, useSliced } from "./shared/useSliced";
 import { familyFocus, namesLeaf } from "./territories/familyFocus";
@@ -146,7 +146,8 @@ export interface CorpusMapProps {
   cardCap?: number | undefined;
   /** The selected card's frame size. Defaults to 160x56. */
   cardSize?: { width: number; height: number } | undefined;
-  theme?: Theme | undefined;
+  /** Any part of the look, laid over `DEFAULT_THEME` (spec consumer styles §2); `checkTheme` from `corpus-map/theme-check` measures it. */
+  theme?: ThemeInput | undefined;
   onSelect?: ((node: MapNode) => void) | undefined;
   /** Present, even `null`, means controlled (spec slice C §3). An id whose node is dimmed or absent reads as no selection. */
   selectedId?: string | null | undefined;
@@ -400,7 +401,8 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // a fresh `cardSize` literal every render is not a change (Task 7's lesson).
   const cardSize = properties.cardSize ?? DEFAULT_CARD_SIZE;
   const { width: cardWidth, height: cardHeight } = cardSize;
-  const theme = properties.theme ?? DEFAULT_THEME;
+  // Resolved in render, so a bad width throws where an error boundary can catch it.
+  const theme = useMemo(() => resolveTheme(properties.theme), [properties.theme]);
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node])), [spec]);
@@ -448,7 +450,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   // and a resize (which only changes `fitScale`) costs no scene rebuild.
   // Keyed on the primitive values `buildScene` actually reads — not on the
   // `tuning`/`theme` objects themselves, which `resolveTuning` and
-  // `properties.theme ?? DEFAULT_THEME` both mint fresh on every render for an
+  // `resolveTheme` both mint fresh on every render for an
   // inline literal prop (spec 4's tuning panel does exactly that), which
   // would rebuild the scene (70-135ms on 10k items) on every render. The
   // literals below and the dependency list must both name every field
