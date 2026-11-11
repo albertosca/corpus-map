@@ -1,4 +1,5 @@
 import type { LabelClass } from "../labels/placement";
+import { normaliseColour } from "./colourNotation";
 
 export interface Theme {
   territoryLabel: string;
@@ -136,22 +137,14 @@ function defined<Shape extends object>(
   };
 }
 
-const SHORT_HEX = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
-
-/** `#rgb` as `#rrggbb`, lower-case; any other notation comes back unchanged. */
-function expandShortHex(colour: string): string {
-  const match = SHORT_HEX.exec(colour);
-  if (match === null) return colour;
-  return `#${match[1]}${match[1]}${match[2]}${match[2]}${match[3]}${match[3]}`.toLowerCase();
-}
-
 const COLOUR_FIELDS = ["territoryLabel", "pointNeutral", "focusOutline", "selectionRing", "edge"] as const;
 
 /**
  * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
  * `territoryNameStyle` merged field by field, a field present as `undefined` taking the default.
  * A width that is not a finite number above 0 is a `RangeError` naming the field. A colour written
- * as `#rgb` is expanded to `#rrggbb` here, so the painters and the checks only meet the long form.
+ * as `#rgb`, `hsl()` or a CSS name is turned into `#rrggbb` (or `rgba()`) here, so the painters and the checks only
+ * meet notations they read.
  */
 export function resolveTheme(input: ThemeInput | undefined): Theme {
   if (input === undefined) return DEFAULT_THEME;
@@ -166,10 +159,10 @@ export function resolveTheme(input: ThemeInput | undefined): Theme {
     if (width !== undefined && !(Number.isFinite(width) && width > 0))
       throw new RangeError(`Theme.${field} must be a finite number greater than 0, got ${String(width)}`);
   }
-  theme.palette = theme.palette.map(expandShortHex);
+  theme.palette = theme.palette.map(normaliseColour);
   for (const field of COLOUR_FIELDS) {
     const colour = theme[field];
-    if (colour !== undefined) theme[field] = expandShortHex(colour);
+    if (colour !== undefined) theme[field] = normaliseColour(colour);
   }
   return theme;
 }

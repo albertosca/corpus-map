@@ -1379,6 +1379,14 @@ export declare function answerEntries(found: readonly (string | ScoredId)[]): (s
  */
 export declare function orderAnswer(spec: MapSpec, found: readonly (string | ScoredId)[], rule: RankRule): string[];
 
+// shared/colourNotation.d.ts
+/**
+ * The notation the painters and the contrast maths read for a theme colour: `#rgb` becomes `#rrggbb`, `hsl()` and
+ * `hsla()` become `#rrggbb` (or `rgba()` when not opaque), and a CSS named colour becomes its `#rrggbb`. Anything else
+ * (`rgb()`, `rgba()`, `#rrggbb`, a notation this library cannot read) comes back unchanged.
+ */
+export declare function normaliseColour(colour: string): string;
+
 // shared/compareIds.d.ts
 /** Orders ids by code unit, the tie-break every sorted list in the map uses so the order never depends on the input's. */
 export declare function compareIds(first: string, second: string): number;
@@ -1946,7 +1954,8 @@ export declare const DARK_THEME: Theme;
  * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
  * `territoryNameStyle` merged field by field, a field present as `undefined` taking the default.
  * A width that is not a finite number above 0 is a `RangeError` naming the field. A colour written
- * as `#rgb` is expanded to `#rrggbb` here, so the painters and the checks only meet the long form.
+ * as `#rgb`, `hsl()` or a CSS name is turned into `#rrggbb` (or `rgba()`) here, so the painters and the checks only
+ * meet notations they read.
  */
 export declare function resolveTheme(input: ThemeInput | undefined): Theme;
 

@@ -7,6 +7,9 @@ import { validateSpec } from "../src/shared/spec";
 import { fitSpec } from "../src/viewport/fit";
 
 const SAMPLES = 15;
+// Enough passes for the engine to optimise `visibleNodes` before the first timed one: with 3, the first test of the file
+// measured 1.08 ms under load while the same test alone measured 0.25 ms (cold code, not a slower pass).
+const WARM_UP_PASSES = 30;
 
 function medianOf(values: number[]): number {
   const sorted = [...values].sort((first, second) => first - second);
@@ -22,7 +25,8 @@ describe("visibleNodes", () => {
   ] as const) {
     it(`costs under 1 ms per pass on ${name} at the fitted 1280 x 800 view`, () => {
       const viewport = fitSpec(spec, 1280, 800, 24);
-      for (let warmUp = 0; warmUp < 3; warmUp += 1) visibleNodes(spec, viewport, 1280, 800, Number.POSITIVE_INFINITY);
+      for (let warmUp = 0; warmUp < WARM_UP_PASSES; warmUp += 1)
+        visibleNodes(spec, viewport, 1280, 800, Number.POSITIVE_INFINITY);
       const samples: number[] = [];
       for (let sample = 0; sample < SAMPLES; sample += 1) {
         const start = performance.now();

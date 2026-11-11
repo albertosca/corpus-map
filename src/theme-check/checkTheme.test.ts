@@ -33,7 +33,7 @@ describe("checkTheme part one", () => {
       Array.from({ length: 11 }, (_, index) => `#${(index * 20 + 40).toString(16).padStart(2, "0")}4466`),
     ],
     ["an rgba entry", ["rgba(10,20,30,0.5)", "#336699"]],
-    ["an unparseable entry", ["blue", "#336699"]],
+    ["an unparseable entry", ["oklch(0.5 0.1 20)", "#336699"]],
     ["an empty palette", []],
   ])("reports a palette of %s without throwing", (_name, palette) => {
     const problems = expectProblem({ palette }, "palette");
@@ -158,5 +158,13 @@ describe("checkTheme with short hex colours", () => {
     const long = ["#336699", "#996633", "#339966", "#993366"];
     const short = ["#369", "#963", "#396", "#936"];
     expect(checkTheme({ palette: short })).toEqual(checkTheme({ palette: long }));
+  });
+
+  it("measures hsl() and named colours the same as their #rrggbb form", () => {
+    const long = ["#336699", "#996633", "#339966", "#993366"];
+    expect(checkTheme({ palette: ["hsl(210, 50%, 40%)", "#963", "hsl(150 50% 40%)", "#936"] })).toEqual(
+      checkTheme({ palette: long }),
+    );
+    expect(checkTheme({ territoryLabel: "silver" })).toEqual(checkTheme({ territoryLabel: "#c0c0c0" }));
   });
 });

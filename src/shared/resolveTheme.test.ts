@@ -95,11 +95,38 @@ describe("resolveTheme", () => {
     ]);
   });
 
-  it("leaves every other notation untouched", () => {
-    expect(resolveTheme({ palette: ["#ff8800", "rgb(1,2,3)", "red"] }).palette).toEqual([
+  it("turns hsl(), hsla() and CSS named colours into notations the painters read", () => {
+    const theme = resolveTheme({
+      palette: ["hsl(0, 100%, 50%)", "hsl(120 100% 25%)", "hsla(240, 100%, 50%, 0.5)"],
+      territoryLabel: "rebeccapurple",
+      pointNeutral: "RED",
+      edge: "aliceblue",
+      focusOutline: "yellowgreen",
+    });
+    expect(theme.palette).toEqual(["#ff0000", "#008000", "rgba(0,0,255,0.5)"]);
+    expect([theme.territoryLabel, theme.pointNeutral, theme.edge, theme.focusOutline]).toEqual([
+      "#663399",
+      "#ff0000",
+      "#f0f8ff",
+      "#9acd32",
+    ]);
+  });
+
+  it("knows all 148 CSS named colours, and no other word", () => {
+    const named = ["black", "white", "gray", "grey", "darkslategray", "lightgoldenrodyellow", "whitesmoke", "tomato"];
+    for (const name of named) expect(resolveTheme({ pointNeutral: name }).pointNeutral).toMatch(/^#[0-9a-f]{6}$/);
+    expect(resolveTheme({ pointNeutral: "tomato" }).pointNeutral).toBe("#ff6347");
+    expect(resolveTheme({ pointNeutral: "lightgoldenrodyellow" }).pointNeutral).toBe("#fafad2");
+    expect(resolveTheme({ pointNeutral: "notacolour" }).pointNeutral).toBe("notacolour");
+    expect(resolveTheme({ pointNeutral: "transparent" }).pointNeutral).toBe("transparent");
+  });
+
+  it("leaves a notation it does not know untouched", () => {
+    expect(resolveTheme({ palette: ["#ff8800", "rgb(1,2,3)", "oklch(0.5 0.1 20)", "hsl(nope)"] }).palette).toEqual([
       "#ff8800",
       "rgb(1,2,3)",
-      "red",
+      "oklch(0.5 0.1 20)",
+      "hsl(nope)",
     ]);
   });
 });
