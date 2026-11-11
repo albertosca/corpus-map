@@ -6,7 +6,7 @@ import { type MinimapCorner } from "./minimap/Minimap";
 import { type Insets } from "./shared/insets";
 import { type Presentation, type PresentationSetting } from "./shared/presentation";
 import { type MapNode, type MapSpec } from "./shared/spec";
-import { type Theme } from "./shared/theme";
+import { type ThemeInput } from "./shared/theme";
 import { type Tuning } from "./shared/tuning";
 import { type MapViewport, type ViewportChangeReason } from "./viewport/publicViewport";
 /** Imperative handle exposed through React 19's `ref`-as-prop (spec 4 §1). */
@@ -74,7 +74,8 @@ export interface CorpusMapProps {
         width: number;
         height: number;
     } | undefined;
-    theme?: Theme | undefined;
+    /** Any part of the look, laid over `DEFAULT_THEME` (spec consumer styles §2); `checkTheme` from `corpus-map/theme-check` measures it. */
+    theme?: ThemeInput | undefined;
     onSelect?: ((node: MapNode) => void) | undefined;
     /** Present, even `null`, means controlled (spec slice C §3). An id whose node is dimmed or absent reads as no selection. */
     selectedId?: string | null | undefined;
@@ -528,7 +529,7 @@ export declare function drawnEdges(scene: Pick<Scene, "related" | "byId">, id: s
  * canvas, then a ring around each neighbour. Drawn at `alpha`, then the
  * point layer's `restoreAlpha` is put back.
  */
-export declare function paintEdges(surface: Surface, scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">, viewport: Viewport, theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel">, options: {
+export declare function paintEdges(surface: Surface, scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">, viewport: Viewport, theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel" | "neighbourRingWidth">, options: {
     id: string;
     width: number;
     height: number;
@@ -650,8 +651,8 @@ export type { Insets } from "./shared/insets";
 export type { Presentation, PresentationSetting } from "./shared/presentation";
 export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/spec";
 export { SpecError, validateSpec } from "./shared/spec";
-export type { Theme } from "./shared/theme";
-export { DARK_THEME, DEFAULT_THEME } from "./shared/theme";
+export type { Theme, ThemeInput } from "./shared/theme";
+export { DARK_THEME, DEFAULT_THEME, resolveTheme } from "./shared/theme";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 export type { TerritoryGroup } from "./territories/groups";
@@ -1225,7 +1226,7 @@ export declare const MATCH_RING_GAP = 2.5;
  * whose ring lies wholly outside the box, or whose territory is dimmed (a
  * hidden item is not a result), is skipped.
  */
-export declare function paintMatches(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel">, matches: ReadonlySet<string>, box: {
+export declare function paintMatches(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel" | "matchRingWidth">, matches: ReadonlySet<string>, box: {
     width: number;
     height: number;
 }, dimmed?: ReadonlySet<string>): void;
@@ -1252,7 +1253,7 @@ export declare const UNVISITED_RING_WIDTH = 1.5;
  * phone frame would otherwise stroke every point of the corpus to show a
  * fifth of them).
  */
-export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius">, dimmed?: ReadonlySet<string>, alpha?: number, box?: {
+export declare function paintPoints(surface: Surface, scene: Scene, spec: MapSpec, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "pointRadius" | "unvisitedRingWidth">, dimmed?: ReadonlySet<string>, alpha?: number, box?: {
     width: number;
     height: number;
 }, matches?: ReadonlySet<string>): void;
@@ -1271,7 +1272,7 @@ export declare const SELECTION_RING_WIDTH = 2;
  * only by colour (WCAG 2.2 SC 1.4.1; spec slice C §5). Drawn inside the
  * point layer, so it fades with the points and is absent at far.
  */
-export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel">, id: string): void;
+export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel" | "selectionRingWidth">, id: string): void;
 
 // search/SearchBox.d.ts
 import { type CSSProperties, type ReactElement } from "react";
@@ -1401,6 +1402,19 @@ export declare const CORNER_POSITION: Record<Corner, {
     bottom?: number;
     left?: number;
 }>;
+
+// shared/devThemeCheck.d.ts
+import type { Theme } from "./theme";
+/** Every theme value `checkTheme` reads, so two themes with the same key get the same warning (once). */
+export declare function themeKeyOf(theme: Theme): string;
+/** Test hook: forget which themes already warned. Not exported from the package entry. */
+export declare function resetThemeWarnings(): void;
+/**
+ * Warns once per distinct theme, in development only, when `checkTheme` finds a problem (spec consumer-styles §5).
+ * `corpus-map/theme-check` is loaded by a dynamic import behind the production guard, so a production bundle drops
+ * the branch and the measurement code never enters the core. A failing load or check is swallowed: advisory only.
+ */
+export declare function warnAboutTheme(theme: Theme): void;
 
 // shared/dimmed.d.ts
 /** A dimmed territory's fill, outline, points and name are drawn at this fraction of their alpha (spec categories §5). */
@@ -1898,12 +1912,42 @@ export interface Theme {
         uppercase?: boolean | undefined;
         spacing?: number | undefined;
     } | undefined;
+    /** Line width of a leaf territory's outline, in CSS pixels (spec consumer styles §3); absent is 1. A finite number above 0. */
+    territoryOutlineWidth?: number | undefined;
+    /** Line width of a family's outline; absent is 1.75. A finite number above 0. */
+    groupOutlineWidth?: number | undefined;
+    /** Line width of the ring that marks an unvisited point; absent is 1.5. `pointRadius` minus this must leave a hole (`checkTheme`). */
+    unvisitedRingWidth?: number | undefined;
+    /** Line width of the selected item's ring; absent is 2. */
+    selectionRingWidth?: number | undefined;
+    /** Line width of the ring around a search or filter match; absent is 1.5. */
+    matchRingWidth?: number | undefined;
+    /** Line width of a related item's ring; absent is 1.5. */
+    neighbourRingWidth?: number | undefined;
 }
+/**
+ * What a consumer passes as `theme` (spec consumer styles §2): every field optional, and the two
+ * nested ones (`territoryFonts`, `territoryNameStyle`) optional field by field. `resolveTheme`
+ * lays it over `DEFAULT_THEME`.
+ */
+export type ThemeInput = {
+    [Field in Exclude<keyof Theme, "territoryFonts">]?: Theme[Field] | undefined;
+} & {
+    territoryFonts?: {
+        [Class in keyof Theme["territoryFonts"]]?: Theme["territoryFonts"][Class] | undefined;
+    } | undefined;
+};
 /** The family names' font below a 600 px box when the theme names none. */
 export declare const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
 export declare const DEFAULT_THEME: Theme;
 /** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
 export declare const DARK_THEME: Theme;
+/**
+ * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
+ * `territoryNameStyle` merged field by field, a field present as `undefined` taking the default.
+ * A width that is not a finite number above 0 is a `RangeError` naming the field.
+ */
+export declare function resolveTheme(input: ThemeInput | undefined): Theme;
 
 // shared/tuning.d.ts
 /**
@@ -2166,7 +2210,7 @@ export declare const GROUP_OUTLINE_WIDTH = 1.75;
  * unchanged. Territories at different visited steps share the layer (each erases what is under it, `fillLayer`), so
  * the smallest-on-top rule holds across steps.
  */
-export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>, visitedStrength?: number): void;
+export declare function paintTerritories(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointNeutral" | "territoryOutlineWidth" | "groupOutlineWidth">, fillAlpha: number, dimmed?: ReadonlySet<string>, familyAlpha?: number, focus?: ReadonlyMap<string, number>, visitedStrength?: number): void;
 
 // territories/shape.d.ts
 export type Point = [number, number];
@@ -2246,6 +2290,45 @@ export declare const VISITED_STEPS = 4;
 export declare const VISITED_MAXIMUM_BOOST = 0.5;
 /** The factor a territory's fill alpha is multiplied by: 1 for no visited node, 1.5 for all (spec far-visited §2). */
 export declare function visitedFactor(share: number): number;
+
+// theme-check/checkTheme.d.ts
+import { type ThemeInput } from "../shared/theme";
+/** Which accessibility check a problem comes from: the metric numbers of the map-feel spec, plus the extra gates. */
+export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette";
+export interface ThemeProblem {
+    metric: ThemeMetric;
+    /** What was measured, e.g. `#7466a9 as a point over its own fill`. */
+    subject: string;
+    /** The worst value found for this kind of problem (a contrast ratio, a ΔE00, or a hole in pixels). */
+    measured: number;
+    /** The bar the value has to reach. */
+    required: number;
+    /** One readable sentence: what is wrong and what to change. */
+    message: string;
+}
+export interface CheckThemeOptions {
+    /** The page colour the map sits on (`#rrggbb` or `rgb()`); by default `#ffffff` for a theme with dark names and `#18181b` for one with light names. */
+    page?: string | undefined;
+}
+/**
+ * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
+ * Pure and advisory: an empty list means every check passed; nothing here throws except an unreadable `page`.
+ */
+export declare function checkTheme(input: ThemeInput, options?: CheckThemeOptions): ThemeProblem[];
+
+// theme-check/colourVision.d.ts
+import type { Rgba } from "../labels/contrast";
+/**
+ * Colour-vision simulation (Machado, Oliveira and Fernandes 2009, severity
+ * 1.0, applied in linear RGB) and the CIEDE2000 colour difference, for
+ * metric 17, shipped in the opt-in `corpus-map/theme-check` entry; the core never simulates vision.
+ */
+export type VisionMode = "normal" | "protanopia" | "deuteranopia" | "tritanopia";
+export declare function simulate(colour: Rgba, mode: VisionMode): Rgba;
+export declare function ciede2000(first: Rgba, second: Rgba): number;
+
+// theme-check/index.d.ts
+export { type CheckThemeOptions, checkTheme, type ThemeMetric, type ThemeProblem } from "./checkTheme";
 
 // viewport/fit.d.ts
 import type { MapSpec } from "../shared/spec";
