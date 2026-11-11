@@ -1,0 +1,163 @@
+{
+  "nodes": [
+    {
+      "id": "2",
+      "label": "Cliffs and headlands",
+      "meta": {
+        "items": 3
+      },
+      "territory": "1",
+      "x": 48.338336,
+      "y": -27.421261
+    },
+    {
+      "id": "3",
+      "label": "Shores and dunes",
+      "meta": {
+        "items": 3
+      },
+      "territory": "1",
+      "x": 64.415516,
+      "y": -27.421261
+    },
+    {
+      "id": "5",
+      "label": "Summits and passes",
+      "meta": {
+        "items": 3
+      },
+      "territory": "4",
+      "x": -42.820384,
+      "y": 7.853189
+    },
+    {
+      "id": "6",
+      "label": "Long routes",
+      "meta": {
+        "items": 3
+      },
+      "territory": "4",
+      "x": -26.743204,
+      "y": 7.853189
+    },
+    {
+      "id": "8",
+      "label": "Ancient woods",
+      "meta": {
+        "items": 3
+      },
+      "territory": "7",
+      "x": -22.2228,
+      "y": 58.650299
+    },
+    {
+      "id": "9",
+      "label": "Ridges and roads",
+      "meta": {
+        "items": 3
+      },
+      "territory": "7",
+      "x": -6.14562,
+      "y": 58.650299
+    },
+    {
+      "id": "11",
+      "label": "Canyons and arches",
+      "meta": {
+        "items": 3
+      },
+      "territory": "10",
+      "x": -6.671601,
+      "y": -43.935853
+    },
+    {
+      "id": "12",
+      "label": "Flats and rims",
+      "meta": {
+        "items": 3
+      },
+      "territory": "10",
+      "x": 9.405579,
+      "y": -43.935853
+    },
+    {
+      "id": "14",
+      "label": "Marsh and reeds",
+      "meta": {
+        "items": 3
+      },
+      "territory": "13",
+      "x": 34.609095,
+      "y": 31.471667
+    },
+    {
+      "id": "15",
+      "label": "Bog and canal",
+      "meta": {
+        "items": 3
+      },
+      "territory": "13",
+      "x": 50.686275,
+      "y": 31.471667
+    },
+    {
+      "id": "17",
+      "label": "Craters and vents",
+      "meta": {
+        "items": 3
+      },
+      "territory": "16",
+      "x": -59.464187,
+      "y": -26.618041
+    },
+    {
+      "id": "18",
+      "label": "Columns and tubes",
+      "meta": {
+        "items": 3
+      },
+      "territory": "16",
+      "x": -43.387007,
+      "y": -26.618041
+    }
+  ],
+  "territories": [
+    {
+      "centroid": [56.376926, -27.421261],
+      "id": "1",
+      "members": ["2", "3"],
+      "name": "Coast"
+    },
+    {
+      "centroid": [-34.781794, 7.853189],
+      "id": "4",
+      "members": ["5", "6"],
+      "name": "Mountain"
+    },
+    {
+      "centroid": [-14.18421, 58.650299],
+      "id": "7",
+      "members": ["8", "9"],
+      "name": "Forest"
+    },
+    {
+      "centroid": [1.366989, -43.935853],
+      "id": "10",
+      "members": ["11", "12"],
+      "name": "Desert"
+    },
+    {
+      "centroid": [42.647685, 31.471667],
+      "id": "13",
+      "members": ["14", "15"],
+      "name": "Wetland"
+    },
+    {
+      "centroid": [-51.425597, -26.618041],
+      "id": "16",
+      "members": ["17", "18"],
+      "name": "Volcanic"
+    }
+  ],
+  "version": "1"
+}
