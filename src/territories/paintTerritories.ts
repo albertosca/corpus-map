@@ -139,7 +139,7 @@ export function paintTerritories(
   surface: Surface,
   scene: Scene,
   viewport: Viewport,
-  theme: Pick<Theme, "pointNeutral">,
+  theme: Pick<Theme, "pointNeutral" | "territoryOutlineWidth" | "groupOutlineWidth">,
   fillAlpha: number,
   dimmed: ReadonlySet<string> = NO_DIMMED,
   familyAlpha = 0,
@@ -167,7 +167,7 @@ export function paintTerritories(
       scene.paintOrder.map((id) => boosted(id, fillAlpha)),
       fillAlpha,
     );
-    outlines(surface, leaves, TERRITORY_OUTLINE_WIDTH, 1);
+    outlines(surface, leaves, theme.territoryOutlineWidth ?? TERRITORY_OUTLINE_WIDTH, 1);
     return;
   }
   const membersOf = new Map(scene.groups.map((group) => [group.id, group.members]));
@@ -207,6 +207,7 @@ export function paintTerritories(
       }),
       fillAlpha,
     );
-  for (const { level, shapes } of leafGroups) outlines(surface, shapes, TERRITORY_OUTLINE_WIDTH, level);
-  outlines(surface, families, GROUP_OUTLINE_WIDTH, 1);
+  for (const { level, shapes } of leafGroups)
+    outlines(surface, shapes, theme.territoryOutlineWidth ?? TERRITORY_OUTLINE_WIDTH, level);
+  outlines(surface, families, theme.groupOutlineWidth ?? GROUP_OUTLINE_WIDTH, 1);
 }

@@ -17,17 +17,18 @@ export function paintSelection(
   surface: Surface,
   scene: Scene,
   viewport: Viewport,
-  theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel">,
+  theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel" | "selectionRingWidth">,
   id: string,
 ): void {
   const node = scene.byId.get(id);
   if (!node) return;
+  const ringWidth = theme.selectionRingWidth ?? SELECTION_RING_WIDTH;
   const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
   surface.ring(
     horizontal,
     vertical,
-    theme.pointRadius + theme.focusOutlineWidth + SELECTION_RING_GAP + SELECTION_RING_WIDTH / 2,
+    theme.pointRadius + theme.focusOutlineWidth + SELECTION_RING_GAP + ringWidth / 2,
     theme.selectionRing ?? theme.territoryLabel,
-    SELECTION_RING_WIDTH,
+    ringWidth,
   );
 }

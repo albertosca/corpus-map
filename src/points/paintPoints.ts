@@ -27,7 +27,7 @@ export function paintPoints(
   scene: Scene,
   spec: MapSpec,
   viewport: Viewport,
-  theme: Pick<Theme, "pointNeutral" | "pointRadius">,
+  theme: Pick<Theme, "pointNeutral" | "pointRadius" | "unvisitedRingWidth">,
   dimmed: ReadonlySet<string> = NO_DIMMED,
   alpha = 1,
   box?: { width: number; height: number },
@@ -58,13 +58,11 @@ export function paintPoints(
     }
     for (const batch of batches.values()) {
       if (batch.visited) surface.fillCircles(batch.marks, theme.pointRadius, batch.colour);
-      else
-        surface.strokeCircles(
-          batch.marks,
-          theme.pointRadius - UNVISITED_RING_WIDTH / 2,
-          batch.colour,
-          UNVISITED_RING_WIDTH,
-        );
+      else {
+        const ringWidth = theme.unvisitedRingWidth ?? UNVISITED_RING_WIDTH;
+        // A ring wider than the point has no hole: clamp so the radius is never negative.
+        surface.strokeCircles(batch.marks, Math.max(0, theme.pointRadius - ringWidth / 2), batch.colour, ringWidth);
+      }
     }
   };
   // Dimmed by its territory, or by a search that does not list it.

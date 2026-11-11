@@ -19,13 +19,14 @@ export function paintMatches(
   surface: Surface,
   scene: Scene,
   viewport: Viewport,
-  theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel">,
+  theme: Pick<Theme, "pointRadius" | "selectionRing" | "territoryLabel" | "matchRingWidth">,
   matches: ReadonlySet<string>,
   box: { width: number; height: number },
   dimmed: ReadonlySet<string> = NO_DIMMED,
 ): void {
   const radius = theme.pointRadius + MATCH_RING_GAP;
-  const reach = radius + MATCH_RING_WIDTH;
+  const ringWidth = theme.matchRingWidth ?? MATCH_RING_WIDTH;
+  const reach = radius + ringWidth;
   const marks: PointMark[] = [];
   for (const id of matches) {
     const node = scene.byId.get(id);
@@ -35,6 +36,5 @@ export function paintMatches(
       continue;
     marks.push({ id, horizontal, vertical });
   }
-  if (marks.length > 0)
-    surface.strokeCircles(marks, radius, theme.selectionRing ?? theme.territoryLabel, MATCH_RING_WIDTH);
+  if (marks.length > 0) surface.strokeCircles(marks, radius, theme.selectionRing ?? theme.territoryLabel, ringWidth);
 }

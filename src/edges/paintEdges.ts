@@ -65,7 +65,7 @@ export function paintEdges(
   surface: Surface,
   scene: Pick<Scene, "related" | "byId" | "maximumEdgeWeight">,
   viewport: Viewport,
-  theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel">,
+  theme: Pick<Theme, "edge" | "pointRadius" | "focusOutlineWidth" | "territoryLabel" | "neighbourRingWidth">,
   options: {
     id: string;
     width: number;
@@ -94,6 +94,12 @@ export function paintEdges(
     ends.push(neighbourPoint);
   }
   for (const [horizontal, vertical] of ends)
-    surface.ring(horizontal, vertical, theme.pointRadius + theme.focusOutlineWidth / 2, colour, NEIGHBOUR_RING_WIDTH);
+    surface.ring(
+      horizontal,
+      vertical,
+      theme.pointRadius + theme.focusOutlineWidth / 2,
+      colour,
+      theme.neighbourRingWidth ?? NEIGHBOUR_RING_WIDTH,
+    );
   surface.globalAlpha(options.restoreAlpha);
 }
