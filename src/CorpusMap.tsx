@@ -34,6 +34,7 @@ import { fade, groupNameAlpha, regimeAt } from "./lod/regime";
 import { visibleNodes } from "./lod/visible";
 import { MINIMAP_SIZE, Minimap, type MinimapCorner } from "./minimap/Minimap";
 import { nearestWithin } from "./points/hover";
+import { themeKeyOf, warnAboutTheme } from "./shared/devThemeCheck";
 import { NO_DIMMED } from "./shared/dimmed";
 import { freeArea, type Insets, normaliseInsets, usableArea } from "./shared/insets";
 import { toMatchSet } from "./shared/matchSet";
@@ -403,6 +404,10 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
   const { width: cardWidth, height: cardHeight } = cardSize;
   // Resolved in render, so a bad width throws where an error boundary can catch it.
   const theme = useMemo(() => resolveTheme(properties.theme), [properties.theme]);
+  // The development warning runs after commit, once per distinct theme value, never in render (spec consumer styles §5).
+  const themeKey = themeKeyOf(theme);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `themeKey` stands for every value of `theme` the checks read
+  useEffect(() => warnAboutTheme(theme), [themeKey]);
 
   const spec = useMemo(() => validateSpec(raw), [raw]);
   const nodesById = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node])), [spec]);
