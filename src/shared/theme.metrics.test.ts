@@ -1,151 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { contrastRatio, over, parseColor, type Rgba } from "../labels/contrast";
-import { tintDirection } from "../territories/familyColours";
-import { TINT_STEPS, tint, tintBand } from "../territories/tint";
-import { visitedFactor } from "../territories/visitedFactor";
-import { ciede2000, simulate, type VisionMode } from "../theme-check/colourVision";
-import { DENSE_FILL_FACTOR, DENSE_NAME_ALPHA } from "./presentation";
+import { parseColor } from "../labels/contrast";
+import { checkTheme, type ThemeMetric } from "../theme-check/checkTheme";
+import { ciede2000, simulate } from "../theme-check/colourVision";
 import { DARK_THEME, DEFAULT_THEME, type Theme } from "./theme";
 
+// The metrics themselves live in `checkTheme` (spec consumer-styles §4): the house themes and a consumer's theme go
+// through the one function. What each metric measures is pinned by the deliberately bad themes in
+// `theme-check/checkTheme.test.ts`; here the house themes must come back clean, one metric per test, on every page.
 const THEMES: Array<[string, Theme, string[]]> = [
   ["light", DEFAULT_THEME, ["#ffffff", "#f7f7f8"]],
   ["dark", DARK_THEME, ["#18181b", "#111114"]],
 ];
 
-/** Every background a point or a name can sit on: the page, bare or under one territory's fill. */
-function backgrounds(theme: Theme, page: Rgba, fillAlpha: number): Rgba[] {
-  return [page, ...theme.palette.map((colour) => over(withAlpha(parseColor(colour), fillAlpha), page))];
-}
-
-function withAlpha(colour: Rgba, alpha: number): Rgba {
-  return [colour[0], colour[1], colour[2], alpha];
-}
+const METRICS: Array<[ThemeMetric, string]> = [
+  ["15", "every palette colour, the neutral and every family tint, as a point, reach 3:1 against what is beneath"],
+  ["16", "names reach 4.5:1 over the guided, dense and visited-ceiling fills, on every colour and tint"],
+  ["17", "every palette pair stays at least ΔE00 9 apart in normal vision and three colour-vision deficiencies"],
+  ["focus", "the keyboard focus outline reaches 3:1 over the visited ceiling, on every palette colour and tint"],
+  ["outline", "a territory outline reaches 3:1 over its own fill at the ceiling and 2.3:1 over a neighbour's"],
+  ["ring", "the unvisited ring keeps a hole of at least 0.5 px"],
+  ["palette", "the palette is opaque and between 2 and 10 colours"],
+];
 
 describe.each(THEMES)("%s theme", (_name, theme, pages) => {
-  // The strongest fill a fully visited territory reaches (spec far-visited). Only names are drawn there: the boost
-  // fades out as points fade in (`paint.visited.test.ts`), because the palette's points reach 3:1 only up to ~0.196 dark (0.218 light).
-  const strongest = theme.territoryFillAlpha * visitedFactor(1);
-  const fillAlphas = [theme.territoryFillAlpha, theme.territoryFillAlpha * DENSE_FILL_FACTOR];
-
-  it("metric 15: every palette colour and the neutral, as a point, reach 3:1 against what is beneath", () => {
-    for (const page of pages.map(parseColor)) {
-      for (const fillAlpha of fillAlphas) {
-        for (const background of backgrounds(theme, page, fillAlpha)) {
-          for (const colour of [...theme.palette, theme.pointNeutral]) {
-            expect(
-              contrastRatio(parseColor(colour), background),
-              `${colour} at fill ${fillAlpha}`,
-            ).toBeGreaterThanOrEqual(3);
-          }
-        }
-      }
-    }
+  it.each(METRICS)("metric %s: %s", (metric) => {
+    for (const page of pages)
+      expect(checkTheme(theme, { page }).filter((problem) => problem.metric === metric)).toEqual([]);
   });
 
-  it("metric 15 and 16 hold for every family tint of every palette colour (spec slice E §5)", () => {
-    const direction = tintDirection(theme);
-    const band = tintBand(theme.palette, direction);
-    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
-    const label = parseColor(theme.territoryLabel);
-    for (const page of pages.map(parseColor)) {
-      for (const fillAlpha of fillAlphas) {
-        const beneath = [page, ...tints.map((colour) => over(withAlpha(parseColor(colour), fillAlpha), page))];
-        for (const background of beneath) {
-          for (const colour of tints)
-            expect(
-              contrastRatio(parseColor(colour), background),
-              `${colour} at fill ${fillAlpha}`,
-            ).toBeGreaterThanOrEqual(3);
-          if (fillAlpha === theme.territoryFillAlpha)
-            expect(contrastRatio(over(label, background), background)).toBeGreaterThanOrEqual(4.5);
-          for (const outline of [
-            theme.focusOutline,
-            theme.selectionRing ?? theme.territoryLabel,
-            theme.edge ?? theme.territoryLabel,
-          ])
-            expect(contrastRatio(parseColor(outline), background), `${outline} over a tint`).toBeGreaterThanOrEqual(3);
-        }
-      }
-    }
-  });
-
-  it("metric 16: names reach 4.5:1 over the visited ceiling, on every palette colour and family tint", () => {
-    const direction = tintDirection(theme);
-    const band = tintBand(theme.palette, direction);
-    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
-    const label = parseColor(theme.territoryLabel);
-    for (const page of pages.map(parseColor))
-      for (const colour of [...theme.palette, ...tints]) {
-        const background = over(withAlpha(parseColor(colour), strongest), page);
-        expect(contrastRatio(over(label, background), background), `${colour} at ${strongest}`).toBeGreaterThanOrEqual(
-          4.5,
-        );
-      }
-  });
-
-  it("metric 15: the keyboard focus outline reaches 3:1 over the visited ceiling, on every palette colour and tint", () => {
-    // The focus outline is the only visible focus at far, where the boost is at full strength (review I1).
-    const direction = tintDirection(theme);
-    const band = tintBand(theme.palette, direction);
-    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
-    for (const page of pages.map(parseColor))
-      for (const colour of [...theme.palette, ...tints]) {
-        const background = over(withAlpha(parseColor(colour), strongest), page);
-        expect(
-          contrastRatio(parseColor(theme.focusOutline), background),
-          `${colour} at ${strongest}`,
-        ).toBeGreaterThanOrEqual(3);
-      }
-  });
-
-  it("metric 15: a territory outline reaches 3:1 over its own fill at the visited ceiling, and 2.3:1 over a neighbour's", () => {
-    // Review M3. The outline is drawn in the territory's full colour. Over its own boosted fill 3:1 holds. Over a
-    // different palette colour's fill it already falls under 3:1 above the base fill in the dark theme (measured:
-    // the pair floor is 3:1 only up to 0.230 light, 0.200 dark), so the cross-colour bar is the measured 2.3:1
-    // floor, pinned so the boost cannot erode it further; the fills themselves differ in hue where two touch.
-    const direction = tintDirection(theme);
-    const band = tintBand(theme.palette, direction);
-    const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
-    const colours = [...theme.palette, ...tints];
-    for (const page of pages.map(parseColor))
-      for (const fill of colours) {
-        const background = over(withAlpha(parseColor(fill), strongest), page);
-        expect(
-          contrastRatio(parseColor(fill), background),
-          `${fill} over itself at ${strongest}`,
-        ).toBeGreaterThanOrEqual(3);
-        for (const outline of colours)
-          expect(
-            contrastRatio(parseColor(outline), background),
-            `${outline} over ${fill} at ${strongest}`,
-          ).toBeGreaterThanOrEqual(2.3);
-      }
-  });
-
-  it("metric 16: territory names reach 4.5:1 over the strongest fill, guided and dense", () => {
-    const label = parseColor(theme.territoryLabel);
-    for (const page of pages.map(parseColor)) {
-      for (const alpha of [theme.territoryFillAlpha, strongest])
-        for (const background of backgrounds(theme, page, alpha)) {
-          expect(contrastRatio(over(label, background), background), `at fill ${alpha}`).toBeGreaterThanOrEqual(4.5);
-        }
-      for (const background of backgrounds(theme, page, theme.territoryFillAlpha * DENSE_FILL_FACTOR)) {
-        const muted = over(withAlpha(label, label[3] * DENSE_NAME_ALPHA), background);
-        expect(contrastRatio(muted, background)).toBeGreaterThanOrEqual(4.5);
-      }
-    }
-  });
-
-  it("metric 17: every palette pair stays at least ΔE00 9 apart in normal vision and three colour-vision deficiencies", () => {
-    const modes: VisionMode[] = ["normal", "protanopia", "deuteranopia", "tritanopia"];
-    for (const mode of modes) {
-      const seen = theme.palette.map((colour) => simulate(parseColor(colour), mode));
-      for (const [index, first] of seen.entries()) {
-        for (const second of seen.slice(index + 1)) {
-          expect(ciede2000(first, second), mode).toBeGreaterThanOrEqual(9);
-        }
-      }
-    }
+  it("passes every check on the page it derives for itself", () => {
+    expect(checkTheme(theme)).toEqual([]);
   });
 
   it("keeps the palette opaque and between 2 and 10 colours", () => {

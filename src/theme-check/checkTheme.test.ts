@@ -90,3 +90,43 @@ describe("checkTheme part one", () => {
     expect(checkTheme({})).toEqual([]);
   });
 });
+
+describe("checkTheme part two", () => {
+  const rest = DEFAULT_THEME.palette.slice(2);
+
+  it("reports two palette colours that are nearly the same (metric 17, normal vision)", () => {
+    const problems = expectProblem({ palette: ["#065781", "#075882", ...rest] }, "17");
+    const found = problems.find((problem) => problem.metric === "17" && problem.subject.includes("normal"));
+    expect(found?.required).toBe(9);
+    expect(found?.subject).toContain("#065781");
+    expect(found?.subject).toContain("#075882");
+  });
+
+  it("reports a pair that is apart in normal vision but collapses under deuteranopia, naming the mode", () => {
+    // Same luminance, opposite on the red-green axis.
+    const palette = ["#8a6a3a", "#5f7a3a", ...rest];
+    const problems = expectProblem({ palette }, "17");
+    expect(problems.some((problem) => problem.subject.includes("deuteranopia"))).toBe(true);
+  });
+
+  it("reports a focus outline that cannot be seen over the fills (focus)", () => {
+    const problems = expectProblem({ focusOutline: "#f0f0f0" }, "focus", { page: "#ffffff" });
+    expect(problems.find((problem) => problem.metric === "focus")?.required).toBe(3);
+  });
+
+  it("reports a palette colour whose own outline vanishes over its fill (outline)", () => {
+    const problems = expectProblem({ palette: ["#f4f4f4", ...DEFAULT_THEME.palette.slice(1)] }, "outline", {
+      page: "#ffffff",
+    });
+    expect(problems.find((problem) => problem.metric === "outline")?.measured).toBeLessThan(3);
+  });
+
+  it.each([
+    ["#ffffff", "#f7f7f8"],
+    ["#18181b", "#111114"],
+  ])("the house themes pass on their pages", (...pages) => {
+    const theme = pages[0] === "#ffffff" ? DEFAULT_THEME : DARK_THEME;
+    for (const page of pages) expect(checkTheme(theme, { page })).toEqual([]);
+    expect(checkTheme(theme)).toEqual([]);
+  });
+});

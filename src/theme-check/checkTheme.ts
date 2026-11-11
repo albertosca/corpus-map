@@ -4,6 +4,7 @@ import { resolveTheme, type ThemeInput } from "../shared/theme";
 import { tintDirection } from "../territories/familyColours";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { visitedFactor } from "../territories/visitedFactor";
+import { ciede2000, simulate, type VisionMode } from "./colourVision";
 
 /** Which accessibility check a problem comes from: the metric numbers of the map-feel spec, plus the extra gates. */
 export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette";
@@ -32,6 +33,12 @@ const MAXIMUM_PALETTE_SIZE = 10;
 const MINIMUM_POINT_CONTRAST = 3;
 const MINIMUM_NAME_CONTRAST = 4.5;
 const MINIMUM_RING_HOLE = 0.5;
+const MINIMUM_PALETTE_DISTANCE = 9;
+const MINIMUM_FOCUS_CONTRAST = 3;
+const MINIMUM_OWN_OUTLINE_CONTRAST = 3;
+// Measured floor of a territory outline over a neighbouring colour's fill (metric 15); the pair already fails 3:1 above the base fill.
+const MINIMUM_NEIGHBOUR_OUTLINE_CONTRAST = 2.3;
+const VISION_MODES: readonly VisionMode[] = ["normal", "protanopia", "deuteranopia", "tritanopia"];
 const DEFAULT_UNVISITED_RING_WIDTH = 1.5;
 
 const withAlpha = (colour: Rgba, alpha: number): Rgba => [colour[0], colour[1], colour[2], alpha];
@@ -231,6 +238,53 @@ export function checkTheme(input: ThemeInput, options: CheckThemeOptions = {}): 
       MINIMUM_NAME_CONTRAST,
       "Move territoryLabel further from the palette colours, or lower territoryFillAlpha.",
     );
+  }
+  // Metric 17: every palette pair stays apart in normal vision and three colour-vision deficiencies.
+  for (const mode of VISION_MODES) {
+    const seen = theme.palette.map((colour) => simulate(parseColor(colour), mode));
+    for (const [index, first] of seen.entries())
+      for (const [offset, second] of seen.slice(index + 1).entries())
+        findings.expectAtLeast(
+          "17",
+          `pair ${mode}`,
+          () => `${theme.palette[index]} and ${theme.palette[index + 1 + offset]} in ${mode} vision`,
+          ciede2000(first, second),
+          MINIMUM_PALETTE_DISTANCE,
+          "Move those two palette colours further apart in lightness or hue, so neighbouring territories stay distinguishable.",
+        );
+  }
+
+  // Keyboard focus is the only visible focus at far, where the visited boost is at full strength; and a territory's outline
+  // must read over its own boosted fill and, at the measured floor, over a neighbour's.
+  const colours = [...theme.palette, ...tints];
+  for (const fill of colours) {
+    const background = over(withAlpha(parseColor(fill), strongest), page);
+    findings.expectAtLeast(
+      "focus",
+      "visited",
+      () =>
+        `the keyboard focus outline (${theme.focusOutline}) over ${fill} at the visited ceiling (${strongest.toFixed(3)})`,
+      contrastRatio(parseColor(theme.focusOutline), background),
+      MINIMUM_FOCUS_CONTRAST,
+      "Pick a focus colour with more contrast against the palette, or lower territoryFillAlpha.",
+    );
+    findings.expectAtLeast(
+      "outline",
+      "own",
+      () => `the outline of ${fill} over its own fill at the visited ceiling (${strongest.toFixed(3)})`,
+      contrastRatio(parseColor(fill), background),
+      MINIMUM_OWN_OUTLINE_CONTRAST,
+      "Move that colour away from the page colour, or lower territoryFillAlpha.",
+    );
+    for (const outline of colours)
+      findings.expectAtLeast(
+        "outline",
+        "neighbour",
+        () => `the outline of ${outline} over ${fill}'s fill at the visited ceiling (${strongest.toFixed(3)})`,
+        contrastRatio(parseColor(outline), background),
+        MINIMUM_NEIGHBOUR_OUTLINE_CONTRAST,
+        "Two touching territories need colours that stay apart, or a lower territoryFillAlpha.",
+      );
   }
   return findings.problems;
 }
