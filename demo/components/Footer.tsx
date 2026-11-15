@@ -8,6 +8,9 @@ import {
   FOOTER_MAXIMUM_WIDTH,
   FOOTER_MINIMUM_BAND_WIDTH,
   GUTTER,
+  INDICATOR_BOTTOM,
+  INDICATOR_HEIGHT_ESTIMATE,
+  INDICATOR_LEFT,
 } from "./floatingLayout";
 import { useViewportWidth } from "./narrow";
 import { BUTTON_WIDTH, zoomControlsRight } from "./ZoomControls";
@@ -33,7 +36,10 @@ export interface FooterPlacement {
   left: number;
   right: number;
   bottom: number;
+  /** Above the whole bottom row (the last resort: the map's free area pays for it). */
   lifted: boolean;
+  /** Above the indicator, beside the minimap: inside the bottom row's height, so it costs the map nothing. */
+  stacked: boolean;
 }
 
 /**
@@ -42,6 +48,8 @@ export interface FooterPlacement {
  * open). The rule: in the bottom row, between the bottom-left run
  * (minimap, then the indicator beside it) and the zoom controls in whichever position they are
  * in, when that band is at least `FOOTER_MINIMUM_BAND_WIDTH` wide; otherwise
+ * stacked one gutter above the indicator, from the minimap's right edge to the zoom controls (still inside the
+ * bottom row's height, so a short window does not lose its map to it), when that band is wide enough; otherwise
  * lifted one gutter above the whole bottom row, from the left gutter to the
  * zoom controls' right edge. Either way the band clears every other bottom
  * control by construction, from the same constants they are placed with.
@@ -51,9 +59,13 @@ export function footerPlacement(viewportWidth: number, drawerOpen: boolean): Foo
   const left = BOTTOM_LEFT_COLUMN_WIDTH + GUTTER;
   const right = zoomRight + BUTTON_WIDTH + GUTTER;
   if (viewportWidth - left - right >= FOOTER_MINIMUM_BAND_WIDTH) {
-    return { left, right, bottom: GUTTER, lifted: false };
+    return { left, right, bottom: GUTTER, lifted: false, stacked: false };
   }
-  return { left: GUTTER, right: zoomRight, bottom: BOTTOM_ROW_HEIGHT + GUTTER, lifted: true };
+  if (viewportWidth - INDICATOR_LEFT - right >= FOOTER_MINIMUM_BAND_WIDTH) {
+    const bottom = INDICATOR_BOTTOM + INDICATOR_HEIGHT_ESTIMATE + GUTTER;
+    return { left: INDICATOR_LEFT, right, bottom, lifted: false, stacked: true };
+  }
+  return { left: GUTTER, right: zoomRight, bottom: BOTTOM_ROW_HEIGHT + GUTTER, lifted: true, stacked: false };
 }
 
 /**
@@ -110,12 +122,13 @@ export function Footer({ corpusId, drawerOpen = false, inline = false }: FooterP
       </footer>
     );
   }
-  const { left, right, bottom, lifted } = footerPlacement(viewportWidth, drawerOpen);
+  const { left, right, bottom, lifted, stacked } = footerPlacement(viewportWidth, drawerOpen);
   return (
     <footer
       data-footer
       data-floating-control
       data-footer-lifted={lifted ? "" : undefined}
+      data-footer-stacked={stacked ? "" : undefined}
       style={{ ...style, left, right, bottom }}
     >
       {text}
