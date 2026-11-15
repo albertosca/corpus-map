@@ -12,6 +12,9 @@ updates:
       # @babel/eslint-parser's ceiling is ESLint 9 (TypeScript 7 has no JS compiler API for typescript-eslint); see CLAUDE.md.
       - dependency-name: eslint
         update-types: ["version-update:semver-major"]
+      # @babel/eslint-parser 7 needs @babel/core 7 (npm ERESOLVE against core 8), and its 8 line has to follow ESLint 10.
+      - dependency-name: "@babel/*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: uv
     directory: /pipeline/arxiv
     schedule:
