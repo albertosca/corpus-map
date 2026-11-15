@@ -13,7 +13,7 @@ jobs:
       # astral-sh/setup-uv publishes no floating major-version tag (verified
       # via `git ls-remote --tags`: only full semver, e.g. v10.2.0) — pinned
       # to the latest release instead.
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.12"
       - run: uv sync --locked
