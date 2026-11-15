@@ -56,7 +56,8 @@
     "api:check": "npm run build && node scripts/api-guard.mjs",
     "api:update": "npm run build && node scripts/api-guard.mjs --update",
     "size": "npm run build && node scripts/size.mjs",
-    "size:badge": "npm run build && node scripts/size.mjs --write-badge"
+    "size:badge": "npm run build && node scripts/size.mjs --write-badge",
+    "coverage:badge": "node scripts/coverage-badge.mjs"
   },
   "sizeLimit": {
     "file": "dist/corpus-map.js",

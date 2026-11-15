@@ -1,8 +1,8 @@
 🇺🇸 [English](README.md) · 🇧🇷 [Português](README.pt.md)
 
-[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml) ![gzip size](docs/badges/size.svg)
+[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml) ![gzip size](docs/badges/size.svg) [![Cobertura de linhas](docs/badges/coverage.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml)
 
-Os limiares de cobertura de 90% de linhas / 85% de branches são impostos dentro do job `test`, e o relatório lcov é publicado como artefato de CI a cada execução; um badge de cobertura hospedado está deliberadamente ausente até que um serviço de cobertura (Codecov ou similar) seja conectado.
+Os limiares de cobertura de 90% de linhas / 85% de branches são impostos dentro do job `test`. A cada push em `main`, esse mesmo job também escreve o badge de cobertura acima (`docs/badges/coverage.svg`) a partir do relatório lcov que os testes acabaram de gerar, então o número é medido pelo próprio CI do repositório, sem serviço de terceiros; o relatório lcov também é publicado como artefato de CI a cada execução.
 
 ## O que é
 

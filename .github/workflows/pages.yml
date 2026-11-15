@@ -1,0 +1,44 @@
+name: Pages
+
+# Publishes the demo to GitHub Pages. The guard below keeps the job from
+# running (and failing) while the repository is private, where Pages is not
+# available; it starts working by itself once the repository is public.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The site lives under /corpus-map/, so the base path is set here and
+      # not in the config the local `npm run dev` also reads.
+      - run: npx vite build --config vite.demo.config.ts --base /corpus-map/
+      # Vite writes the bundled dependencies' licences to a dot-directory,
+      # which the Pages artifact upload leaves out: copy it to a visible name.
+      - run: cp dist-demo/.vite/license.md dist-demo/THIRD-PARTY-LICENSES.md
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist-demo
+      - id: deployment
+        uses: actions/deploy-pages@v5

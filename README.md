@@ -1,8 +1,8 @@
 🇺🇸 [English](README.md) · 🇧🇷 [Português](README.pt.md)
 
-[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml) ![gzip size](docs/badges/size.svg)
+[![CI](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml) [![Lint](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml/badge.svg)](https://github.com/albertosca/corpus-map/actions/workflows/lint.yml) ![gzip size](docs/badges/size.svg) [![Line coverage](docs/badges/coverage.svg)](https://github.com/albertosca/corpus-map/actions/workflows/ci.yml)
 
-Coverage thresholds of 90% lines / 85% branches are enforced inside the `test` job and the lcov report is published as a CI artifact on every run; a hosted coverage badge is deliberately absent until a coverage service (Codecov or similar) is connected.
+Coverage thresholds of 90% lines / 85% branches are enforced inside the `test` job. On every push to `main` that job also writes the coverage badge above (`docs/badges/coverage.svg`) from the lcov report the tests just produced, so the number is measured by this repository's own CI, with no third-party service; the lcov report is also published as a CI artifact on every run.
 
 ## What it is
 

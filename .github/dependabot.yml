@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # @babel/eslint-parser's ceiling is ESLint 9 (TypeScript 7 has no JS compiler API for typescript-eslint); see CLAUDE.md.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: uv
+    directory: /pipeline/arxiv
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
