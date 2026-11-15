@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!pipeline", "!demo/corpora/arxiv.json", "!demo/corpora/arxiv.meta.json"]
+    "includes": ["**", "!**/*.md", "!pipeline", "!demo/corpora/arxiv.json", "!demo/corpora/arxiv.meta.json"]
   },
   "formatter": {
     "enabled": true,
@@ -31,6 +31,10 @@
   },
   "overrides": [
     { "includes": ["src/**"], "linter": { "rules": { "suspicious": { "noConsole": "error" } } } },
+    {
+      "includes": ["**/*.test.tsx"],
+      "linter": { "rules": { "correctness": { "noComponentHookFactories": "off" } } }
+    },
     {
       "includes": ["api/**"],
       "formatter": { "enabled": false },
