@@ -10,7 +10,7 @@ import { DEFAULT_TUNING } from "../src/shared/tuning";
 import { fitScene } from "../src/viewport/fitScene";
 
 // One frame at 60fps. This is the stated target, not a measured figure — see
-// the note in docs/superpowers/specs/2026-09-13-corpus-map-design.md. It is
+// the note in the 2026-09-13 corpus-map design spec (kept in the owner's private docs). It is
 // scheduled to be replaced with a number derived from a real CI measurement
 // plus headroom, once the first CI run produces one.
 const BUDGET_MS = 16;

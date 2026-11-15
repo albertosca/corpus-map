@@ -3,6 +3,8 @@ dist/
 dist-demo/
 coverage/
 .superpowers/
+# Symlink to the owner's private docs repository (specs, plans, backlog); never committed
+docs/superpowers
 .claude/worktrees/
 
 # pipeline/arxiv (Python, managed by uv)
