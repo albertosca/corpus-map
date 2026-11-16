@@ -75,8 +75,13 @@ export function Indicator({ store, inline = false }: IndicatorProps): ReactEleme
   const view = useSyncExternalStore(store.subscribe, store.get);
   if (!view) return null;
   return (
-    <div data-indicator {...(inline ? {} : { "data-floating-control": "" })} style={inline ? inlineStyle : style}>
+    <section
+      data-indicator
+      aria-label="Map view"
+      {...(inline ? {} : { "data-floating-control": "" })}
+      style={inline ? inlineStyle : style}
+    >
       {view.regime} · {view.ratio.toFixed(1)}× · {view.visibleCount} {view.visibleCount === 1 ? "item" : "items"}
-    </div>
+    </section>
   );
 }

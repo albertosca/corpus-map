@@ -28,6 +28,15 @@ describe("Indicator (showcase Task 5)", () => {
     expect(screen.getByText("near · 12.0× · 0 items")).not.toBeNull();
   });
 
+  it("sits in a labelled region, floating or inline, so no page content is outside a landmark", () => {
+    const view: CorpusMapView = { regime: "far", ratio: 1, visibleCount: 8000, presentation: "guided" };
+    const floating = render(<Indicator store={storeWith(view)} />);
+    expect(screen.getByRole("region", { name: "Map view" }).textContent).toBe("far · 1.0× · 8000 items");
+    floating.unmount();
+    render(<Indicator store={storeWith(view)} inline />);
+    expect(screen.getByRole("region", { name: "Map view" }).textContent).toBe("far · 1.0× · 8000 items");
+  });
+
   it("rounds the ratio to one decimal even when it lands on a whole number", () => {
     render(<Indicator store={storeWith({ regime: "far", ratio: 1, visibleCount: 8000, presentation: "guided" })} />);
     expect(screen.getByText("far · 1.0× · 8000 items")).not.toBeNull();
