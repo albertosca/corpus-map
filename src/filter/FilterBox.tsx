@@ -200,7 +200,8 @@ export function FilterBox(properties: FilterBoxProps): ReactElement {
           No values to filter by
         </span>
       ) : null}
-      <fieldset ref={panelReference} id={panelIdentifier} aria-label={label} hidden={!open} style={panel}>
+      <fieldset ref={panelReference} id={panelIdentifier} hidden={!open} style={panel}>
+        <legend style={VISUALLY_HIDDEN}>{label}</legend>
         {selected.size === 0 ? null : (
           <button
             type="button"

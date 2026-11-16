@@ -38,6 +38,16 @@ describe("FilterBox (spec filter §3, §5)", () => {
     expect(onMatches).not.toHaveBeenCalled();
   });
 
+  it("names its group with a legend, the first child of the fieldset, not only an aria-label", () => {
+    mount();
+    openPanel();
+    const group = screen.getByRole("group", { name: "Filter" });
+    expect(group.tagName).toBe("FIELDSET");
+    expect(group.firstElementChild?.tagName).toBe("LEGEND");
+    expect(group.firstElementChild?.textContent).toBe("Filter");
+    expect(group.hasAttribute("aria-label")).toBe(false);
+  });
+
   it("opens a group of labelled checkboxes with their counts, sorted by label", () => {
     mount();
     openPanel();
