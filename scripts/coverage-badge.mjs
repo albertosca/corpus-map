@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 // number this repository measured (no third-party service, no token).
 // Usage: node scripts/coverage-badge.mjs [lcov.info] [output.svg]
 const lcovPath = process.argv[2] ?? "coverage/lcov.info";
-const outputPath = process.argv[3] ?? "docs/badges/coverage.svg";
+const outputPath = process.argv[3] ?? "coverage/coverage.svg";
 
 /** Line coverage: the sum of every `LF:` (found) and `LH:` (hit) record. */
 export function lineCoverage(lcov) {

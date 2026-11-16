@@ -28,19 +28,28 @@ jobs:
           name: coverage
           path: coverage/lcov.info
       # The coverage badge is an SVG this job writes from the lcov report the
-      # tests just produced: no third-party service, no token. `[skip ci]`
-      # keeps the bot commit from starting another run.
-      - name: Update the coverage badge
+      # tests just produced: no third-party service, no token. It goes to the
+      # `badges` branch, never to `main`, so the required checks and the
+      # protection on `main` never block the bot. `[skip ci]` keeps the bot
+      # commit from starting another run.
+      - name: Publish the coverage badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          npm run coverage:badge
-          if [ -n "$(git status --porcelain -- docs/badges/coverage.svg)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add docs/badges/coverage.svg
+          node scripts/coverage-badge.mjs coverage/lcov.info "$RUNNER_TEMP/coverage.svg"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin badges > /dev/null; then
+            git fetch --depth=1 origin badges
+            git worktree add "$RUNNER_TEMP/badges" FETCH_HEAD
+          else
+            git worktree add --orphan -b badges "$RUNNER_TEMP/badges"
+          fi
+          cd "$RUNNER_TEMP/badges"
+          cp "$RUNNER_TEMP/coverage.svg" coverage.svg
+          git add coverage.svg
+          if ! git diff --cached --quiet; then
             git commit -m "Update the coverage badge [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            git push origin HEAD:badges
           fi
 
   bench:
