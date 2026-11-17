@@ -4,10 +4,11 @@ import { resolveTheme, type ThemeInput } from "../shared/theme";
 import { tintDirection } from "../territories/familyColours";
 import { TINT_STEPS, tint, tintBand } from "../territories/tint";
 import { visitedFactor } from "../territories/visitedFactor";
+import { checkAccent } from "./accent";
 import { ciede2000, simulate, type VisionMode } from "./colourVision";
 
 /** Which accessibility check a problem comes from: the metric numbers of the map-feel spec, plus the extra gates. */
-export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette";
+export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette" | "accent";
 
 export interface ThemeProblem {
   metric: ThemeMetric;
@@ -55,7 +56,7 @@ function defaultPage(ground: string, direction: 1 | -1): string {
 }
 
 /** Keeps the worst case per `metric:kind`, so a failing palette yields a short readable list, not thousands of rows. */
-class Findings {
+export class Findings {
   private readonly worst = new Map<string, ThemeProblem>();
 
   expectAtLeast(
@@ -314,5 +315,6 @@ export function checkTheme(input: ThemeInput, options: CheckThemeOptions = {}): 
         "Two touching territories need colours that stay apart, or a lower territoryFillAlpha.",
       );
   }
+  checkAccent(theme.tones, theme.palette, findings);
   return findings.problems;
 }
