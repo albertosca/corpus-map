@@ -155,7 +155,7 @@ function checkReadable(theme: ReturnType<typeof resolveTheme>, findings: Finding
 
 /**
  * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
- * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page` and an invalid width (a `RangeError` from `resolveTheme`, which runs first).
+ * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page`, an invalid width and an unreadable or unknown `tones` role (a `RangeError` from `resolveTheme`, which runs first).
  */
 export function checkTheme(input: ThemeInput, options: CheckThemeOptions = {}): ThemeProblem[] {
   const theme = resolveTheme(input);

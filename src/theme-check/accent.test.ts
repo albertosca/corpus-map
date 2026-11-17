@@ -29,6 +29,14 @@ describe("accent metric", () => {
     );
   });
 
+  it("fails an accent that a territory colour matches, through the palette check", () => {
+    // A consumer palette holding the accent itself: no colour-vision mode can tell them apart.
+    expect(accentSubjects({ palette: ["#f26b1d", "#141b26"] })).toMatch(
+      /colour difference \(protanopia\) between accent and #f26b1d/,
+    );
+    expect(accentSubjects(DEFAULT_THEME)).not.toMatch(/colour difference/);
+  });
+
   it("fails an accent with too little chroma", () => {
     expect(accentSubjects({ tones: { accent: "#8a8f98", accentText: "#4a4f58" } })).toMatch(/chroma/);
   });
