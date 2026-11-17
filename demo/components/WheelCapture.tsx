@@ -39,8 +39,8 @@ const copyButtonStyle: CSSProperties = {
   padding: "4px 10px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   fontSize: 12,
   // This button lives inside `TuningPanel`'s `data-floating-control`
   // (`WheelCapture` has no floating container of its own), so a
@@ -53,7 +53,7 @@ const copyButtonStyle: CSSProperties = {
 const statusStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: token("textMuted"),
+  color: token("muted"),
 };
 
 const tableWrapStyle: CSSProperties = {
@@ -75,7 +75,7 @@ const thStyle: CSSProperties = {
   fontWeight: 600,
   position: "sticky",
   top: 0,
-  background: token("surfaceSolid"),
+  background: token("surface"),
 };
 
 const tdStyle: CSSProperties = {

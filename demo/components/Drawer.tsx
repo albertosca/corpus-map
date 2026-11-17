@@ -63,10 +63,10 @@ const panelStyle: CSSProperties = {
   gap: 10,
   overflowY: "auto",
   padding: "16px 18px",
-  background: token("surfaceSolid"),
+  background: token("surface"),
   borderLeft: `1px solid ${token("border")}`,
   boxShadow: `-2px 0 10px ${token("shadow")}`,
-  color: token("text"),
+  color: token("ink"),
   fontSize: 14,
 };
 
@@ -83,11 +83,11 @@ const sheetStyle: CSSProperties = {
   gap: 10,
   overflowY: "auto",
   padding: "0 18px 16px",
-  background: token("surfaceSolid"),
+  background: token("surface"),
   borderTop: `1px solid ${token("border")}`,
   borderRadius: "12px 12px 0 0",
   boxShadow: `0 -2px 10px ${token("shadow")}`,
-  color: token("text"),
+  color: token("ink"),
   fontSize: 14,
 };
 
@@ -105,7 +105,7 @@ const handleStyle: CSSProperties = {
   minHeight: TOUCH_TARGET_SIZE,
   padding: 0,
   border: "none",
-  background: token("surfaceSolid"),
+  background: token("surface"),
   cursor: "grab",
   touchAction: "none",
 };
@@ -147,8 +147,8 @@ const closeButtonStyle: CSSProperties = {
   padding: "6px 10px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   fontSize: 13,
   // A percentage `maxWidth` resolves against the containing block, so this
   // genuinely caps the button at the drawer's own width -- real CSS
@@ -163,7 +163,7 @@ const metaLineStyle: CSSProperties = {
 };
 
 const linkStyle: CSSProperties = {
-  color: token("link"),
+  color: token("accentText"),
 };
 
 const definitionListStyle: CSSProperties = {
@@ -176,7 +176,7 @@ const definitionListStyle: CSSProperties = {
 
 const termStyle: CSSProperties = {
   margin: 0,
-  color: token("textMuted"),
+  color: token("muted"),
 };
 
 const definitionStyle: CSSProperties = {
@@ -208,15 +208,15 @@ const relatedButtonStyle: CSSProperties = {
   padding: "6px 8px",
   borderRadius: 4,
   border: `1px solid ${token("border")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   font: "inherit",
   textAlign: "left",
   cursor: "pointer",
 };
 
 const relatedReasonStyle: CSSProperties = {
-  color: token("textMuted"),
+  color: token("muted"),
   fontSize: 12,
 };
 

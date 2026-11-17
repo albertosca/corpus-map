@@ -34,11 +34,11 @@ const panelStyle: CSSProperties = {
   boxSizing: "border-box",
   overflowY: "hidden",
   padding: 12,
-  background: token("surfaceSolid"),
+  background: token("surface"),
   border: `1px solid ${token("border")}`,
   borderRadius: 6,
   boxShadow: `0 2px 10px ${token("shadow")}`,
-  color: token("text"),
+  color: token("ink"),
   fontSize: 13,
 };
 

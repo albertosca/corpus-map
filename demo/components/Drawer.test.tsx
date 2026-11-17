@@ -288,18 +288,18 @@ describe("Drawer side layout styles (spec mobile §6: unchanged)", () => {
     expect(drawer.className).toBe("cm-drawer-panel");
     expect(styles).toMatchInlineSnapshot(`
       [
-        "position: fixed; top: 48px; right: 0px; bottom: 0px; width: 90vw; max-width: 320px; z-index: 20; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding: 16px 18px; background: var(--surface-solid); border-left: 1px solid var(--border); box-shadow: -2px 0 10px var(--shadow); color: var(--text); font-size: 14px;",
+        "position: fixed; top: 48px; right: 0px; bottom: 0px; width: 90vw; max-width: 320px; z-index: 20; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding: 16px 18px; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -2px 0 10px var(--shadow); color: var(--ink); font-size: 14px;",
         "display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;",
         "margin: 0px; font-size: 16px; font-weight: 600; line-height: 1.35;",
-        "flex-shrink: 0; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 13px; max-width: 100%;",
+        "flex-shrink: 0; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--panel); color: var(--ink); font-size: 13px; max-width: 100%;",
         "margin: 0px;",
         "margin: 0px;",
         "margin: 0px;",
-        "color: var(--link);",
+        "color: var(--accent-text);",
         "margin: 6px 0px 0px; font-size: 14px; font-weight: 600;",
         "margin: 0px; padding: 0px; list-style: none; display: flex; flex-direction: column; gap: 6px;",
-        "display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; max-width: 100%; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer;",
-        "color: var(--text-muted); font-size: 12px;",
+        "display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; max-width: 100%; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel); color: var(--ink); font: inherit; text-align: left; cursor: pointer;",
+        "color: var(--muted); font-size: 12px;",
       ]
     `);
   });

@@ -53,9 +53,9 @@ const style: CSSProperties = {
   whiteSpace: "nowrap",
   padding: "4px 10px",
   borderRadius: 4,
-  background: token("surface"),
+  background: token("panel"),
   border: `1px solid ${token("border")}`,
-  color: token("text"),
+  color: token("ink"),
   fontSize: 13,
 };
 
