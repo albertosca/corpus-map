@@ -162,7 +162,10 @@ describe("CorpusMap keyboard focus on the canvas (2026-09-25 review, B10)", () =
     // context's width, which is where a leaked focus width would show. This
     // fake canvas has no document, so the layer takes its fallback path.
     const lastFrame = frames[frames.length - 1] ?? [];
-    const boundaries = lastFrame.filter((stroke) => DEFAULT_THEME.palette.includes(stroke.style));
+    // The darkest slate step is the ink, which is also the focus outline's colour: tell them apart by what they are.
+    const boundaries = lastFrame.filter(
+      (stroke) => DEFAULT_THEME.palette.includes(stroke.style) && !isFocusStyle(stroke),
+    );
     expect(boundaries.length).toBeGreaterThan(0);
     for (const boundary of boundaries) expect(boundary.width).toBe(TERRITORY_OUTLINE_WIDTH);
     const fillEdges = lastFrame.filter((stroke) => stroke.style === "transparent");
