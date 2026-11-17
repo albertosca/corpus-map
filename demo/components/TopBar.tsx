@@ -36,6 +36,8 @@ interface TopBarProps {
         onGo: (id: string) => void;
         /** How the list orders its results (the library default when absent). */
         rank?: RankRule | undefined;
+        /** Results show and nothing is selected: "Show on map" takes the screen's one accent fill. */
+        accentSpot?: boolean | undefined;
       }
     | undefined;
   /** The attribute filter (spec filter §6); absent draws none. Wide: after the search; narrow: first in the Menu. */
@@ -46,6 +48,9 @@ interface TopBarProps {
 
 /** Where the search runs, read by the input as its description. */
 const SEARCH_HINT = "Searches titles and details in your browser";
+
+/** A wrapper that adds no box of its own: the bar's flex layout sees the search box as before. */
+const CONTENTS_STYLE: CSSProperties = { display: "contents" };
 
 /** The popover's id, which the Menu button's `aria-controls` names. */
 const MENU_ID = "top-bar-menu";
@@ -275,16 +280,18 @@ export function TopBar({
           ))}
         </select>
         {search ? (
-          <SearchBox
-            spec={search.spec}
-            onMatches={search.onMatches}
-            onShow={search.onShow}
-            onGo={search.onGo}
-            rank={search.rank}
-            hint={SEARCH_HINT}
-            touchTargets
-            style={narrowSearchStyle}
-          />
+          <span data-accent-spot={search.accentSpot ? "on" : "off"} style={CONTENTS_STYLE}>
+            <SearchBox
+              spec={search.spec}
+              onMatches={search.onMatches}
+              onShow={search.onShow}
+              onGo={search.onGo}
+              rank={search.rank}
+              hint={SEARCH_HINT}
+              touchTargets
+              style={narrowSearchStyle}
+            />
+          </span>
         ) : null}
         <button
           type="button"
@@ -364,15 +371,17 @@ export function TopBar({
         ))}
       </select>
       {search ? (
-        <SearchBox
-          spec={search.spec}
-          onMatches={search.onMatches}
-          onShow={search.onShow}
-          onGo={search.onGo}
-          rank={search.rank}
-          hint={SEARCH_HINT}
-          style={searchStyle}
-        />
+        <span data-accent-spot={search.accentSpot ? "on" : "off"} style={CONTENTS_STYLE}>
+          <SearchBox
+            spec={search.spec}
+            onMatches={search.onMatches}
+            onShow={search.onShow}
+            onGo={search.onGo}
+            rank={search.rank}
+            hint={SEARCH_HINT}
+            style={searchStyle}
+          />
+        </span>
       ) : null}
       {filter ? <FilterBox spec={filter.spec} attribute={filter.attribute} onMatches={filter.onMatches} /> : null}
       {assistant ? (

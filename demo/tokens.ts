@@ -41,8 +41,21 @@ export function token(name: TokenName): string {
   return `var(${variableName(name)})`;
 }
 
+/**
+ * The one accent fill of the demo's screen: the "Show on map" button of the library's search box while results show
+ * and nothing is selected (the selected item's dot is the spot afterwards). The box is the library's, so it carries
+ * neither a class nor a data attribute: the demo marks the wrapper and this rule reaches the one button that has no
+ * `aria-label` (Clear search has one). `!important` because the box styles its controls inline.
+ */
+export const ACCENT_SPOT_RULE = `[data-accent-spot="on"] search button:not([aria-label]) {
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
+  border-color: transparent !important;
+}
+`;
+
 export function tokenStylesheet(): string {
   const block = (scheme: "light" | "dark") =>
     (Object.keys(TOKENS) as TokenName[]).map((name) => `  ${variableName(name)}: ${TOKENS[name][scheme]};`).join("\n");
-  return `:root {\n${block("light")}\n}\n@media (prefers-color-scheme: dark) {\n:root {\n${block("dark")}\n}\n}\n`;
+  return `:root {\n${block("light")}\n}\n@media (prefers-color-scheme: dark) {\n:root {\n${block("dark")}\n}\n}\n${ACCENT_SPOT_RULE}`;
 }

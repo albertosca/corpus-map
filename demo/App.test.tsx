@@ -2466,6 +2466,35 @@ describe("App (showcase Task 5)", () => {
       expect(other.getAttribute("aria-description")).toBeNull();
     });
 
+    describe("accent count per screen: 0 or 1", () => {
+      // The one accent spot is Show on map while results show and nothing is selected; once an item is selected its
+      // dot (a canvas draw, pinned in paintSelection.test.ts) is the spot and the button goes back to an outline.
+      const spots = () => document.querySelectorAll('[data-accent-spot="on"]').length;
+
+      it("is 0 with no search, 1 while results show, 0 again once an item is selected, 0 after clearing", async () => {
+        await renderApp(SEARCH_SPEC);
+        await screen.findByText(/1\.0×/);
+        zoomToNear();
+        expect(spots()).toBe(0);
+        typeQuery("matching");
+        await screen.findByText("1 result");
+        expect(spots()).toBe(1);
+        fireEvent.click(await screen.findByRole("button", { name: "Graph matching" }));
+        await screen.findByRole("dialog");
+        expect(spots()).toBe(0);
+        fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+        expect(spots()).toBe(0);
+      });
+
+      it("is 0 for a query with no result", async () => {
+        await renderApp(SEARCH_SPEC);
+        await screen.findByText(/1\.0×/);
+        typeQuery("zzzz");
+        await screen.findByText("No results");
+        expect(spots()).toBe(0);
+      });
+    });
+
     it("fits the view around the matches with Show on map", async () => {
       await renderApp(SEARCH_SPEC);
       await screen.findByText(/1\.0×/);

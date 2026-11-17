@@ -636,6 +636,7 @@ export function App({ loadArxiv }: AppProps = {}) {
           onShow: () => mapReference.current?.revealAll(framing(searchMatches ?? [], filterMatches)),
           onGo: handleGoToResult,
           rank: searchRank,
+          accentSpot: selectedId === null && searchMatches !== null && searchMatches.length > 0,
         }}
         filter={
           // Like the search, mounted with an empty spec while the corpus loads, so a retry clears it.
