@@ -43,7 +43,7 @@ The library is agnostic about domain exactly to the extent that this contract is
   - A territory's fill gets fuller the larger its visited share: nearest quarter, from today's alpha up to 1.5 times it. A spec with no visited node looks exactly as before.
   - A family's share is taken over its leaves.
   - The territory button in the accessible tree adds "N of M visited".
-  - The boost fades out as the points are drawn, because the palette's points keep 3:1 contrast over a fill only up to about 0.196 (dark) or 0.218 (light).
+  - The boost fades out as the points are drawn, because the palette's points keep 3:1 contrast over a fill only up to about 0.166 (dark) or 0.168 (light).
 
 ### Territories
 
