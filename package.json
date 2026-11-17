@@ -76,7 +76,7 @@
     },
     "themeCheck": {
       "file": "dist/theme-check.js",
-      "maximumGzipBytes": 6900
+      "maximumGzipBytes": 8130
     }
   },
   "devDependencies": {

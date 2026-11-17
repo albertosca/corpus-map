@@ -14,7 +14,7 @@ const fromLinear = (channel: number) => {
   return Math.round(Math.min(1, Math.max(0, encoded)) * 255);
 };
 
-function toOklab(red: number, green: number, blue: number): [number, number, number] {
+export function toOklab(red: number, green: number, blue: number): [number, number, number] {
   const [linearRed, linearGreen, linearBlue] = [toLinear(red), toLinear(green), toLinear(blue)];
   const long = Math.cbrt(0.4122214708 * linearRed + 0.5363325363 * linearGreen + 0.0514459929 * linearBlue);
   const medium = Math.cbrt(0.2119034982 * linearRed + 0.6806995451 * linearGreen + 0.1073969566 * linearBlue);
