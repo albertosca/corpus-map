@@ -653,6 +653,8 @@ export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/s
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme, ThemeInput } from "./shared/theme";
 export { DARK_THEME, DEFAULT_THEME, resolveTheme } from "./shared/theme";
+export type { Tones } from "./shared/tones";
+export { DARK_TONES, DEFAULT_TONES } from "./shared/tones";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 export type { TerritoryGroup } from "./territories/groups";
@@ -1266,13 +1268,16 @@ import { type Viewport } from "../viewport/viewport";
 /** Clear space between the keyboard focus ring's outer edge and the selection ring. */
 export declare const SELECTION_RING_GAP = 3;
 export declare const SELECTION_RING_WIDTH = 2;
+/** The selected dot is drawn this much larger than a plain point, so the one accent fill reads as a mark, not a recoloured point. */
+export declare const SELECTED_DOT_GROWTH = 1;
 /**
- * The selected item: the point, a gap, then a ring outside where the
+ * The selected item: its dot filled with the theme's one accent (the only
+ * accent fill on the map), a gap, then a ring outside where the
  * keyboard focus ring sits, so the two differ by shape and position, not
  * only by colour (WCAG 2.2 SC 1.4.1; spec slice C §5). Drawn inside the
  * point layer, so it fades with the points and is absent at far.
  */
-export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel" | "selectionRingWidth">, id: string): void;
+export declare function paintSelection(surface: Surface, scene: Scene, viewport: Viewport, theme: Pick<Theme, "pointRadius" | "focusOutlineWidth" | "selectionRing" | "territoryLabel" | "selectionRingWidth" | "tones">, id: string): void;
 
 // search/SearchBox.d.ts
 import { type CSSProperties, type ReactElement } from "react";
@@ -1864,7 +1869,15 @@ export declare function canvasSurface(context: CanvasRenderingContext2D): Surfac
 
 // shared/theme.d.ts
 import type { LabelClass } from "../labels/placement";
+import { type Tones } from "./tones";
 export interface Theme {
+    /**
+     * The eight colour roles (spec two-tone-accent §3): `ground`, `surface`, `secondBase`, `ink`, `muted`,
+     * `accent`, `onAccent`, `accentText`. Passing `tones` to `resolveTheme` re-derives every field a role
+     * decides (names, points, cards, tooltip, selection ring, focus, edges) from them; a field set
+     * explicitly still wins over its role.
+     */
+    tones: Tones;
     territoryLabel: string;
     /**
      * Fonts of the territory names by class; the family names use `large`, and
@@ -1939,8 +1952,14 @@ export interface Theme {
  * lays it over `DEFAULT_THEME`.
  */
 export type ThemeInput = {
-    [Field in Exclude<keyof Theme, "territoryFonts">]?: Theme[Field] | undefined;
+    [Field in Exclude<keyof Theme, "territoryFonts" | "tones">]?: Theme[Field] | undefined;
 } & {
+    /** The roles to change (any subset); each reaches every field derived from it, unless that field is set explicitly. */
+    tones?: {
+        [Role in keyof Tones]?: string | undefined;
+    } | undefined;
+    /** The house theme the roles and fields are laid over: `"light"` (default) or `"dark"`. */
+    base?: "light" | "dark" | undefined;
     territoryFonts?: {
         [Class in keyof Theme["territoryFonts"]]?: Theme["territoryFonts"][Class] | undefined;
     } | undefined;
@@ -1958,6 +1977,55 @@ export declare const DARK_THEME: Theme;
  * meet notations they read.
  */
 export declare function resolveTheme(input: ThemeInput | undefined): Theme;
+
+// shared/tones.d.ts
+import type { Theme } from "./theme";
+/** The eight colour roles of the two-tone-accent look: two bases, ink, muted, and one accent with its text variants. */
+export interface Tones {
+    /** The page: the light base in a light theme, the dark base in a dark one. */
+    ground: string;
+    /** Cards, the top bar, the legend. */
+    surface: string;
+    /** The other base: the tooltip and the bottom strip. */
+    secondBase: string;
+    /** Names, outlines, the keyboard focus. */
+    ink: string;
+    /** Points, edges and secondary text. */
+    muted: string;
+    /** The one fill that stands out: the selected item's dot. */
+    accent: string;
+    /** Text and icons on an `accent` fill. */
+    onAccent: string;
+    /** The accent as text, a ring or a link: it keeps 4.5:1 on `ground` and `surface`. */
+    accentText: string;
+}
+export declare const DEFAULT_TONES: Tones;
+export declare const DARK_TONES: Tones;
+export declare const TONE_ROLES: Array<keyof Tones>;
+export declare function withAlpha(colour: string, alpha: number): string;
+/**
+ * `input` laid over `base`, role by role. An unknown role or a colour this library cannot read is a
+ * `RangeError` naming it (a `#rgb`, `hsl()` or CSS name is turned into `#rrggbb` first), and a role present
+ * as `undefined` keeps the base's.
+ */
+export declare function mergeTones(base: Tones, input: {
+    [Role in keyof Tones]?: string | undefined;
+} | undefined): Tones;
+/**
+ * How far each slate step travels from `ground` toward `ink` (spec two-tone §5), the darkest (or lightest) one being
+ * `ink` itself. Measured 2026-11-17 with `checkTheme` over every four-step combination: toward `secondBase` only three
+ * steps pass, toward `ink` these four do (light: one clean combination, dark: five).
+ */
+export declare const SLATE_STEPS: {
+    readonly onLightGround: readonly [0.6, 0.725, 0.85, 1];
+    readonly onDarkGround: readonly [0.5, 0.625, 0.775, 1];
+};
+/** Four hue-free tone steps, `ground` mixed toward `ink`: the palette of a theme that sets no hues of its own. */
+export declare function slateSteps(tones: Pick<Tones, "ground" | "ink">): string[];
+/** The `Theme` fields a role decides (spec two-tone §3.2). */
+export type ToneDerived = Pick<Theme, "tones" | "palette" | "territoryLabel" | "pointNeutral" | "cardBackground" | "cardBorder" | "hoverBackground" | "hoverText" | "selectionRing" | "focusOutline" | "edge">;
+/** Every `Theme` field a role decides, from the roles alone. */
+export declare function themeFromTones(tones: Tones): ToneDerived;
 
 // shared/tuning.d.ts
 /**
@@ -2256,6 +2324,7 @@ export declare function ringArea(ring: Ring): number;
 // territories/tint.d.ts
 /** Lightness offsets in OKLab, one per sibling slot (spec slice E §5). */
 export declare const TINT_STEPS: readonly [0, 0.07, 0.14, 0.21, 0.28];
+export declare function toOklab(red: number, green: number, blue: number): [number, number, number];
 /** OKLab lightness limits for any tint: past the ceiling a tint washes out the points drawn over its fill on a dark page. */
 export declare const TINT_FLOOR = 0.05;
 export declare const TINT_CEILING = 0.78;
@@ -2301,10 +2370,33 @@ export declare const VISITED_MAXIMUM_BOOST = 0.5;
 /** The factor a territory's fill alpha is multiplied by: 1 for no visited node, 1.5 for all (spec far-visited §2). */
 export declare function visitedFactor(share: number): number;
 
+// theme-check/accent.d.ts
+import type { Tones } from "../shared/tones";
+import type { Findings } from "./checkTheme";
+import { type VisionMode } from "./colourVision";
+/**
+ * The shape and contrast rules of the two-tone-accent skill's validator (`check_palette.ts`, measured in the
+ * 2026-11-13 spike), kept here so `checkTheme` and the validator agree by construction: the opposite accent sits at
+ * least 120 degrees of OKLCH hue from the second base with at least twice its chroma, and a colour-vision
+ * deficiency still sees it as another colour (the chromatic OKLab distance, times 100, against the bases).
+ */
+export declare const MINIMUM_HUE_DISTANCE = 120;
+export declare const MINIMUM_CHROMA_RATIO = 2;
+export declare const MINIMUM_BASE_LIGHTNESS_GAP = 0.35;
+export declare const MINIMUM_CHROMATIC_SEPARATION = 8;
+/** CIEDE2000 between the accent and every palette colour, in each vision mode (the bar of metric 17). */
+export declare const MINIMUM_ACCENT_DELTA = 9;
+/** The validator's one allowed exception: the light accent fill on the ground, which keeps its 3:1 through the ring. */
+export declare const ACCENT_ON_GROUND_FLOOR = 2.5;
+/** Chromatic OKLab distance (a and b only, times 100) between two colours as `mode` sees them. */
+export declare function chromaticSeparation(first: string, second: string, mode: VisionMode): number;
+/** Metric "accent": the eight roles hold the two-tone-accent contract (shape, contrast pairs, colour vision). */
+export declare function checkAccent(tones: Tones, palette: readonly string[], findings: Findings): void;
+
 // theme-check/checkTheme.d.ts
 import { type ThemeInput } from "../shared/theme";
 /** Which accessibility check a problem comes from: the metric numbers of the map-feel spec, plus the extra gates. */
-export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette";
+export type ThemeMetric = "15" | "16" | "17" | "focus" | "outline" | "ring" | "palette" | "accent";
 export interface ThemeProblem {
     metric: ThemeMetric;
     /** What was measured, e.g. `#7466a9 as a point over its own fill`. */
@@ -2317,8 +2409,19 @@ export interface ThemeProblem {
     message: string;
 }
 export interface CheckThemeOptions {
-    /** The page colour the map sits on (`#rrggbb` or `rgb()`); by default `#ffffff` for a theme with dark names and `#18181b` for one with light names. */
+    /**
+     * The page colour the map sits on (`#rrggbb` or `rgb()`); by default the theme's `tones.ground`, or, when
+     * that ground sits on the same side as the names (a light ground under light names), `#ffffff` for a theme with dark names and `#18181b` for one with light names.
+     */
     page?: string | undefined;
+}
+/** Keeps the worst case per `metric:kind`, so a failing palette yields a short readable list, not thousands of rows. */
+export declare class Findings {
+    private readonly worst;
+    expectAtLeast(metric: ThemeMetric, kind: string, subject: () => string, measured: number, required: number, advice: string): void;
+    fail(metric: ThemeMetric, subject: string, measured: number, required: number, message: string): void;
+    get problems(): ThemeProblem[];
+    get isEmpty(): boolean;
 }
 /**
  * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
