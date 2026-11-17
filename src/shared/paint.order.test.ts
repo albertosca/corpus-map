@@ -102,7 +102,9 @@ describe("paint order (slice D)", () => {
     );
     const pointsStart = surface.calls.indexOf("alpha");
     const pointsEnd = surface.calls.lastIndexOf("alpha");
-    expect(surface.calls.slice(pointsStart + 1, pointsEnd).length).toBe(4);
+    // Since the accent dot (two-tone plan, task 5) the selection is a filled circle, then its ring: one call more.
+    expect(surface.calls.slice(pointsStart + 1, pointsEnd).length).toBe(5);
+    expect(surface.calls[pointsEnd - 2]).toBe("circle");
     expect(surface.calls[pointsEnd - 1]).toBe("ring");
     expect(surface.alphas).toEqual([0.5, 1]);
   });
@@ -159,6 +161,7 @@ describe("edges in the point layer (spec slice E §6)", () => {
       "ring",
       "ring",
       "alpha",
+      "circle",
       "ring",
       "alpha",
     ]);
@@ -254,7 +257,11 @@ describe("item labels in the point layer (spec item labels §7)", () => {
     const surface = painted("near", 0.5);
     const calls = surface.calls;
     const plate = calls.indexOf("plate");
-    expect(plate).toBeGreaterThan(calls.lastIndexOf("circle"));
+    // The last circle is the selected item's accent dot (two-tone plan, task 5), drawn over the plates and the edges, under its ring.
+    const selectionDot = calls.lastIndexOf("circle");
+    expect(plate).toBeGreaterThan(calls.lastIndexOf("circle", selectionDot - 1));
+    expect(selectionDot).toBeGreaterThan(calls.lastIndexOf("line"));
+    expect(selectionDot).toBeLessThan(calls.lastIndexOf("ring"));
     expect(plate).toBeLessThan(calls.indexOf("line"));
     expect(plate).toBeLessThan(calls.indexOf("ring"));
     const itemText = surface.texts.findIndex((text) => text.text === "C");
@@ -290,8 +297,11 @@ describe("search matches in the point layer (spec search §2)", () => {
     expect(matchRings(surface).map((ring) => ring.width)).toEqual([1.5]);
     expect(surface.rings.map((ring) => ring.width)).toEqual([2]);
     const calls = surface.calls;
-    expect(calls.indexOf("hollowCircle")).toBeGreaterThan(calls.lastIndexOf("circle"));
-    expect(calls.indexOf("ring")).toBeGreaterThan(calls.lastIndexOf("hollowCircle"));
+    // The last circle is the selected item's accent dot (two-tone plan, task 5), drawn after the match rings, under its ring.
+    const selectionDot = calls.lastIndexOf("circle");
+    expect(calls.indexOf("hollowCircle")).toBeGreaterThan(calls.lastIndexOf("circle", selectionDot - 1));
+    expect(selectionDot).toBeGreaterThan(calls.lastIndexOf("hollowCircle"));
+    expect(calls.indexOf("ring")).toBeGreaterThan(selectionDot);
   });
 
   it("shows the matches at far too, where a corpus opens: points drawn at full strength, a ring on the match", () => {
