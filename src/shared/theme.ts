@@ -1,7 +1,15 @@
 import type { LabelClass } from "../labels/placement";
 import { normaliseColour } from "./colourNotation";
+import { DARK_TONES, DEFAULT_TONES, mergeTones, type Tones, themeFromTones } from "./tones";
 
 export interface Theme {
+  /**
+   * The eight colour roles (spec two-tone-accent §3): `ground`, `surface`, `secondBase`, `ink`, `muted`,
+   * `accent`, `onAccent`, `accentText`. Passing `tones` to `resolveTheme` re-derives every field a role
+   * decides (names, points, cards, tooltip, selection ring, focus, edges) from them; a field set
+   * explicitly still wins over its role.
+   */
+  tones: Tones;
   territoryLabel: string;
   /**
    * Fonts of the territory names by class; the family names use `large`, and
@@ -72,8 +80,12 @@ export interface Theme {
  * lays it over `DEFAULT_THEME`.
  */
 export type ThemeInput = {
-  [Field in Exclude<keyof Theme, "territoryFonts">]?: Theme[Field] | undefined;
+  [Field in Exclude<keyof Theme, "territoryFonts" | "tones">]?: Theme[Field] | undefined;
 } & {
+  /** The roles to change (any subset); each reaches every field derived from it, unless that field is set explicitly. */
+  tones?: { [Role in keyof Tones]?: string | undefined } | undefined;
+  /** The house theme the roles and fields are laid over: `"light"` (default) or `"dark"`. */
+  base?: "light" | "dark" | undefined;
   territoryFonts?:
     | { [Class in keyof Theme["territoryFonts"]]?: Theme["territoryFonts"][Class] | undefined }
     | undefined;
@@ -83,24 +95,17 @@ export type ThemeInput = {
 export const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
 
 export const DEFAULT_THEME: Theme = {
-  territoryLabel: "#23232d",
+  ...themeFromTones(DEFAULT_TONES),
   territoryFonts: {
     large: "600 18px system-ui, sans-serif",
     medium: "600 14px system-ui, sans-serif",
     small: "500 12px system-ui, sans-serif",
     compact: DEFAULT_COMPACT_GROUP_FONT,
   },
-  cardBackground: "#ffffff",
-  cardBorder: "rgba(120,120,140,0.45)",
-  hoverBackground: "rgba(30,30,40,0.92)",
-  hoverText: "#ffffff",
   pointRadius: 2.4,
-  focusOutline: "#1d4ed8",
   focusOutlineWidth: 3,
-  edge: "#4a4a58",
   // Ink and paper (spec serious default §2): steel blue, ochre, olive, violet, brown, sage, slate, mauve; metric 17 measured, not guessed.
   palette: ["#065781", "#9a6232", "#525000", "#7466a9", "#603d36", "#5e715f", "#3e4951", "#856e81"],
-  pointNeutral: "#5b6170",
   territoryFillAlpha: 0.16,
   territoryNameStyle: { uppercase: true, spacing: 0.6 },
 };
@@ -108,15 +113,8 @@ export const DEFAULT_THEME: Theme = {
 /** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
 export const DARK_THEME: Theme = {
   ...DEFAULT_THEME,
-  territoryLabel: "#ececf1",
+  ...themeFromTones(DARK_TONES),
   palette: ["#619c9f", "#e8c270", "#91963f", "#807cc6", "#9d7e73", "#a7cdb0", "#b6abf6", "#d4c5d8"],
-  pointNeutral: "#a0a6b4",
-  cardBackground: "rgb(28,28,32)",
-  cardBorder: "rgba(160,160,180,0.45)",
-  hoverBackground: "rgba(240,240,245,0.94)",
-  hoverText: "#111114",
-  focusOutline: "#7aa7ff",
-  edge: "#c4c4d0",
 };
 
 const WIDTH_FIELDS = [
@@ -148,11 +146,16 @@ const COLOUR_FIELDS = ["territoryLabel", "pointNeutral", "focusOutline", "select
  */
 export function resolveTheme(input: ThemeInput | undefined): Theme {
   if (input === undefined) return DEFAULT_THEME;
+  const { base: baseName, tones: toneInput, ...fields } = input;
+  const house = baseName === "dark" ? DARK_THEME : DEFAULT_THEME;
+  const tones = mergeTones(house.tones, toneInput);
   const theme: Theme = {
-    ...DEFAULT_THEME,
-    ...defined(input),
-    territoryFonts: { ...DEFAULT_THEME.territoryFonts, ...defined(input.territoryFonts) },
-    territoryNameStyle: { ...DEFAULT_THEME.territoryNameStyle, ...defined(input.territoryNameStyle) },
+    ...house,
+    ...(toneInput === undefined ? {} : themeFromTones(tones)),
+    ...defined(fields),
+    tones,
+    territoryFonts: { ...house.territoryFonts, ...defined(input.territoryFonts) },
+    territoryNameStyle: { ...house.territoryNameStyle, ...defined(input.territoryNameStyle) },
   };
   for (const field of WIDTH_FIELDS) {
     const width = theme[field];

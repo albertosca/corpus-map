@@ -24,7 +24,7 @@ describe("paintSelection", () => {
         x: 15,
         y: 15,
         r: DEFAULT_THEME.pointRadius + DEFAULT_THEME.focusOutlineWidth + SELECTION_RING_GAP + SELECTION_RING_WIDTH / 2,
-        color: DEFAULT_THEME.territoryLabel,
+        color: DEFAULT_THEME.selectionRing,
         width: SELECTION_RING_WIDTH,
       },
     ]);

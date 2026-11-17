@@ -14,6 +14,8 @@ export type { MapEdge, MapNode, MapSpec, NodeState, Territory } from "./shared/s
 export { SpecError, validateSpec } from "./shared/spec";
 export type { Theme, ThemeInput } from "./shared/theme";
 export { DARK_THEME, DEFAULT_THEME, resolveTheme } from "./shared/theme";
+export type { Tones } from "./shared/tones";
+export { DARK_TONES, DEFAULT_TONES } from "./shared/tones";
 export type { Tuning } from "./shared/tuning";
 export { DEFAULT_TUNING, resolveTuning } from "./shared/tuning";
 export type { TerritoryGroup } from "./territories/groups";

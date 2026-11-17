@@ -14,6 +14,7 @@ export function themeKeyOf(theme: Theme): string {
     theme.edge,
     theme.selectionRing,
     theme.unvisitedRingWidth,
+    theme.tones,
   ]);
 }
 
