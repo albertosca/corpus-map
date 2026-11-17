@@ -2801,7 +2801,7 @@ describe("App (showcase Task 5)", () => {
     it("paints the panel opaque so the legend behind it never shows through (2026-11-03 browser pass)", async () => {
       const { container } = await renderApp(ASSISTANT_SPEC);
       const panel = container.querySelector<HTMLElement>("[data-assistant-panel]");
-      expect(panel?.style.background).toBe("var(--surface-solid)");
+      expect(panel?.style.background).toBe("var(--surface)");
     });
 
     it("keeps the panel itself from scrolling, so only the answers do (2026-11-03 browser pass)", async () => {

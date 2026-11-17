@@ -57,9 +57,9 @@ const bottomStripStyle: CSSProperties = {
   padding: "4px 12px",
   lineHeight: 1.25,
   fontSize: 12,
-  background: token("surface"),
+  background: token("panel"),
   borderTop: `1px solid ${token("border")}`,
-  color: token("text"),
+  color: token("ink"),
 };
 
 const loadingStyle: CSSProperties = {
@@ -67,7 +67,7 @@ const loadingStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
-  color: token("text"),
+  color: token("ink"),
   fontSize: 14,
 };
 
@@ -87,7 +87,7 @@ const errorStyle: CSSProperties = {
   justifyContent: "center",
   gap: 12,
   height: "100%",
-  color: token("text"),
+  color: token("accentText"),
   fontSize: 14,
 };
 
@@ -95,8 +95,8 @@ const retryButtonStyle: CSSProperties = {
   padding: "6px 14px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   fontSize: 13,
 };
 
@@ -692,7 +692,9 @@ export function App({ loadArxiv }: AppProps = {}) {
           />
         ) : hasError ? (
           <div data-load-error role="alert" style={errorStyle}>
-            <p style={{ margin: 0 }}>Could not load the corpus.</p>
+            <p style={{ margin: 0 }}>
+              <span aria-hidden="true">⚠ </span>Could not load the corpus.
+            </p>
             <button type="button" data-retry onClick={handleRetry} style={retryButtonStyle}>
               Try again
             </button>

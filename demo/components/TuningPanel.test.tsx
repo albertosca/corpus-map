@@ -157,13 +157,16 @@ describe("TuningPanel (showcase Task 7)", () => {
   it("shows the tuning RangeError with role=alert; the thresholds error is separate", () => {
     renderPanel({ tuningError: "tuning.pinchGain must be a finite number > 0, got -1" });
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toBe("tuning.pinchGain must be a finite number > 0, got -1");
+    expect(alert.textContent).toBe("⚠ tuning.pinchGain must be a finite number > 0, got -1");
+    // The icon is decoration: the words carry the message, so a screen reader skips it.
+    expect(alert.querySelector("[aria-hidden='true']")?.textContent).toBe("⚠ ");
   });
 
   it("shows the thresholds RangeError with role=alert", () => {
     renderPanel({ thresholdsError: "thresholds.midAt (10) must be <= thresholds.nearAt (6)" });
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toBe("thresholds.midAt (10) must be <= thresholds.nearAt (6)");
+    expect(alert.textContent).toBe("⚠ thresholds.midAt (10) must be <= thresholds.nearAt (6)");
+    expect(alert.querySelector("[aria-hidden='true']")?.textContent).toBe("⚠ ");
   });
 
   it("clicking Reset calls onReset", () => {
@@ -320,10 +323,10 @@ describe("TuningPanel (showcase Task 7)", () => {
 
   describe("visual restraint", () => {
     it("every colour the panel uses is a demo token, whose contrast demo/tokens.test.ts checks in both schemes", () => {
-      expect(PANEL_TEXT_COLOR).toBe(token("text"));
-      expect(PANEL_MUTED_TEXT_COLOR).toBe(token("textMuted"));
-      expect(PANEL_BACKGROUND_COLOR).toBe(token("surfaceSolid"));
-      expect(PANEL_ALERT_COLOR).toBe(token("danger"));
+      expect(PANEL_TEXT_COLOR).toBe(token("ink"));
+      expect(PANEL_MUTED_TEXT_COLOR).toBe(token("muted"));
+      expect(PANEL_BACKGROUND_COLOR).toBe(token("surface"));
+      expect(PANEL_ALERT_COLOR).toBe(token("accentText"));
     });
 
     it("no label reads in ALL CAPS and no arrow glyph is used", () => {

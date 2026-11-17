@@ -73,8 +73,8 @@ const buttonStyle: CSSProperties = {
   padding: "6px 10px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   fontSize: 13,
 };
 

@@ -49,7 +49,7 @@ export const TONE_ROLES = Object.keys(DEFAULT_TONES) as Array<keyof Tones>;
 /** The border of a card: the ink at 45% alpha, the same weight the previous default carried. */
 const CARD_BORDER_ALPHA = 0.45;
 
-function withAlpha(colour: string, alpha: number): string {
+export function withAlpha(colour: string, alpha: number): string {
   const [red, green, blue] = parseColor(colour);
   return `rgba(${Math.round(red)},${Math.round(green)},${Math.round(blue)},${alpha})`;
 }

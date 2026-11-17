@@ -80,9 +80,9 @@ const barStyle: CSSProperties = {
   alignItems: "center",
   gap: "8px 12px",
   padding: "10px 16px",
-  background: token("surface"),
+  background: token("panel"),
   borderBottom: `1px solid ${token("border")}`,
-  color: token("text"),
+  color: token("ink"),
 };
 
 const labelStyle: CSSProperties = {
@@ -93,7 +93,7 @@ const selectStyle: CSSProperties = {
   padding: "4px 8px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surfaceSolid"),
+  background: token("surface"),
   color: "inherit",
   maxWidth: "70vw",
 };
@@ -110,8 +110,8 @@ const gearButtonStyle: CSSProperties = {
   padding: "4px 10px",
   borderRadius: 4,
   border: `1px solid ${token("borderStrong")}`,
-  background: token("surface"),
-  color: token("text"),
+  background: token("panel"),
+  color: token("ink"),
   fontSize: 13,
   // Real containment (Task 7 fix round 2), not the container's own
   // `maxWidth` alone: `barStyle`'s `flexWrap: "wrap"` only wraps a line of
@@ -156,7 +156,7 @@ const popoverStyle: CSSProperties = {
   gap: 6,
   padding: 8,
   maxWidth: "calc(100vw - 24px)",
-  background: token("surfaceSolid"),
+  background: token("surface"),
   border: `1px solid ${token("border")}`,
   borderRadius: 6,
   boxShadow: `0 2px 10px ${token("shadow")}`,
@@ -178,7 +178,7 @@ const narrowStatusStyle = (filled: boolean): CSSProperties => ({
   ...(filled
     ? {
         padding: "6px 10px",
-        background: token("surfaceSolid"),
+        background: token("surface"),
         border: `1px solid ${token("border")}`,
         borderRadius: 6,
       }

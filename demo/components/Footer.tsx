@@ -94,9 +94,9 @@ const style: CSSProperties = {
   whiteSpace: "normal",
   padding: "4px 14px",
   borderRadius: 4,
-  background: token("surface"),
+  background: token("panel"),
   border: `1px solid ${token("border")}`,
-  color: token("text"),
+  color: token("ink"),
   fontSize: 12,
 };
 

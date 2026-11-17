@@ -48,13 +48,13 @@ export interface TuningPanelProps {
 }
 
 /** Neutral colours, reused (not reinvented) from the rest of the demo shell — see `visual restraint`, spec 4 §2. */
-export const PANEL_TEXT_COLOR = token("text");
-export const PANEL_MUTED_TEXT_COLOR = token("textMuted");
-export const PANEL_BACKGROUND_COLOR = token("surfaceSolid");
-export const PANEL_ALERT_COLOR = token("danger");
+export const PANEL_TEXT_COLOR = token("ink");
+export const PANEL_MUTED_TEXT_COLOR = token("muted");
+export const PANEL_BACKGROUND_COLOR = token("surface");
+export const PANEL_ALERT_COLOR = token("accentText");
 const PANEL_BORDER_COLOR = token("border");
 const CONTROL_BORDER_COLOR = token("borderStrong");
-const BUTTON_BACKGROUND_COLOR = token("surface");
+const BUTTON_BACKGROUND_COLOR = token("panel");
 
 const panelStyle: CSSProperties = {
   position: "fixed",
@@ -134,8 +134,9 @@ const alertStyle: CSSProperties = {
   margin: 0,
   padding: "6px 8px",
   borderRadius: 4,
-  background: token("dangerSurface"),
+  background: token("surface"),
   color: PANEL_ALERT_COLOR,
+  border: `1px solid ${PANEL_ALERT_COLOR}`,
   fontSize: 12,
 };
 
@@ -451,6 +452,7 @@ export function TuningPanel({
 
       {tuningError ? (
         <p role="alert" style={alertStyle}>
+          <span aria-hidden="true">⚠ </span>
           {tuningError}
         </p>
       ) : null}
@@ -490,6 +492,7 @@ export function TuningPanel({
 
       {thresholdsError ? (
         <p role="alert" style={alertStyle}>
+          <span aria-hidden="true">⚠ </span>
           {thresholdsError}
         </p>
       ) : null}
