@@ -256,10 +256,10 @@ describe("legend touch targets (spec mobile §5)", () => {
     const styles = [...new Set(targets(container).map((target) => target.getAttribute("style")))].sort();
     expect(styles).toMatchInlineSnapshot(`
       [
-        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer;",
-        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; display: flex; align-items: center; gap: 6px; flex: 1 1 0%; text-align: left;",
-        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; flex: 1 1 0%; text-align: left;",
-        "color: rgb(35, 35, 45); font: 500 13px system-ui, sans-serif; width: 100%; box-sizing: border-box; min-height: 24px; margin: 4px 0px;",
+        "color: rgb(20, 27, 38); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer;",
+        "color: rgb(20, 27, 38); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; display: flex; align-items: center; gap: 6px; flex: 1 1 0%; text-align: left;",
+        "color: rgb(20, 27, 38); font: 500 13px system-ui, sans-serif; min-height: 24px; background: none; border: medium; padding: 0px; cursor: pointer; flex: 1 1 0%; text-align: left;",
+        "color: rgb(20, 27, 38); font: 500 13px system-ui, sans-serif; width: 100%; box-sizing: border-box; min-height: 24px; margin: 4px 0px;",
         "display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 24px; min-height: 24px; cursor: pointer;",
       ]
     `);
