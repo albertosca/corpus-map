@@ -68,8 +68,8 @@ describe("checkTheme part one", () => {
 
   it("measures against the given page", () => {
     expect(checkTheme(DEFAULT_THEME, { page: "#ffffff" })).toEqual([]);
-    expect(checkTheme(DEFAULT_THEME, { page: "#18181b" }).length).toBeGreaterThan(0);
-    expect(checkTheme(DARK_THEME, { page: "#18181b" })).toEqual([]);
+    expect(checkTheme(DEFAULT_THEME, { page: "#0f141b" }).length).toBeGreaterThan(0);
+    expect(checkTheme(DARK_THEME, { page: "#0f141b" })).toEqual([]);
     expect(checkTheme(DARK_THEME, { page: "#ffffff" }).length).toBeGreaterThan(0);
   });
 
@@ -78,12 +78,31 @@ describe("checkTheme part one", () => {
     expect(checkTheme(DARK_THEME)).toEqual([]);
   });
 
+  it("measures on the theme's own ground when the names contrast with it", () => {
+    const tones = { ground: "#c8ced6" };
+    const onGround = checkTheme({ tones }, { page: "#c8ced6" });
+    expect(onGround.length).toBeGreaterThan(0);
+    expect(checkTheme({ tones })).toEqual(onGround);
+    expect(checkTheme({ tones }, { page: "#ffffff" })).not.toEqual(onGround);
+  });
+
+  it("falls back to the stock page when the ground sits on the names' side", () => {
+    // Dark names (the light house theme) over a dark ground cannot be the page: names would vanish.
+    expect(checkTheme({ tones: { ground: "#0f141b" } })).toEqual(
+      checkTheme({ tones: { ground: "#0f141b" } }, { page: "#ffffff" }),
+    );
+    // Light names (the dark house theme) over a light ground fall back to #18181b.
+    expect(checkTheme({ base: "dark", tones: { ground: "#f1f3f6" } })).toEqual(
+      checkTheme({ base: "dark", tones: { ground: "#f1f3f6" } }, { page: "#18181b" }),
+    );
+  });
+
   it("rejects a page it cannot parse", () => {
     expect(() => checkTheme({}, { page: "blue" })).toThrow(RangeError);
   });
 
   it("the house light theme has no problems on its pages", () => {
-    for (const page of ["#ffffff", "#f7f7f8"]) expect(checkTheme(DEFAULT_THEME, { page })).toEqual([]);
+    for (const page of ["#ffffff", "#f1f3f6"]) expect(checkTheme(DEFAULT_THEME, { page })).toEqual([]);
   });
 
   it("accepts a partial theme and resolves it over the default", () => {
@@ -122,8 +141,8 @@ describe("checkTheme part two", () => {
   });
 
   it.each([
-    ["#ffffff", "#f7f7f8"],
-    ["#18181b", "#111114"],
+    ["#ffffff", "#f1f3f6"],
+    ["#0f141b", "#0a0d12"],
   ])("the house themes pass on their pages", (...pages) => {
     const theme = pages[0] === "#ffffff" ? DEFAULT_THEME : DARK_THEME;
     for (const page of pages) expect(checkTheme(theme, { page })).toEqual([]);

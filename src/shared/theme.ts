@@ -104,8 +104,6 @@ export const DEFAULT_THEME: Theme = {
   },
   pointRadius: 2.4,
   focusOutlineWidth: 3,
-  // Ink and paper (spec serious default §2): steel blue, ochre, olive, violet, brown, sage, slate, mauve; metric 17 measured, not guessed.
-  palette: ["#065781", "#9a6232", "#525000", "#7466a9", "#603d36", "#5e715f", "#3e4951", "#856e81"],
   territoryFillAlpha: 0.16,
   territoryNameStyle: { uppercase: true, spacing: 0.6 },
 };
@@ -114,7 +112,6 @@ export const DEFAULT_THEME: Theme = {
 export const DARK_THEME: Theme = {
   ...DEFAULT_THEME,
   ...themeFromTones(DARK_TONES),
-  palette: ["#619c9f", "#e8c270", "#91963f", "#807cc6", "#9d7e73", "#a7cdb0", "#b6abf6", "#d4c5d8"],
 };
 
 const WIDTH_FIELDS = [

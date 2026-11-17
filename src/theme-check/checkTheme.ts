@@ -22,7 +22,10 @@ export interface ThemeProblem {
 }
 
 export interface CheckThemeOptions {
-  /** The page colour the map sits on (`#rrggbb` or `rgb()`); by default `#ffffff` for a theme with dark names and `#18181b` for one with light names. */
+  /**
+   * The page colour the map sits on (`#rrggbb` or `rgb()`); by default the theme's `tones.ground`, or, when
+   * that ground sits on the same side as the names (a light ground under light names), `#ffffff` for a theme with dark names and `#18181b` for one with light names.
+   */
   page?: string | undefined;
 }
 
@@ -42,6 +45,14 @@ const VISION_MODES: readonly VisionMode[] = ["normal", "protanopia", "deuteranop
 const DEFAULT_UNVISITED_RING_WIDTH = 1.5;
 
 const withAlpha = (colour: Rgba, alpha: number): Rgba => [colour[0], colour[1], colour[2], alpha];
+
+/** The theme's own ground, unless it sits on the names' side of the page (light names need a dark page, dark names a light one). */
+function defaultPage(ground: string, direction: 1 | -1): string {
+  const groundIsLight =
+    contrastRatio(parseColor(ground), parseColor("#000000")) > contrastRatio(parseColor(ground), parseColor("#ffffff"));
+  if (groundIsLight === (direction === -1)) return ground;
+  return direction === 1 ? PAGE_FOR_LIGHT_INK : PAGE_FOR_DARK_INK;
+}
 
 /** Keeps the worst case per `metric:kind`, so a failing palette yields a short readable list, not thousands of rows. */
 class Findings {
@@ -165,7 +176,7 @@ export function checkTheme(input: ThemeInput, options: CheckThemeOptions = {}): 
   );
 
   const direction = tintDirection(theme);
-  const page = parseColor(options.page ?? (direction === 1 ? PAGE_FOR_LIGHT_INK : PAGE_FOR_DARK_INK));
+  const page = parseColor(options.page ?? defaultPage(theme.tones.ground, direction));
   const band = tintBand(theme.palette, direction);
   const tints = theme.palette.flatMap((colour) => TINT_STEPS.map((step) => tint(colour, step, direction, band)));
   const label = parseColor(theme.territoryLabel);
