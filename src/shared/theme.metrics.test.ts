@@ -39,6 +39,18 @@ describe.each(THEMES)("%s theme", (_name, theme, pages) => {
   });
 });
 
+describe("dark theme page floor", () => {
+  // `DARK_THEME`'s doc promises a dark page of `#131519` or darker (measured 2026-11-17, review finding I-1: the
+  // old `#18181b` claim failed metric 15 at 2.89). If the palette moves so a lighter page passes, update the doc.
+  it("is clean on the documented floor page", () => {
+    expect(checkTheme(DARK_THEME, { page: "#131519" })).toEqual([]);
+  });
+
+  it("reports metric 15 on the old documented page, so the floor in the doc is real", () => {
+    expect(checkTheme(DARK_THEME, { page: "#18181b" }).map((problem) => problem.metric)).toContain("15");
+  });
+});
+
 describe("colour-vision helper", () => {
   it("leaves a colour unchanged in normal vision and measures identical colours as 0 apart", () => {
     const colour = parseColor("#003c96");

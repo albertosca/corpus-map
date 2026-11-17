@@ -204,7 +204,7 @@ describe("gallery corpora", () => {
         }),
       );
       // A large corpus's scene is built across tasks (spec mobile §7), so the first call can come later.
-      await waitFor(() => expect(onRegimeChange.mock.calls[0]).toEqual(["far"]));
+      await waitFor(() => expect(onRegimeChange.mock.calls[0]).toEqual(["far"]), { timeout: 10_000 });
       unmount();
     }
   });

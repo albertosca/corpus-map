@@ -122,4 +122,13 @@ describe("tones", () => {
       new RangeError('Theme.tones has no role "inkk"'),
     );
   });
+
+  it("rejects a role that is not a string, from a JS or JSON consumer, with a RangeError naming it", () => {
+    expect(() => resolveTheme({ tones: { accent: 42 } as never })).toThrow(
+      new RangeError("Theme.tones.accent: 42 is not a colour corpus-map can read"),
+    );
+    expect(() => resolveTheme({ tones: { accent: null } as never })).toThrow(
+      new RangeError("Theme.tones.accent: null is not a colour corpus-map can read"),
+    );
+  });
 });

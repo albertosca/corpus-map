@@ -12,7 +12,7 @@ export interface Tones {
   secondBase: string;
   /** Names, outlines, the keyboard focus. */
   ink: string;
-  /** Points, edges and secondary text. */
+  /** Edges, and points that belong to no territory (a point in a territory takes that territory's step). */
   muted: string;
   /** The one fill that stands out: the selected item's dot. */
   accent: string;
@@ -64,9 +64,11 @@ export function mergeTones(base: Tones, input: { [Role in keyof Tones]?: string 
   for (const [role, colour] of Object.entries(input ?? {})) {
     if (!(TONE_ROLES as string[]).includes(role)) throw new RangeError(`Theme.tones has no role "${role}"`);
     if (colour === undefined) continue;
-    const normalised = normaliseColour(colour);
-    if (!isSupportedColour(normalised))
-      throw new RangeError(`Theme.tones.${role}: "${colour}" is not a colour corpus-map can read`);
+    const normalised = typeof colour === "string" ? normaliseColour(colour) : undefined;
+    if (normalised === undefined || !isSupportedColour(normalised))
+      throw new RangeError(
+        `Theme.tones.${role}: ${typeof colour === "string" ? `"${colour}"` : String(colour)} is not a colour corpus-map can read`,
+      );
     merged[role as keyof Tones] = normalised;
   }
   return merged;

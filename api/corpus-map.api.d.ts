@@ -1967,7 +1967,7 @@ export type ThemeInput = {
 /** The family names' font below a 600 px box when the theme names none. */
 export declare const DEFAULT_COMPACT_GROUP_FONT = "600 12px system-ui, sans-serif";
 export declare const DEFAULT_THEME: Theme;
-/** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
+/** For a dark page (`#131519` or darker, the house page being `#0f141b`; measured 2026-11-17, a lighter one such as `#18181b` fails metric 15); every colour is checked by metrics 15-17 and the focus test. */
 export declare const DARK_THEME: Theme;
 /**
  * The theme a consumer's `ThemeInput` describes: `DEFAULT_THEME` under it, `territoryFonts` and
@@ -1990,7 +1990,7 @@ export interface Tones {
     secondBase: string;
     /** Names, outlines, the keyboard focus. */
     ink: string;
-    /** Points, edges and secondary text. */
+    /** Edges, and points that belong to no territory (a point in a territory takes that territory's step). */
     muted: string;
     /** The one fill that stands out: the selected item's dot. */
     accent: string;
@@ -2425,7 +2425,7 @@ export declare class Findings {
 }
 /**
  * Measures a theme against the accessibility metrics the library holds its own themes to (spec consumer-styles §4).
- * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page` and an invalid width (a `RangeError` from `resolveTheme`, which runs first).
+ * Pure and advisory: an empty list means every check passed; the only things that throw are an unreadable `page`, an invalid width and an unreadable or unknown `tones` role (a `RangeError` from `resolveTheme`, which runs first).
  */
 export declare function checkTheme(input: ThemeInput, options?: CheckThemeOptions): ThemeProblem[];
 

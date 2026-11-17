@@ -22,7 +22,7 @@ Eight colour roles, `Theme.tones`, restyle the whole map. A consumer who only wa
 | `surface` | Cards, and the text on the tooltip. |
 | `secondBase` | The other base: the tooltip's background. |
 | `ink` | Names, the card border (at 45% alpha), the keyboard focus outline, and the darkest territory step. |
-| `muted` | Points and edges. |
+| `muted` | Edges, and points that belong to no territory. A point inside a territory is painted in that territory's step. |
 | `accent` | The one fill that stands out: the selected item's dot. |
 | `onAccent` | Text and icons you put on an `accent` fill. The map draws none. |
 | `accentText` | The accent as a ring, text or link: it keeps 4.5:1 on `ground` and `surface`. The selection ring uses it. |
@@ -45,6 +45,9 @@ Precedence, from strongest to weakest:
 - A role you pass as `undefined` keeps the base's.
 - An unknown role or a colour the library cannot read is a `RangeError` naming it. `#rgb`, `hsl()` and CSS names are converted to `#rrggbb` first.
 - A `palette` you pass replaces the slate steps, so a consumer who wants hues still gets them.
+- To restyle a house look, use `base` and roles. Spreading `DARK_THEME` (`{ ...DARK_THEME, tones: { accent } }`) makes every field it carries explicit, so the roles you pass no longer reach them and the rest of `tones` falls back to the light roles; the drawn map keeps the dark fields, but `checkTheme` then measures mixed roles.
+- The dark house look is made for a page of `#131519` or darker (the house page is `#0f141b`); on a lighter dark page, such as `#18181b`, its points fall under 3:1.
+- The development warning measures on `tones.ground`, which is `#f1f3f6` in the light look: a consumer palette made for a white page can warn on it. Set `tones.ground` to your page.
 
 ### Choosing an accent
 
@@ -52,7 +55,7 @@ The accent has to be another colour from the bases, not just another tone: on th
 
 - the two bases differ in lightness by at least 0.35 (OKLab);
 - the accent is at least 120° of hue from `secondBase`, and at least twice as saturated;
-- text and ink pairs reach 4.5:1 and the accent fill 3:1 on `surface`;
+- text and ink pairs reach 4.5:1, the accent fill 3:1 on `surface` and 2.5:1 on `ground` (the ring in `accentText` carries the 3:1 there);
 - the accent is at least 8 apart from `ground`, `surface` and `secondBase` under protanopia, deuteranopia and tritanopia, and at least 9 (CIEDE2000) from every territory colour.
 
 Keep the accent for one thing per screen. The map spends it on the selected item's dot; the demo spends it on the "Show on map" button until something is selected. Use `accentText`, an icon and words, not a second fill, for anything that needs attention.
@@ -120,7 +123,7 @@ It returns a list of `ThemeProblem` (`metric`, `subject`, `measured`, `required`
 
 - Colours are read in `#rrggbb`, `rgb()` and `rgba()`.
 - `#rgb`, `hsl()`/`hsla()` and the 148 CSS colour names are converted to those when the theme is resolved.
-- Any other notation (`oklch()`, `color-mix()`, `transparent`) is reported as a problem. The measurements stop there, since they cannot be made without a canvas.
+- Any other notation (`oklch()`, `color-mix()`, `transparent`) in a theme field is reported as a problem, and the measurements stop there, since they cannot be made without a canvas. In a `tones` role it is a `RangeError` instead, naming the role, because the roles are resolved before anything is measured.
 
 ### In development
 

@@ -108,7 +108,7 @@ export const DEFAULT_THEME: Theme = {
   territoryNameStyle: { uppercase: true, spacing: 0.6 },
 };
 
-/** For a dark page (`#18181b` or darker); every colour is checked by metrics 15-17 and the focus test. */
+/** For a dark page (`#131519` or darker, the house page being `#0f141b`; measured 2026-11-17, a lighter one such as `#18181b` fails metric 15); every colour is checked by metrics 15-17 and the focus test. */
 export const DARK_THEME: Theme = {
   ...DEFAULT_THEME,
   ...themeFromTones(DARK_TONES),
