@@ -1,4 +1,4 @@
-import { isSupportedColour, parseColor } from "../labels/contrast";
+import { contrastRatio, isSupportedColour, parseColor } from "../labels/contrast";
 import { normaliseColour } from "./colourNotation";
 import type { Theme } from "./theme";
 
@@ -72,10 +72,37 @@ export function mergeTones(base: Tones, input: { [Role in keyof Tones]?: string 
   return merged;
 }
 
+/**
+ * How far each slate step travels from `ground` toward `ink` (spec two-tone §5), the darkest (or lightest) one being
+ * `ink` itself. Measured 2026-11-17 with `checkTheme` over every four-step combination: toward `secondBase` only three
+ * steps pass, toward `ink` these four do (light: one clean combination, dark: five).
+ */
+export const SLATE_STEPS = {
+  onLightGround: [0.6, 0.725, 0.85, 1],
+  onDarkGround: [0.5, 0.625, 0.775, 1],
+} as const;
+
+const hexByte = (channel: number): string => Math.round(channel).toString(16).padStart(2, "0");
+
+/** Four hue-free tone steps, `ground` mixed toward `ink`: the palette of a theme that sets no hues of its own. */
+export function slateSteps(tones: Pick<Tones, "ground" | "ink">): string[] {
+  const ground = parseColor(tones.ground);
+  const ink = parseColor(tones.ink);
+  const onLight = contrastRatio(ground, parseColor("#000000")) > contrastRatio(ground, parseColor("#ffffff"));
+  const steps = onLight ? SLATE_STEPS.onLightGround : SLATE_STEPS.onDarkGround;
+  return steps.map((step) => {
+    const channels = [0, 1, 2].map(
+      (channel) => (ground[channel] ?? 0) + ((ink[channel] ?? 0) - (ground[channel] ?? 0)) * step,
+    );
+    return `#${channels.map(hexByte).join("")}`;
+  });
+}
+
 /** The `Theme` fields a role decides (spec two-tone §3.2). */
 export type ToneDerived = Pick<
   Theme,
   | "tones"
+  | "palette"
   | "territoryLabel"
   | "pointNeutral"
   | "cardBackground"
@@ -100,5 +127,6 @@ export function themeFromTones(tones: Tones): ToneDerived {
     selectionRing: tones.accentText,
     focusOutline: tones.ink,
     edge: tones.muted,
+    palette: slateSteps(tones),
   };
 }

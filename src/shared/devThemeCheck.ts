@@ -47,7 +47,7 @@ export function warnAboutTheme(theme: Theme): void {
         const lines = problems.map((problem) => `- ${problem.message}`).join("\n");
         // biome-ignore lint/suspicious/noConsole: the development warning is the feature (consumer styles spec §5)
         console.warn(
-          `corpus-map theme: ${problems.length} accessibility problem(s), measured on a white or #18181b page ` +
+          `corpus-map theme: ${problems.length} accessibility problem(s), measured on the theme's tones.ground ` +
             `(pass your page to checkTheme from "corpus-map/theme-check" for an exact answer):\n${lines}`,
         );
       })

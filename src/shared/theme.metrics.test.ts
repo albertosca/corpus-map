@@ -8,8 +8,8 @@ import { DARK_THEME, DEFAULT_THEME, type Theme } from "./theme";
 // through the one function. What each metric measures is pinned by the deliberately bad themes in
 // `theme-check/checkTheme.test.ts`; here the house themes must come back clean, one metric per test, on every page.
 const THEMES: Array<[string, Theme, string[]]> = [
-  ["light", DEFAULT_THEME, ["#ffffff", "#f7f7f8"]],
-  ["dark", DARK_THEME, ["#18181b", "#111114"]],
+  ["light", DEFAULT_THEME, ["#ffffff", "#f1f3f6"]],
+  ["dark", DARK_THEME, ["#0f141b", "#0a0d12"]],
 ];
 
 const METRICS: Array<[ThemeMetric, string]> = [

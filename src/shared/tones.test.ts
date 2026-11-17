@@ -44,6 +44,26 @@ describe("tones", () => {
     });
   });
 
+  it("derives four slate steps from ground toward ink, hue-free", () => {
+    expect(themeFromTones(DEFAULT_TONES).palette).toEqual(["#6c7179", "#51565f", "#353b45", "#141b26"]);
+    expect(themeFromTones(DARK_TONES).palette).toEqual(["#7c8188", "#979ca3", "#b7bcc3", "#e8edf4"]);
+  });
+
+  it("follows the roles: a warmer ground moves every step and the last one stays the ink", () => {
+    const steps = themeFromTones({ ...DEFAULT_TONES, ground: "#f6f1ea" }).palette;
+    expect(steps).not.toEqual(themeFromTones(DEFAULT_TONES).palette);
+    expect(steps.at(-1)).toBe(DEFAULT_TONES.ink);
+  });
+
+  it("lets a consumer palette beat the slate steps, and tones alone move them", () => {
+    expect(resolveTheme({ palette: ["#112233", "#445566"] }).palette).toEqual(["#112233", "#445566"]);
+    expect(resolveTheme({ tones: { ink: "#000000" } }).palette.at(-1)).toBe("#000000");
+    expect(resolveTheme({ palette: ["#112233", "#445566"], tones: { ink: "#000000" } }).palette).toEqual([
+      "#112233",
+      "#445566",
+    ]);
+  });
+
   it("derives the dark theme from the dark roles", () => {
     const derived = themeFromTones(DARK_TONES);
     expect(derived.territoryLabel).toBe("#e8edf4");
