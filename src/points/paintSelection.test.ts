@@ -3,9 +3,9 @@ import { estimateText } from "../labels/placement";
 import { buildScene } from "../shared/scene";
 import { validateSpec } from "../shared/spec";
 import { RecordingSurface } from "../shared/surface";
-import { DEFAULT_THEME } from "../shared/theme";
+import { DARK_THEME, DEFAULT_THEME } from "../shared/theme";
 import { DEFAULT_TUNING } from "../shared/tuning";
-import { paintSelection, SELECTION_RING_GAP, SELECTION_RING_WIDTH } from "./paintSelection";
+import { paintSelection, SELECTED_DOT_GROWTH, SELECTION_RING_GAP, SELECTION_RING_WIDTH } from "./paintSelection";
 
 const spec = validateSpec({
   version: "1",
@@ -31,6 +31,29 @@ describe("paintSelection", () => {
     expect((surface.rings[0]?.r ?? 0) - SELECTION_RING_WIDTH / 2).toBeGreaterThan(focusOuterEdge);
   });
 
+  it("fills the selected item's dot with the accent, then rings it", () => {
+    const surface = new RecordingSurface();
+    paintSelection(surface, scene, { scale: 10, tx: 5, ty: 5 }, DEFAULT_THEME, "a");
+    expect(surface.circles).toEqual([
+      { id: "a", x: 15, y: 15, r: DEFAULT_THEME.pointRadius + SELECTED_DOT_GROWTH, fill: DEFAULT_THEME.tones.accent },
+    ]);
+    expect(surface.calls.indexOf("circle")).toBeLessThan(surface.calls.indexOf("ring"));
+  });
+
+  it("paints the dot in the accent of the dark theme", () => {
+    const surface = new RecordingSurface();
+    paintSelection(surface, scene, { scale: 1, tx: 0, ty: 0 }, DARK_THEME, "a");
+    expect(surface.circles[0]?.fill).toBe(DARK_THEME.tones.accent);
+  });
+
+  it("keeps the dot inside the ring: a gap remains between the grown dot and the ring's inner edge", () => {
+    const surface = new RecordingSurface();
+    paintSelection(surface, scene, { scale: 1, tx: 0, ty: 0 }, DEFAULT_THEME, "a");
+    const dotEdge = surface.circles[0]?.r ?? Number.POSITIVE_INFINITY;
+    const ringInnerEdge = (surface.rings[0]?.r ?? 0) - SELECTION_RING_WIDTH / 2;
+    expect(ringInnerEdge - dotEdge).toBeGreaterThanOrEqual(2);
+  });
+
   it("uses the theme's selectionRing when it has one", () => {
     const surface = new RecordingSurface();
     paintSelection(surface, scene, { scale: 1, tx: 0, ty: 0 }, { ...DEFAULT_THEME, selectionRing: "#ff00ff" }, "a");
@@ -41,5 +64,6 @@ describe("paintSelection", () => {
     const surface = new RecordingSurface();
     paintSelection(surface, scene, { scale: 1, tx: 0, ty: 0 }, DEFAULT_THEME, "missing");
     expect(surface.rings).toEqual([]);
+    expect(surface.circles).toEqual([]);
   });
 });
