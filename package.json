@@ -81,8 +81,8 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
-    "@babel/core": "^7.29.7",
-    "@babel/eslint-parser": "^7.29.9",
+    "@babel/core": "^7.29.13",
+    "@babel/eslint-parser": "^7.29.13",
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
     "@biomejs/biome": "^2.6.7",
