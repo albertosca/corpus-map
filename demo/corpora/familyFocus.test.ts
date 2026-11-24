@@ -11,7 +11,7 @@ import type { MapSpec } from "../../src/shared/spec";
 import { RecordingSurface } from "../../src/shared/surface";
 import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
-import { familyCounts, familyFocus } from "../../src/territories/familyFocus";
+import { familyCounts, familyFocus, focusKeyOf } from "../../src/territories/familyFocus";
 import { fitScene } from "../../src/viewport/fitScene";
 import type { Viewport } from "../../src/viewport/viewport";
 import { drawnName } from "../../test/drawnName";
@@ -56,7 +56,7 @@ function regimeFor(ratio: number) {
   return regime;
 }
 
-/** The weights `CorpusMap` derives for `viewport`: `familyCounts` through `familyFocus`, the same calls. */
+/** The weights `CorpusMap` derives for `viewport`: `familyCounts` through `familyFocus` and `focusKeyOf`, the same calls. */
 function weightsAt(viewport: Viewport, width: number, height: number) {
   // The visible list, as CorpusMap passes it, so the guards measure what ships.
   const counts = familyCounts(
@@ -67,7 +67,11 @@ function weightsAt(viewport: Viewport, width: number, height: number) {
     familyOfLeaf,
     scene.groups.map((group) => group.id),
   );
-  return { counts, weights: familyFocus(counts, DEFAULT_TUNING) };
+  // Through the focus key, rounded to 1/256 as CorpusMap paints them (review minor 12).
+  const weights = new Map<string, number>(
+    JSON.parse(focusKeyOf(familyFocus(counts, DEFAULT_TUNING, spec.nodes.length))) as Array<[string, number]>,
+  );
+  return { counts, weights };
 }
 
 /** Every name `paint` draws for `viewport`, with or without the focus. */
@@ -121,7 +125,10 @@ describe("metric 19: only the dominant family is drawn as leaves (arXiv, painted
       for (const ratio of RATIOS)
         for (const centre of gridOfCentres(12, 8)) {
           const { counts, weights } = weightsAt(viewAt(fit, width, height, ratio, centre), width, height);
-          if ([...counts.values()].every((count) => count === 0)) continue;
+          // Below 2.5 items' weight the blend toward 1 (FOCUS_CONFIDENT_ITEMS) keeps every family within half a focus
+          // key step of 1, so all of them paint at 1: a sparse screen draws every family, as spec family focus §2 says.
+          // Measured on the painted, rounded weights: 6 such views here and 2 on the UMAP map (1f3cdc7), none above 2.2.
+          if (Math.max(...counts.values()) < 2.5) continue;
           visited += 1;
           const full = [...weights.values()].filter((weight) => weight === 1).length;
           if (full > 2) crowded.push(`ratio ${ratio} at ${centre.map(Math.round).join(",")}: ${full} families`);
@@ -220,7 +227,10 @@ describe("risk 2: a family name beside leaf names at mid (arXiv, painted)", () =
         for (const centre of gridOfCentres(12, 8)) {
           const viewport = viewAt(fit, width, height, ratio, centre);
           const { weights, counts } = weightsAt(viewport, width, height);
-          if ([...counts.values()].every((count) => count === 0)) continue;
+          // Below 2.5 items' weight the blend toward 1 (FOCUS_CONFIDENT_ITEMS) keeps every family within half a focus
+          // key step of 1, so all of them paint at 1: a sparse screen draws every family, as spec family focus §2 says.
+          // Measured on the painted, rounded weights: 6 such views here and 2 on the UMAP map (1f3cdc7), none above 2.2.
+          if (Math.max(...counts.values()) < 2.5) continue;
           const regime = regimeFor(ratio);
           const groupAlpha = groupNameAlpha(ratio, regime, options);
           const surface = new RecordingSurface();
@@ -273,7 +283,7 @@ function neighbouringFamilies(): Array<[[number, number], [number, number]]> {
 
 describe("continuity: a pan across a family boundary at mid changes no name's alpha by more than a stated step", () => {
   const STEPS = 100;
-  // Measured per 1/100 of a family-to-family pan at ratio 2.5: 0.115 (1440x900) and 0.096 (375x812) on corpus-cartographer's map, the one shipped; 0.058 and 0.044 on the UMAP map it replaced (1f3cdc7). The bound leaves headroom, not slack.
+  // Measured per 1/100 of a family-to-family pan at ratio 2.5, on the painted weights rounded by the focus key: 0.119 (1440x900) and 0.098 (375x812) on corpus-cartographer's map, the one shipped; 0.059 and 0.044 on the UMAP map it replaced (1f3cdc7). The bound leaves headroom, not slack.
   const MAXIMUM_JUMP = 0.15;
   for (const [width, height] of BOXES) {
     it(`no name's alpha jumps by more than ${MAXIMUM_JUMP} between frames, at ${width}x${height}`, () => {
@@ -330,7 +340,7 @@ describe("continuity at near: a small pan moves no family's weight by more than 
   // A frame is one 2% of the box width of pan; at near that is a few items entering or leaving.
   const PAN_FRACTION = 0.02;
   const FRAMES = 60;
-  // Measured at ratios 4, 8 and 16: 0.525 (1440x900) and 0.375 (375x812) on corpus-cartographer's map, the one shipped; 0.279 and 0.192 on the UMAP map it replaced (1f3cdc7). A pan that crosses a dense cluster moves a share by whole steps; the engine packs each family into evenly filled disks, so a 2% pan sweeps a dense strip of one disk, and the soft edge (FOCUS_FEATHER), focusFloor 0.25 and FOCUS_CONFIDENT_ITEMS 96 are what bring it under the bound, with little headroom at 1440x900.
+  // Measured at ratios 4, 8 and 16, on the painted weights rounded by the focus key: 0.523 (1440x900) and 0.375 (375x812) on corpus-cartographer's map, the one shipped; 0.277 and 0.191 on the UMAP map it replaced (1f3cdc7). A pan that crosses a dense cluster moves a share by whole steps; the engine packs each family into evenly filled disks, so a 2% pan sweeps a dense strip of one disk, and the soft edge (FOCUS_FEATHER), focusFloor 0.25 and FOCUS_CONFIDENT_ITEMS 96 are what bring it under the bound, with little headroom at 1440x900.
   const MAXIMUM_WEIGHT_JUMP = 0.55;
   for (const [width, height] of BOXES) {
     it(`no weight jumps by more than ${MAXIMUM_WEIGHT_JUMP} between frames, at ${width}x${height}`, () => {

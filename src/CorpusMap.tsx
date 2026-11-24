@@ -1011,7 +1011,7 @@ export function CorpusMap({ ref: handleReference, ...properties }: CorpusMapProp
       familyOfLeaf,
       scene.groups.map((group) => group.id),
     );
-    return focusKeyOf(familyFocus(counts, tuning));
+    return focusKeyOf(familyFocus(counts, tuning, spec.nodes.length));
   })();
   const focus = useMemo(
     () => (focusKey === "" ? undefined : new Map<string, number>(JSON.parse(focusKey) as Array<[string, number]>)),

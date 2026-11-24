@@ -18,13 +18,18 @@ function smoothstep(lower: number, upper: number, value: number): number {
 /**
  * On-screen items of the largest family below which the shares are not trusted
  * (review I-1): with few items a pan moves a share by a large step, so the
- * weight is blended toward 1 and is continuous per item. 24 held on the UMAP
- * map; corpus-cartographer's map packs each family into evenly filled disks
- * with empty gaps between them, so at near a screen holds a few dozen items
- * and 96 is what keeps its weight jump under the near guard (spec arxiv engine
- * map). The thousands of items seen at mid are untouched.
+ * weight is blended toward 1 and is continuous per item. It scales with the
+ * corpus, one item per CORPUS_ITEMS_PER_CONFIDENT_ITEM, between these two:
+ * 24 held on the UMAP map and keeps a small corpus focused (the demo's 54
+ * Chemical elements); corpus-cartographer's 8,000-paper map packs each family
+ * into evenly filled disks with empty gaps between them, so at near a screen
+ * holds a few dozen items and 96 is what keeps its weight jump under the near
+ * guard (spec arxiv engine map). The thousands of items seen at mid are
+ * untouched.
  */
+const FOCUS_CONFIDENT_ITEMS_LEAST = 24;
 const FOCUS_CONFIDENT_ITEMS = 96;
+const CORPUS_ITEMS_PER_CONFIDENT_ITEM = 80;
 
 /**
  * The share of the box, from each edge inward, over which an item's weight in
@@ -87,9 +92,18 @@ export function focusKeyOf(weights: ReadonlyMap<string, number>): string {
  * Each family's weight in [0, 1] from how many items it has on screen (spec
  * family focus §2): the largest family is 1, the rest follow the smoothstep of
  * their share of it. Nothing on screen leaves every family at 1, which is the
- * map as it was drawn before this existed.
+ * map as it was drawn before this existed. `corpusItems` is the spec's item
+ * count, which sets how many on-screen items the shares need to be trusted.
  */
-export function familyFocus(counts: ReadonlyMap<string, number>, options: FocusOptions): ReadonlyMap<string, number> {
+export function familyFocus(
+  counts: ReadonlyMap<string, number>,
+  options: FocusOptions,
+  corpusItems: number,
+): ReadonlyMap<string, number> {
+  const confident = Math.min(
+    FOCUS_CONFIDENT_ITEMS,
+    Math.max(FOCUS_CONFIDENT_ITEMS_LEAST, corpusItems / CORPUS_ITEMS_PER_CONFIDENT_ITEM),
+  );
   let largest = 0;
   for (const count of counts.values()) if (count > largest) largest = count;
   const weights = new Map<string, number>();
@@ -99,7 +113,7 @@ export function familyFocus(counts: ReadonlyMap<string, number>, options: FocusO
       continue;
     }
     const share = smoothstep(options.focusFloor, options.focusFull, count / largest);
-    weights.set(family, share + (1 - share) * (1 - smoothstep(0, FOCUS_CONFIDENT_ITEMS, largest)));
+    weights.set(family, share + (1 - share) * (1 - smoothstep(0, confident, largest)));
   }
   return weights;
 }

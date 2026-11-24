@@ -233,6 +233,8 @@ With families, the mid and near regimes draw leaves only for the family that dom
 - At or above `tuning.focusFull` (default 1) all its leaves are drawn.
 - In between the weight rises smoothly, so nothing pops on a pan.
 
+An item counts fully once it sits 15% of the box inside the edge, and partly nearer the edge, so an item entering or leaving the screen moves its family's count gradually. While the largest family has only a few items on screen, every family stays mostly drawn as leaves. How many items it takes to trust the shares grows with the corpus: 24 for a corpus of up to about 1,900 items, rising to 96 at about 7,700.
+
 ## Hover
 
 At the mid and near regimes, hovering the nearest point within `tuning.hoverRadius` screen pixels shows its label in a small tooltip. It is not shown when that point's label is already drawn where it can be seen (on the canvas and not under the selected card).

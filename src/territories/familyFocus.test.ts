@@ -4,6 +4,8 @@ import type { Viewport } from "../viewport/viewport";
 import { FOCUS_FEATHER, familyCounts, familyFocus, focusKeyOf, levelsOf, namesLeaf } from "./familyFocus";
 
 const options = { focusFloor: 0.25, focusFull: 0.6 };
+/** A corpus as large as the arXiv demo's: the shares are trusted from 96 on-screen items of the largest family. */
+const LARGE_CORPUS = 8000;
 const counts = (entries: Array<[string, number]>) => new Map(entries);
 
 describe("familyFocus (spec family focus §2)", () => {
@@ -15,6 +17,7 @@ describe("familyFocus (spec family focus §2)", () => {
           ["b", 2],
         ]),
         options,
+        LARGE_CORPUS,
       ).get("a"),
     ).toBe(1);
     const tied = familyFocus(
@@ -23,12 +26,13 @@ describe("familyFocus (spec family focus §2)", () => {
         ["b", 7],
       ]),
       options,
+      LARGE_CORPUS,
     );
     expect([tied.get("a"), tied.get("b")]).toEqual([1, 1]);
   });
 
   it("gives a lone family 1", () => {
-    expect(familyFocus(counts([["a", 3]]), options).get("a")).toBe(1);
+    expect(familyFocus(counts([["a", 3]]), options, LARGE_CORPUS).get("a")).toBe(1);
   });
 
   it("keeps every family at 1 when nothing is on screen", () => {
@@ -38,6 +42,7 @@ describe("familyFocus (spec family focus §2)", () => {
         ["b", 0],
       ]),
       options,
+      LARGE_CORPUS,
     );
     expect([weights.get("a"), weights.get("b")]).toEqual([1, 1]);
   });
@@ -50,6 +55,7 @@ describe("familyFocus (spec family focus §2)", () => {
           ["b", 0],
         ]),
         options,
+        LARGE_CORPUS,
       ).get("b"),
     ).toBe(0);
   });
@@ -62,6 +68,7 @@ describe("familyFocus (spec family focus §2)", () => {
           ["b", 0],
         ]),
         options,
+        LARGE_CORPUS,
       ).get("b") as number;
     // An item entering an empty screen must not drop the other families from 1 to 0 in one step.
     expect(weightOfEmpty(1)).toBeGreaterThan(0.9);
@@ -81,6 +88,7 @@ describe("familyFocus (spec family focus §2)", () => {
         ["above", 90],
       ]),
       options,
+      LARGE_CORPUS,
     );
     expect([weights.get("floor"), weights.get("full"), weights.get("above")]).toEqual([0, 1, 1]);
   });
@@ -93,6 +101,7 @@ describe("familyFocus (spec family focus §2)", () => {
         ["high", 50],
       ]),
       options,
+      LARGE_CORPUS,
     );
     const low = weights.get("low") as number;
     const high = weights.get("high") as number;
@@ -109,14 +118,34 @@ describe("familyFocus (spec family focus §2)", () => {
           ["b", total / 3],
         ]),
         options,
+        LARGE_CORPUS,
       ).values()) {
         expect(Number.isNaN(weight)).toBe(false);
       }
     }
   });
 
+  it("trusts the shares from fewer on-screen items on a small corpus (review I-1)", () => {
+    const weightOfEmpty = (largest: number, corpusItems: number) =>
+      familyFocus(
+        counts([
+          ["a", largest],
+          ["b", 0],
+        ]),
+        options,
+        corpusItems,
+      ).get("b") as number;
+    // The demo's Chemical elements corpus has 54 items: a screen holds a few dozen at most.
+    expect(weightOfEmpty(24, 54)).toBe(0);
+    expect(weightOfEmpty(24, LARGE_CORPUS)).toBeGreaterThan(0.5);
+    expect(weightOfEmpty(96, LARGE_CORPUS)).toBe(0);
+    // In between it scales with the corpus, so a corpus of a few thousand trusts the shares before 96.
+    expect(weightOfEmpty(50, 4000)).toBe(0);
+    expect(weightOfEmpty(50, LARGE_CORPUS)).toBeGreaterThan(0);
+  });
+
   it("leaves an empty map empty", () => {
-    expect(familyFocus(new Map(), options).size).toBe(0);
+    expect(familyFocus(new Map(), options, LARGE_CORPUS).size).toBe(0);
   });
 });
 
@@ -201,7 +230,11 @@ describe("familyCounts (spec arxiv engine map §2)", () => {
   });
 
   it("seeds every family at 0 and never returns NaN for an empty box", () => {
-    const spec = specWith([{ id: "middle", x: 200, y: 150, territory: "aleaf" }]);
+    // The item at the origin sits on screen 0 of a box of width 0: the 0/0 case.
+    const spec = specWith([
+      { id: "middle", x: 200, y: 150, territory: "aleaf" },
+      { id: "origin", x: 0, y: 0, territory: "bleaf" },
+    ]);
     const emptyBoxes: Array<[number, number]> = [
       [0, HEIGHT],
       [WIDTH, 0],
@@ -234,7 +267,7 @@ describe("familyCounts (spec arxiv engine map §2)", () => {
       territory: position % 4 === 0 ? "bleaf" : "aleaf",
     }));
     const counts = familyCounts(specWith(nodes).nodes, identity, WIDTH, HEIGHT, familyOfLeaf, families);
-    const weights = familyFocus(counts, { focusFloor: 0.5, focusFull: 1 });
+    const weights = familyFocus(counts, { focusFloor: 0.5, focusFull: 1 }, LARGE_CORPUS);
     for (const weight of weights.values()) expect(weight).toBeGreaterThan(0.9);
   });
 });
