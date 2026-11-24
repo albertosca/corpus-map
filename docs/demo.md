@@ -16,7 +16,7 @@ Selecting a node opens a drawer with its label and territory.
 
 - For arXiv, it also shows the publication year, the arXiv category and a link to the paper's abstract page.
 - Every other corpus gets a generic field list from its `meta`.
-- When the item has edges (arXiv ships papers similar across two categories), the drawer lists them under Related, each with the title words the two share. Pressing one selects and reveals it.
+- When the item has edges (arXiv ships each paper's most similar papers, linked by corpus-cartographer), the drawer lists them under Related, each with the title words the two share. Pressing one selects and reveals it.
 
 ## Links
 
@@ -49,7 +49,7 @@ The four are deliberately unrelated, and deliberately not food. A map spec valid
 
 - Fetched lazily from `demo/corpora/arxiv.json`. The build emits it as its own asset, so its ~1.5 MB never blocks the shell's first paint, and a failed load can be retried without reloading the page.
 - The footer credits it verbatim: "Thank you to arXiv for use of its open access interoperability."
-- Built by the separate package under [pipeline/arxiv/](../pipeline/arxiv/README.md).
+- Papers and territories come from [pipeline/arxiv/](../pipeline/arxiv/README.md); positions and links from [corpus-cartographer](https://github.com/albertosca/corpus-cartographer/blob/main/docs/usage.md).
 - Its territories are the map's own clusters: 18 named topics in 5 families, named by Claude and held to a blind test.
 - Each paper's arXiv category is on its card and in the drawer.
 

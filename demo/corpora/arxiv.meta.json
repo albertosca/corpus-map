@@ -244,5 +244,20 @@
         "output_tokens": 29091
       }
     }
+  },
+  "map": {
+    "engine": "corpus-cartographer",
+    "version": "0.4.1",
+    "commit": "0a37bb6",
+    "embeddings_model": "minishlab/potion-base-8M",
+    "positions_and_edges": "computed by corpus-cartographer from the papers' titles and these territories; they replace the umap positions and the edges recorded above, which describe the pipeline's own run",
+    "edges": 6109,
+    "commands": [
+      "curl -fsSL -o arxiv-map-spec.json https://raw.githubusercontent.com/albertosca/corpus-map/main/demo/corpora/arxiv.json",
+      "python scripts/build_arxiv_export.py arxiv-map-spec.json arxiv-export.json",
+      "python scripts/build_embeddings.py arxiv-export.json minishlab/potion-base-8M arxiv-embeddings",
+      "corpus-cartographer --input arxiv-export.json --embeddings-dir arxiv-embeddings --out-dir arxiv-map",
+      "python scripts/build_arxiv_demo.py arxiv-map-spec.json arxiv-map/map-spec.nested.json arxiv.json"
+    ]
   }
 }

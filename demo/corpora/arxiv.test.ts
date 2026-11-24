@@ -215,21 +215,27 @@ describe("the arXiv corpus", () => {
     }
   });
 
-  it("ships edges, every one across two arXiv categories, at most six per item", () => {
+  // The engine's links (corpus-cartographer): each paper's most similar papers, measured 6,109 edges, the busiest paper 28.
+  const MAXIMUM_DEGREE = 28;
+  it("ships the engine's links: known papers, no self link, no repeated pair, weights in (0, 1]", () => {
     const spec = validateSpec(rawSpec);
-    const categoryOf = new Map(
-      spec.nodes.map((node) => [node.id, (node.meta as { category?: { id?: string } } | undefined)?.category?.id]),
-    );
+    const ids = new Set(spec.nodes.map((node) => node.id));
+    const pairs = new Set<string>();
     const degrees = new Map<string, number>();
     const edges = spec.edges ?? [];
     expect(edges.length).toBeGreaterThan(0);
     for (const edge of edges) {
-      expect(categoryOf.get(edge.source)).toBeDefined();
-      expect(categoryOf.get(edge.source)).not.toBe(categoryOf.get(edge.target));
+      expect(ids.has(edge.source) && ids.has(edge.target)).toBe(true);
+      expect(edge.source).not.toBe(edge.target);
+      const pair = [edge.source, edge.target].sort().join(" ");
+      expect(pairs.has(pair)).toBe(false);
+      pairs.add(pair);
+      expect(edge.weight).toBeGreaterThan(0);
+      expect(edge.weight).toBeLessThanOrEqual(1);
       degrees.set(edge.source, (degrees.get(edge.source) ?? 0) + 1);
       degrees.set(edge.target, (degrees.get(edge.target) ?? 0) + 1);
     }
-    expect(Math.max(...degrees.values())).toBeLessThanOrEqual(6);
+    expect(Math.max(...degrees.values())).toBeLessThanOrEqual(MAXIMUM_DEGREE);
   });
 
   it("arxiv.meta.json's attribution is exactly the arXiv sentence", () => {
