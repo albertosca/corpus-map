@@ -229,7 +229,7 @@ How they are placed:
 
 With families, the mid and near regimes draw leaves only for the family that dominates the screen. Each family gets a weight from its share of the largest family's on-screen items:
 
-- Below `tuning.focusFloor` (default 0.5) the family is drawn as a family.
+- Below `tuning.focusFloor` (default 0.25) the family is drawn as a family.
 - At or above `tuning.focusFull` (default 1) all its leaves are drawn.
 - In between the weight rises smoothly, so nothing pops on a pan.
 

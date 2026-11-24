@@ -6,7 +6,7 @@ import { CorpusMap, type CorpusMapHandle } from "./CorpusMap";
 import { validateSpec } from "./shared/spec";
 
 // Enough items on screen that the shares are trusted (FOCUS_CONFIDENT_ITEMS).
-const PER_TERRITORY = Array.from({ length: 15 }, (_unused, index) => index);
+const PER_TERRITORY = Array.from({ length: 60 }, (_unused, index) => index);
 const territory = (id: string, name: string, group: string, left: number) => ({
   id,
   name,
@@ -116,11 +116,11 @@ describe("CorpusMap open territory under the family focus (review I-3)", () => {
     [-half, half],
   ];
   // Family A has thirty items around a small territory of family B that has two: B's leaf name is not drawn at near.
-  const around = Array.from({ length: 30 }, (_unused, index) => ({
+  const around = Array.from({ length: 120 }, (_unused, index) => ({
     id: `a${index}`,
     label: `a${index}`,
-    x: 4 + (index % 6),
-    y: -3 + Math.floor(index / 6) * 1.2,
+    x: 4 + (index % 12) / 2,
+    y: -3 + Math.floor(index / 12) * 0.6,
     territory: "abig",
   }));
   const lopsided = validateSpec({

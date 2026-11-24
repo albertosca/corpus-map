@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { familyFocus, levelsOf, namesLeaf } from "./familyFocus";
+import { validateSpec } from "../shared/spec";
+import type { Viewport } from "../viewport/viewport";
+import { FOCUS_FEATHER, familyCounts, familyFocus, focusKeyOf, levelsOf, namesLeaf } from "./familyFocus";
 
 const options = { focusFloor: 0.25, focusFull: 0.6 };
 const counts = (entries: Array<[string, number]>) => new Map(entries);
@@ -64,10 +66,10 @@ describe("familyFocus (spec family focus §2)", () => {
     // An item entering an empty screen must not drop the other families from 1 to 0 in one step.
     expect(weightOfEmpty(1)).toBeGreaterThan(0.9);
     let largestStep = 0;
-    for (let items = 1; items <= 60; items += 1)
+    for (let items = 1; items <= 120; items += 1)
       largestStep = Math.max(largestStep, Math.abs(weightOfEmpty(items) - weightOfEmpty(items - 1)));
     expect(largestStep).toBeLessThan(0.1);
-    expect(weightOfEmpty(60)).toBe(0);
+    expect(weightOfEmpty(120)).toBe(0);
   });
 
   it("is 0 at or below the floor and 1 at or above the full share", () => {
@@ -145,5 +147,127 @@ describe("namesLeaf (review I-3)", () => {
     expect(namesLeaf(0, 0)).toBe(false);
     expect(namesLeaf(0.6, 1)).toBe(false);
     expect(namesLeaf(0.4, 1)).toBe(true);
+  });
+});
+
+describe("familyCounts (spec arxiv engine map §2)", () => {
+  const WIDTH = 400;
+  const HEIGHT = 300;
+  const identity: Viewport = { scale: 1, tx: 0, ty: 0 };
+  const families = ["alpha", "beta"];
+  const familyOfLeaf = new Map([
+    ["aleaf", "alpha"],
+    ["bleaf", "beta"],
+  ]);
+  const specWith = (nodes: Array<{ id: string; x: number; y: number; territory: string | null }>) =>
+    validateSpec({
+      version: "1",
+      territories: ["aleaf", "bleaf"].map((leaf) => ({
+        id: leaf,
+        name: leaf,
+        members: nodes.filter((node) => node.territory === leaf).map((node) => node.id),
+        centroid: [0, 0],
+      })),
+      nodes: nodes.map((node) => ({ ...node, label: node.id })),
+    });
+
+  it("counts an item in the middle of the box as 1 and one outside as nothing", () => {
+    const spec = specWith([
+      { id: "middle", x: 200, y: 150, territory: "aleaf" },
+      { id: "outside", x: -50, y: 150, territory: "bleaf" },
+    ]);
+    const counts = familyCounts(spec.nodes, identity, WIDTH, HEIGHT, familyOfLeaf, families);
+    expect(counts.get("alpha")).toBe(1);
+    expect(counts.get("beta")).toBe(0);
+  });
+
+  it("moves a family's count continuously as an item crosses the box edge", () => {
+    let previous = 0;
+    let largestStep = 0;
+    for (let step = -10; step <= 60; step += 1) {
+      const spec = specWith([{ id: "crossing", x: (WIDTH * step) / 100, y: HEIGHT / 2, territory: "bleaf" }]);
+      const count = familyCounts(spec.nodes, identity, WIDTH, HEIGHT, familyOfLeaf, families).get("beta") ?? 0;
+      largestStep = Math.max(largestStep, Math.abs(count - previous));
+      previous = count;
+    }
+    // One step is 1% of the box; the hard box jumped by a whole item on the edge.
+    expect(largestStep).toBeLessThanOrEqual(0.2);
+    expect(previous).toBe(1);
+  });
+
+  it("reaches 1 at FOCUS_FEATHER of the box inside", () => {
+    const spec = specWith([{ id: "inside", x: WIDTH * FOCUS_FEATHER, y: HEIGHT / 2, territory: "aleaf" }]);
+    expect(familyCounts(spec.nodes, identity, WIDTH, HEIGHT, familyOfLeaf, families).get("alpha")).toBe(1);
+  });
+
+  it("seeds every family at 0 and never returns NaN for an empty box", () => {
+    const spec = specWith([{ id: "middle", x: 200, y: 150, territory: "aleaf" }]);
+    const emptyBoxes: Array<[number, number]> = [
+      [0, HEIGHT],
+      [WIDTH, 0],
+      [0, 0],
+    ];
+    for (const [width, height] of emptyBoxes)
+      expect([...familyCounts(spec.nodes, identity, width, height, familyOfLeaf, families)]).toEqual([
+        ["alpha", 0],
+        ["beta", 0],
+      ]);
+  });
+
+  it("skips an item with no territory and a leaf with no family", () => {
+    const spec = specWith([
+      { id: "loose", x: 200, y: 150, territory: null },
+      { id: "orphan", x: 200, y: 150, territory: "bleaf" },
+    ]);
+    const counts = familyCounts(spec.nodes, identity, WIDTH, HEIGHT, new Map([["aleaf", "alpha"]]), families);
+    expect([...counts]).toEqual([
+      ["alpha", 0],
+      ["beta", 0],
+    ]);
+  });
+
+  it("leaves every family near 1 when all items sit in the feather band", () => {
+    const nodes = Array.from({ length: 40 }, (_unused, position) => ({
+      id: `edge${position}`,
+      x: 2,
+      y: 10 + position * 7,
+      territory: position % 4 === 0 ? "bleaf" : "aleaf",
+    }));
+    const counts = familyCounts(specWith(nodes).nodes, identity, WIDTH, HEIGHT, familyOfLeaf, families);
+    const weights = familyFocus(counts, { focusFloor: 0.5, focusFull: 1 });
+    for (const weight of weights.values()) expect(weight).toBeGreaterThan(0.9);
+  });
+});
+
+describe("focusKeyOf (spec arxiv engine map §3)", () => {
+  it("gives the same key when no weight moves by a whole step of 1/256", () => {
+    const before = new Map([
+      ["family-a", 0.5],
+      ["family-b", 1],
+    ]);
+    const after = new Map([
+      ["family-a", 0.5 + 0.4 / 256],
+      ["family-b", 1],
+    ]);
+    expect(focusKeyOf(after)).toBe(focusKeyOf(before));
+  });
+
+  it("changes the key when a weight moves by more than a step", () => {
+    const before = new Map([["family-a", 0.5]]);
+    const after = new Map([["family-a", 0.5 + 2 / 256]]);
+    expect(focusKeyOf(after)).not.toBe(focusKeyOf(before));
+  });
+
+  it("round-trips through JSON as each family's weight, rounded to the step", () => {
+    const weights = new Map([
+      ["family-a", 0.3],
+      ["family-b", 1],
+      ["family-c", 0],
+    ]);
+    const parsed = new Map<string, number>(JSON.parse(focusKeyOf(weights)) as Array<[string, number]>);
+    expect([...parsed.keys()]).toEqual(["family-a", "family-b", "family-c"]);
+    expect(parsed.get("family-a")).toBe(Math.round(0.3 * 256) / 256);
+    expect(parsed.get("family-b")).toBe(1);
+    expect(parsed.get("family-c")).toBe(0);
   });
 });

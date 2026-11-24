@@ -11,7 +11,7 @@ import type { MapSpec } from "../../src/shared/spec";
 import { RecordingSurface } from "../../src/shared/surface";
 import { DEFAULT_THEME } from "../../src/shared/theme";
 import { DEFAULT_TUNING } from "../../src/shared/tuning";
-import { familyFocus } from "../../src/territories/familyFocus";
+import { familyCounts, familyFocus } from "../../src/territories/familyFocus";
 import { fitScene } from "../../src/viewport/fitScene";
 import type { Viewport } from "../../src/viewport/viewport";
 import { drawnName } from "../../test/drawnName";
@@ -56,13 +56,17 @@ function regimeFor(ratio: number) {
   return regime;
 }
 
-/** The weights `CorpusMap` derives for `viewport`: the on-screen items by family, through `familyFocus`. */
+/** The weights `CorpusMap` derives for `viewport`: `familyCounts` through `familyFocus`, the same calls. */
 function weightsAt(viewport: Viewport, width: number, height: number) {
-  const counts = new Map(scene.groups.map((group) => [group.id, 0]));
-  for (const node of visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY)) {
-    const family = node.territory === null ? undefined : familyOfLeaf.get(node.territory);
-    if (family !== undefined) counts.set(family, (counts.get(family) ?? 0) + 1);
-  }
+  // The visible list, as CorpusMap passes it, so the guards measure what ships.
+  const counts = familyCounts(
+    visibleNodes(spec, viewport, width, height, Number.POSITIVE_INFINITY),
+    viewport,
+    width,
+    height,
+    familyOfLeaf,
+    scene.groups.map((group) => group.id),
+  );
   return { counts, weights: familyFocus(counts, DEFAULT_TUNING) };
 }
 
@@ -269,7 +273,7 @@ function neighbouringFamilies(): Array<[[number, number], [number, number]]> {
 
 describe("continuity: a pan across a family boundary at mid changes no name's alpha by more than a stated step", () => {
   const STEPS = 100;
-  // Measured 0.095 (1440x900) and 0.069 (375x812) per 1/100 of a family-to-family pan at ratio 2.5; the bound leaves headroom, not slack.
+  // Measured per 1/100 of a family-to-family pan at ratio 2.5: 0.115 (1440x900) and 0.096 (375x812) on corpus-cartographer's map, the one shipped; 0.058 and 0.044 on the UMAP map it replaced (1f3cdc7). The bound leaves headroom, not slack.
   const MAXIMUM_JUMP = 0.15;
   for (const [width, height] of BOXES) {
     it(`no name's alpha jumps by more than ${MAXIMUM_JUMP} between frames, at ${width}x${height}`, () => {
@@ -326,7 +330,7 @@ describe("continuity at near: a small pan moves no family's weight by more than 
   // A frame is one 2% of the box width of pan; at near that is a few items entering or leaving.
   const PAN_FRACTION = 0.02;
   const FRAMES = 60;
-  // Measured 0.48 (1440x900) and 0.30 (375x812) at ratios 4, 8 and 16: with hundreds of items on screen a pan that crosses a dense cluster moves a share by whole steps; the low-count jump to 0 (review I-1) is what the confidence blend removed.
+  // Measured at ratios 4, 8 and 16: 0.525 (1440x900) and 0.375 (375x812) on corpus-cartographer's map, the one shipped; 0.279 and 0.192 on the UMAP map it replaced (1f3cdc7). A pan that crosses a dense cluster moves a share by whole steps; the engine packs each family into evenly filled disks, so a 2% pan sweeps a dense strip of one disk, and the soft edge (FOCUS_FEATHER), focusFloor 0.25 and FOCUS_CONFIDENT_ITEMS 96 are what bring it under the bound, with little headroom at 1440x900.
   const MAXIMUM_WEIGHT_JUMP = 0.55;
   for (const [width, height] of BOXES) {
     it(`no weight jumps by more than ${MAXIMUM_WEIGHT_JUMP} between frames, at ${width}x${height}`, () => {

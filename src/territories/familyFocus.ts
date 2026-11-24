@@ -1,3 +1,6 @@
+import type { MapNode } from "../shared/spec";
+import { toScreen, type Viewport } from "../viewport/viewport";
+
 export interface FocusOptions {
   /** A share of the largest family at or below which a family shows no leaves. */
   focusFloor: number;
@@ -14,11 +17,71 @@ function smoothstep(lower: number, upper: number, value: number): number {
 
 /**
  * On-screen items of the largest family below which the shares are not trusted
- * (review I-1): with a handful of items one more or fewer moves a share by a
- * whole step, so the weight is blended toward 1 and is continuous per item.
- * The thousands of items seen at mid are untouched.
+ * (review I-1): with few items a pan moves a share by a large step, so the
+ * weight is blended toward 1 and is continuous per item. 24 held on the UMAP
+ * map; corpus-cartographer's map packs each family into evenly filled disks
+ * with empty gaps between them, so at near a screen holds a few dozen items
+ * and 96 is what keeps its weight jump under the near guard (spec arxiv engine
+ * map). The thousands of items seen at mid are untouched.
  */
-const FOCUS_CONFIDENT_ITEMS = 24;
+const FOCUS_CONFIDENT_ITEMS = 96;
+
+/**
+ * The share of the box, from each edge inward, over which an item's weight in
+ * the focus count rises from 0 to 1 (spec arxiv engine map §2), so an item
+ * crossing the edge moves its family's count continuously. On its own it does
+ * not keep corpus-cartographer's map under the guards: a pan sweeps a dense
+ * strip of one disk whatever the kernel, so the floor (`focusFloor` 0.25) and
+ * FOCUS_CONFIDENT_ITEMS (96) do the rest. Measured on both arXiv maps: see the
+ * continuity guards in demo/corpora/familyFocus.test.ts.
+ */
+export const FOCUS_FEATHER = 0.15;
+
+/** 0 on the box edge or outside it, 1 from FOCUS_FEATHER of the box inward, smooth between. */
+function edgeWeight(position: number): number {
+  return smoothstep(0, FOCUS_FEATHER, Math.min(position, 1 - position));
+}
+
+/**
+ * Each family's items on screen, each weighted by how far inside the box it
+ * sits, so the count moves continuously while panning. Every family in
+ * `families` is present, at 0 when it has nothing on screen. `nodes` may be
+ * every node or only the visible ones (an item outside the box weighs 0), so
+ * the map passes the list it already computed for the visible count.
+ */
+export function familyCounts(
+  nodes: readonly MapNode[],
+  viewport: Viewport,
+  width: number,
+  height: number,
+  familyOfLeaf: ReadonlyMap<string, string>,
+  families: readonly string[],
+): Map<string, number> {
+  const counts = new Map<string, number>(families.map((family) => [family, 0]));
+  for (const node of nodes) {
+    const family = node.territory === null ? undefined : familyOfLeaf.get(node.territory);
+    if (family === undefined) continue;
+    const [horizontal, vertical] = toScreen(viewport, node.x, node.y);
+    const weight = edgeWeight(horizontal / width) * edgeWeight(vertical / height);
+    if (weight > 0) counts.set(family, (counts.get(family) ?? 0) + weight);
+  }
+  return counts;
+}
+
+/** The step the focus key rounds each weight to (spec arxiv engine map §3). */
+const FOCUS_KEY_STEP = 256;
+
+/**
+ * The weights as a string key, each rounded to 1/256: the soft-edged count
+ * moves a weight a little on almost every pan frame, and a change no paint
+ * would show should not rebuild the focus. Parse it with `JSON.parse` into
+ * `[family, weight]` pairs.
+ */
+export function focusKeyOf(weights: ReadonlyMap<string, number>): string {
+  return JSON.stringify(
+    [...weights].map(([family, weight]) => [family, Math.round(weight * FOCUS_KEY_STEP) / FOCUS_KEY_STEP]),
+  );
+}
 
 /**
  * Each family's weight in [0, 1] from how many items it has on screen (spec

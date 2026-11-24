@@ -31,7 +31,10 @@ export interface Tuning {
   /**
    * At mid and near, the share of the largest family's on-screen items at or
    * below which a family is drawn as a family, not as leaves (spec family
-   * focus §2); the weight rises smoothly to 1 at `focusFull`.
+   * focus §2); the weight rises smoothly to 1 at `focusFull`. 0.25 was measured
+   * on both arXiv maps (spec arxiv engine map): 0.5 made the ramp too steep for
+   * corpus-cartographer's map, whose sparse near screens flipped the dominant
+   * family on a pan.
    */
   focusFloor: number;
   /** The share of the largest family's on-screen items at or above which a family shows all its leaves. */
@@ -54,7 +57,7 @@ export const DEFAULT_TUNING: Tuning = {
   labelClasses: { large: 0.8, medium: 0.4 },
   hoverRadius: 12,
   groupNamesUntil: 1.4,
-  focusFloor: 0.5,
+  focusFloor: 0.25,
   focusFull: 1,
   edgesPerNode: 3,
   itemLabelWidth: 160,
