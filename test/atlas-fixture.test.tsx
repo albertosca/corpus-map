@@ -5,11 +5,11 @@ import fixture from "../fixtures/atlas/trails.map-spec.json";
 import { CorpusMap } from "../src/CorpusMap";
 import { validateSpec } from "../src/shared/spec";
 
-// The document the corpus_atlas gem serves for its example trails (see the
-// gem's script/export_map_spec_fixture.rb): the contract between the two
+// The document the Rails gem serves for its example trails (see the gem's
+// script/export_map_spec_fixture.rb): the contract between the two
 // repositories, rendered by this library's own code. The file is the script's
 // output run through `biome format` (same data, this repository's layout).
-describe("the map spec the corpus_atlas gem serves", () => {
+describe("the map spec the Rails gem serves", () => {
   const spec = validateSpec(fixture);
 
   it("passes this library's own validator", () => {

@@ -16,7 +16,7 @@ Selecting a node opens a drawer with its label and territory.
 
 - For arXiv, it also shows the publication year, the arXiv category and a link to the paper's abstract page.
 - Every other corpus gets a generic field list from its `meta`.
-- When the item has edges (arXiv ships each paper's most similar papers, linked by corpus-cartographer), the drawer lists them under Related, each with the title words the two share. Pressing one selects and reveals it.
+- When the item has edges (arXiv ships each paper's most similar papers, linked by corpus-cartographer), the drawer lists them under Related, each with the title words the two share when they share any. Pressing one selects and reveals it.
 
 ## Links
 
