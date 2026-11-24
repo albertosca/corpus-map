@@ -248,7 +248,7 @@
   "map": {
     "engine": "corpus-cartographer",
     "version": "0.4.1",
-    "commit": "4e8450f",
+    "commit": "ccd4882",
     "embeddings_model": "minishlab/potion-base-8M",
     "positions_and_edges": "computed by corpus-cartographer from the papers' titles and these territories; they replace the umap positions and the edges recorded above, which describe the pipeline's own run",
     "edges": 6109,
