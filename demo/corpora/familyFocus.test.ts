@@ -378,6 +378,71 @@ describe("continuity at near: a small pan moves no family's weight by more than 
   }
 });
 
+/** The largest weight jump between consecutive views, over every family. */
+function largestJump(previous: ReadonlyMap<string, number>, current: ReadonlyMap<string, number>) {
+  let largest = 0;
+  for (const [family, weight] of current)
+    largest = Math.max(largest, Math.abs(weight - (previous.get(family) ?? weight)));
+  return largest;
+}
+
+// The off-path sweeps (whole-branch review, minor 2): the near guard above pans only from a family's centre toward its nearest family, so these pan from a grid of centres in eight directions and zoom one 1.1x step at a time (the step of the arXiv pop sweep) about the same centres. Neither holds to the near guard's 0.55. Most frames over it are the confidence blend on a screen near a disk's rim: one family fills the view, a step drops its weighted count from about 60-100 items to 12-40, and families with nothing on screen jump from about 0 to 0.95 (family focus §2 blends a sparse screen toward 1 on purpose). So each sweep is held to its own measured bound: the largest jump and how many frames go over 0.55. Measured on the painted weights, rounded by the focus key, on corpus-cartographer's map: pans 0.863 with 17 of 23,520 frames over (1440x900) and 0.402 with 0 (375x812); zoom steps 0.762 with 10 of 931 and 0.883 with 14. With main's focusFloor 0.5 the pans read 1.000 with 75 over and 0.641 with 7, and the zoom 20 over at 375x812.
+const OFF_PATH_BOUND = 0.55;
+const OFF_PATH_LARGEST = 0.9;
+
+describe("continuity off the path: pans from a grid of centres and zoom steps (whole-branch review, minor 2)", () => {
+  const PAN_FRACTION = 0.02;
+  const FRAMES = 20;
+  const DIRECTIONS = Array.from({ length: 8 }, (_, index) => (index * Math.PI) / 4);
+  const PANS_OVER = 24;
+  const ZOOMS_OVER = 16;
+  for (const [width, height] of BOXES) {
+    it(`a pan from any of 49 centres in 8 directions keeps the weights within the bound, at ${width}x${height}`, () => {
+      const fit = fitAt(width, height);
+      const jumps: number[] = [];
+      for (const ratio of [4, 8, 16])
+        for (const origin of gridOfCentres(7, 7))
+          for (const direction of DIRECTIONS) {
+            const worldStep = (width * PAN_FRACTION) / (fit.scale * ratio);
+            let previous = weightsAt(viewAt(fit, width, height, ratio, origin), width, height).weights;
+            for (let step = 1; step <= FRAMES; step += 1) {
+              const centre: [number, number] = [
+                origin[0] + Math.cos(direction) * worldStep * step,
+                origin[1] + Math.sin(direction) * worldStep * step,
+              ];
+              const current = weightsAt(viewAt(fit, width, height, ratio, centre), width, height).weights;
+              jumps.push(largestJump(previous, current));
+              previous = current;
+            }
+          }
+      expect(jumps.length).toBe(3 * 49 * 8 * FRAMES);
+      expect(Math.max(...jumps)).toBeLessThanOrEqual(OFF_PATH_LARGEST);
+      expect(jumps.filter((jump) => jump > OFF_PATH_BOUND).length).toBeLessThanOrEqual(PANS_OVER);
+      // Non-vacuous: weights did move.
+      expect(Math.max(...jumps)).toBeGreaterThan(0);
+    }, 60_000);
+
+    it(`a 1.1x zoom step about any of 49 centres keeps the weights within the bound, at ${width}x${height}`, () => {
+      const fit = fitAt(width, height);
+      const jumps: number[] = [];
+      for (const origin of gridOfCentres(7, 7)) {
+        let ratio = 2.5;
+        let previous = weightsAt(viewAt(fit, width, height, ratio, origin), width, height).weights;
+        while (ratio * 1.1 <= 16) {
+          ratio *= 1.1;
+          const current = weightsAt(viewAt(fit, width, height, ratio, origin), width, height).weights;
+          jumps.push(largestJump(previous, current));
+          previous = current;
+        }
+      }
+      expect(jumps.length).toBe(49 * 19);
+      expect(Math.max(...jumps)).toBeLessThanOrEqual(OFF_PATH_LARGEST);
+      expect(jumps.filter((jump) => jump > OFF_PATH_BOUND).length).toBeLessThanOrEqual(ZOOMS_OVER);
+      expect(Math.max(...jumps)).toBeGreaterThan(0);
+    });
+  }
+});
+
 describe("review I-2: a family name beside item label plates at near (arXiv, painted)", () => {
   const labels = placeItemLabels(
     spec,
