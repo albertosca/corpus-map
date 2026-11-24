@@ -2064,7 +2064,10 @@ export interface Tuning {
     /**
      * At mid and near, the share of the largest family's on-screen items at or
      * below which a family is drawn as a family, not as leaves (spec family
-     * focus §2); the weight rises smoothly to 1 at `focusFull`.
+     * focus §2); the weight rises smoothly to 1 at `focusFull`. 0.25 was measured
+     * on both arXiv maps (spec arxiv engine map): 0.5 made the ramp too steep for
+     * corpus-cartographer's map, whose sparse near screens flipped the dominant
+     * family on a pan.
      */
     focusFloor: number;
     /** The share of the largest family's on-screen items at or above which a family shows all its leaves. */
@@ -2175,6 +2178,8 @@ export declare function familyColours(shapes: ReadonlyMap<string, readonly Ring[
 };
 
 // territories/familyFocus.d.ts
+import type { MapNode } from "../shared/spec";
+import { type Viewport } from "../viewport/viewport";
 export interface FocusOptions {
     /** A share of the largest family at or below which a family shows no leaves. */
     focusFloor: number;
@@ -2182,12 +2187,38 @@ export interface FocusOptions {
     focusFull: number;
 }
 /**
+ * The share of the box, from each edge inward, over which an item's weight in
+ * the focus count rises from 0 to 1 (spec arxiv engine map §2), so an item
+ * crossing the edge moves its family's count continuously. On its own it does
+ * not keep corpus-cartographer's map under the guards: a pan sweeps a dense
+ * strip of one disk whatever the kernel, so the floor (`focusFloor` 0.25) and
+ * FOCUS_CONFIDENT_ITEMS (96) do the rest. Measured on both arXiv maps: see the
+ * continuity guards in demo/corpora/familyFocus.test.ts.
+ */
+export declare const FOCUS_FEATHER = 0.15;
+/**
+ * Each family's items on screen, each weighted by how far inside the box it
+ * sits, so the count moves continuously while panning. Every family in
+ * `families` is present, at 0 when it has nothing on screen. `nodes` may be
+ * every node or only the visible ones (an item outside the box weighs 0), so
+ * the map passes the list it already computed for the visible count.
+ */
+export declare function familyCounts(nodes: readonly MapNode[], viewport: Viewport, width: number, height: number, familyOfLeaf: ReadonlyMap<string, string>, families: readonly string[]): Map<string, number>;
+/**
+ * The weights as a string key, each rounded to 1/256: the soft-edged count
+ * moves a weight a little on almost every pan frame, and a change no paint
+ * would show should not rebuild the focus. Parse it with `JSON.parse` into
+ * `[family, weight]` pairs.
+ */
+export declare function focusKeyOf(weights: ReadonlyMap<string, number>): string;
+/**
  * Each family's weight in [0, 1] from how many items it has on screen (spec
  * family focus §2): the largest family is 1, the rest follow the smoothstep of
  * their share of it. Nothing on screen leaves every family at 1, which is the
- * map as it was drawn before this existed.
+ * map as it was drawn before this existed. `corpusItems` is the spec's item
+ * count, which sets how many on-screen items the shares need to be trusted.
  */
-export declare function familyFocus(counts: ReadonlyMap<string, number>, options: FocusOptions): ReadonlyMap<string, number>;
+export declare function familyFocus(counts: ReadonlyMap<string, number>, options: FocusOptions, corpusItems: number): ReadonlyMap<string, number>;
 /** A family's two levels from the frame's group alpha and its weight: its leaves' and its own. */
 export declare function levelsOf(groupAlpha: number, weight: number): {
     leaf: number;
